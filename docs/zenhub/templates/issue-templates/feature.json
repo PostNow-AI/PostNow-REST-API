@@ -1,0 +1,11 @@
+{
+  "name": "Feature Request",
+  "description": "Template for feature issues",
+  "title": "Feature Request",
+  "body": "## 🎯 Feature Request\n\n### 📋 Description\n[Clear description of the feature]\n\n### 🎯 Acceptance Criteria\n- [ ] [Criterion 1]\n- [ ] [Criterion 2]\n- [ ] [Criterion 3]\n\n### 🏷️ Labels\n- feature\n- [frontend/backend/testing]\n- [priority: high/medium/low]\n\n### 👥 Assignment\n- **Responsible:** [IA Alpha/Beta/Charlie]\n- **Estimate:** [X] story points\n- **Sprint:** [Sprint Number]\n\n### 📝 Definition of Done\n- [ ] Code implemented\n- [ ] Tests written\n- [ ] Documentation updated\n- [ ] Review approved\n- [ ] Deploy completed\n\n### 🔗 Related\n- Epic: [Epic name]\n- Dependencies: [List dependencies]",
+  "labels": [
+    "feature"
+  ],
+  "assignees": [],
+  "milestone": null
+}

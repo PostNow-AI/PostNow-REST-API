@@ -1,0 +1,75 @@
+[
+  {
+    "name": "Foundation",
+    "description": "Core infrastructure and backend improvements",
+    "objectives": [
+      "Core services optimization",
+      "Backend architecture improvements",
+      "Performance monitoring setup",
+      "Error tracking implementation"
+    ],
+    "responsible": {
+      "primary": "IA Alpha",
+      "support": "IA Charlie"
+    },
+    "estimate": {
+      "total": 40,
+      "sprint1": 20,
+      "sprint2": 20
+    },
+    "labels": [
+      "epic",
+      "foundation",
+      "backend",
+      "performance"
+    ]
+  },
+  {
+    "name": "UI/UX Enhancement",
+    "description": "Frontend improvements and user experience",
+    "objectives": [
+      "Design system consolidation",
+      "UX improvements",
+      "Responsive design",
+      "Accessibility compliance"
+    ],
+    "responsible": {
+      "primary": "IA Beta",
+      "support": "IA Charlie"
+    },
+    "estimate": {
+      "total": 30,
+      "sprint5": 30
+    },
+    "labels": [
+      "epic",
+      "ui-ux",
+      "frontend",
+      "accessibility"
+    ]
+  },
+  {
+    "name": "Quality & Testing",
+    "description": "Comprehensive testing and quality assurance",
+    "objectives": [
+      "Comprehensive testing",
+      "Performance validation",
+      "Production deployment",
+      "Monitoring setup"
+    ],
+    "responsible": {
+      "primary": "IA Charlie",
+      "support": "IA Alpha"
+    },
+    "estimate": {
+      "total": 25,
+      "sprint6": 25
+    },
+    "labels": [
+      "epic",
+      "quality",
+      "testing",
+      "deployment"
+    ]
+  }
+]

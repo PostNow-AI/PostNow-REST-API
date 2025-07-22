@@ -1,0 +1,124 @@
+{
+  "labels": [
+    {
+      "name": "feature",
+      "color": "0e8a16",
+      "description": "Novas funcionalidades"
+    },
+    {
+      "name": "bug",
+      "color": "d93f0b",
+      "description": "Correções de bugs"
+    },
+    {
+      "name": "enhancement",
+      "color": "1d76db",
+      "description": "Melhorias"
+    },
+    {
+      "name": "documentation",
+      "color": "0075ca",
+      "description": "Documentação"
+    },
+    {
+      "name": "testing",
+      "color": "fef2c0",
+      "description": "Testes"
+    },
+    {
+      "name": "deployment",
+      "color": "5319e7",
+      "description": "Deploy"
+    },
+    {
+      "name": "priority:high",
+      "color": "d93f0b",
+      "description": "Alta prioridade"
+    },
+    {
+      "name": "priority:medium",
+      "color": "fef2c0",
+      "description": "Média prioridade"
+    },
+    {
+      "name": "priority:low",
+      "color": "0e8a16",
+      "description": "Baixa prioridade"
+    },
+    {
+      "name": "frontend",
+      "color": "1d76db",
+      "description": "Frontend work"
+    },
+    {
+      "name": "backend",
+      "color": "5319e7",
+      "description": "Backend work"
+    },
+    {
+      "name": "ux",
+      "color": "fef2c0",
+      "description": "User Experience"
+    },
+    {
+      "name": "performance",
+      "color": "d93f0b",
+      "description": "Performance optimization"
+    },
+    {
+      "name": "security",
+      "color": "d93f0b",
+      "description": "Security related"
+    },
+    {
+      "name": "accessibility",
+      "color": "0e8a16",
+      "description": "Accessibility compliance"
+    },
+    {
+      "name": "wireframe",
+      "color": "1d76db",
+      "description": "Wireframe development"
+    },
+    {
+      "name": "approved",
+      "color": "0e8a16",
+      "description": "Approved for implementation"
+    },
+    {
+      "name": "implementation",
+      "color": "5319e7",
+      "description": "Live component"
+    },
+    {
+      "name": "blocked",
+      "color": "d93f0b",
+      "description": "Blocked by dependency"
+    }
+  ],
+  "assignmentRules": {
+    "backend": "IA Alpha",
+    "performance": "IA Alpha",
+    "architecture": "IA Alpha",
+    "frontend": "IA Beta",
+    "ux": "IA Beta",
+    "components": "IA Beta",
+    "testing": "IA Charlie",
+    "ci-cd": "IA Charlie",
+    "quality": "IA Charlie"
+  },
+  "autoLabeling": {
+    "frontend": [
+      "frontend",
+      "ux"
+    ],
+    "backend": [
+      "backend",
+      "performance"
+    ],
+    "testing": [
+      "testing",
+      "quality"
+    ]
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "pipelines": [
+    {
+      "name": "Main Pipeline",
+      "columns": [
+        {
+          "name": "Backlog",
+          "position": 0
+        },
+        {
+          "name": "Sprint Planning",
+          "position": 1
+        },
+        {
+          "name": "In Progress",
+          "position": 2
+        },
+        {
+          "name": "Development",
+          "position": 3
+        },
+        {
+          "name": "Testing",
+          "position": 4
+        },
+        {
+          "name": "Review",
+          "position": 5
+        },
+        {
+          "name": "Ready for Deploy",
+          "position": 6
+        },
+        {
+          "name": "Deployed",
+          "position": 7
+        }
+      ]
+    },
+    {
+      "name": "Wireframe Pipeline",
+      "columns": [
+        {
+          "name": "Wireframe Backlog",
+          "position": 0
+        },
+        {
+          "name": "Wireframe Development",
+          "position": 1
+        },
+        {
+          "name": "Wireframe Review",
+          "position": 2
+        },
+        {
+          "name": "Wireframe Approved",
+          "position": 3
+        },
+        {
+          "name": "Implementation Ready",
+          "position": 4
+        }
+      ]
+    }
+  ],
+  "automationRules": {
+    "autoAssignment": {
+      "backend": "IA Alpha",
+      "performance": "IA Alpha",
+      "architecture": "IA Alpha",
+      "frontend": "IA Beta",
+      "ux": "IA Beta",
+      "components": "IA Beta",
+      "testing": "IA Charlie",
+      "ci-cd": "IA Charlie",
+      "quality": "IA Charlie"
+    },
+    "autoLabeling": {
+      "frontend": [
+        "frontend",
+        "ux"
+      ],
+      "backend": [
+        "backend",
+        "performance"
+      ],
+      "testing": [
+        "testing",
+        "quality"
+      ]
+    }
+  }
+}
