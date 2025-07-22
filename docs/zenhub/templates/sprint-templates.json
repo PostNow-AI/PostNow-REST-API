@@ -1,0 +1,70 @@
+[
+  {
+    "name": "Sprint 1-2: Foundation",
+    "goal": "Core infrastructure and backend improvements",
+    "capacity": {
+      "IA Alpha": 20,
+      "IA Beta": 0,
+      "IA Charlie": 5
+    },
+    "epics": [
+      "Foundation"
+    ],
+    "labels": [
+      "foundation",
+      "backend",
+      "performance"
+    ]
+  },
+  {
+    "name": "Sprint 3-4: Service Integration",
+    "goal": "API integration and database optimization",
+    "capacity": {
+      "IA Alpha": 20,
+      "IA Beta": 0,
+      "IA Charlie": 5
+    },
+    "epics": [
+      "Foundation"
+    ],
+    "labels": [
+      "backend",
+      "api",
+      "database"
+    ]
+  },
+  {
+    "name": "Sprint 5: Component Enhancement",
+    "goal": "Frontend improvements and user experience",
+    "capacity": {
+      "IA Alpha": 0,
+      "IA Beta": 20,
+      "IA Charlie": 5
+    },
+    "epics": [
+      "UI/UX Enhancement"
+    ],
+    "labels": [
+      "frontend",
+      "ux",
+      "components"
+    ]
+  },
+  {
+    "name": "Sprint 6: Quality & Deployment",
+    "goal": "Comprehensive testing and production deployment",
+    "capacity": {
+      "IA Alpha": 5,
+      "IA Beta": 0,
+      "IA Charlie": 15
+    },
+    "epics": [
+      "Quality & Testing"
+    ],
+    "labels": [
+      "testing",
+      "quality",
+      "deployment"
+    ]
+  }
+]

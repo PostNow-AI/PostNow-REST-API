@@ -1,0 +1,11 @@
+{
+  "name": "Enhancement Request",
+  "description": "Template for enhancement issues",
+  "title": "Enhancement Request",
+  "body": "## 🔧 Enhancement Request\n\n### 📋 Description\n[Clear description of the enhancement]\n\n### 🎯 Current State\n[Describe current implementation]\n\n### 🚀 Proposed Enhancement\n[Describe proposed improvement]\n\n### 🏷️ Labels\n- enhancement\n- [frontend/backend/testing]\n- [priority: high/medium/low]\n\n### 👥 Assignment\n- **Responsible:** [IA Alpha/Beta/Charlie]\n- **Estimate:** [X] story points\n- **Sprint:** [Sprint Number]\n\n### 📝 Definition of Done\n- [ ] Enhancement implemented\n- [ ] Tests written\n- [ ] Documentation updated\n- [ ] Review approved\n- [ ] Deploy completed",
+  "labels": [
+    "enhancement"
+  ],
+  "assignees": [],
+  "milestone": null
+}
