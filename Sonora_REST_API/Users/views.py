@@ -36,21 +36,21 @@ def google_callback(request):
 def google_auth(request):
     """
     Google OAuth authentication endpoint
-    Expected payload: {'access_token': 'google_access_token'}
+    Expected payload: {'access_token': 'google_access_token'} or {'code': 'authorization_code'}
     """
     access_token = request.data.get('access_token')
+    auth_code = request.data.get('code')
 
-    if not access_token:
+    if not access_token and not auth_code:
         return Response(
-            {'error': 'access_token is required'},
+            {'error': 'access_token or code is required'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
-        # This will be handled by the GoogleLogin view
-        google_login = GoogleLogin()
-        google_login.request = request
-        return google_login.post(request)
+        # Use the GoogleLogin view properly through the class-based view approach
+        view = GoogleLogin.as_view()
+        return view(request)
     except Exception as e:
         return Response(
             {'error': str(e)},
