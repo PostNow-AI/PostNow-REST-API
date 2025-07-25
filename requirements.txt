@@ -9,3 +9,4 @@ mysqlclient==2.2.7
 PyMySQL==1.1.1
 python-dotenv==1.1.0
 requests==2.32.3
+dj-rest-auth[with_social]==6.0.0       # REST API authentication utils
