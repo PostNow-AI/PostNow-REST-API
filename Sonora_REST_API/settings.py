@@ -206,6 +206,15 @@ SOCIALACCOUNT_PROVIDERS = {
 SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 SOCIALACCOUNT_EMAIL_REQUIRED = True
 SOCIALACCOUNT_AUTO_SIGNUP = True  # Automatically create user accounts
+
+# Account Linking Configuration
+# Enable email-based authentication for social accounts
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+# Auto-connect if email matches existing account
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
+SOCIALACCOUNT_LOGIN_ON_GET = False  # Require POST for social login (security)
+
+# Account connection settings
 ACCOUNT_SIGNUP_EMAIL_ENTER_TWICE = False
 ACCOUNT_SESSION_REMEMBER = True
 

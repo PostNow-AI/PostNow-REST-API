@@ -17,7 +17,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from Sonora_REST_API.Users.views import GoogleLogin, google_auth, google_callback
+from Sonora_REST_API.Users.views import (
+    GoogleLogin,
+    disconnect_social_account,
+    google_auth,
+    google_callback,
+    list_social_accounts,
+)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,4 +33,10 @@ urlpatterns = [
     path('api/v1/auth/google/auth/', google_auth, name='google_auth'),
     path('api/v1/auth/google/callback/',
          google_callback, name='google_callback'),
+
+    # Social account management endpoints
+    path('api/v1/auth/social-accounts/',
+         list_social_accounts, name='list_social_accounts'),
+    path('api/v1/auth/social-accounts/<int:account_id>/disconnect/',
+         disconnect_social_account, name='disconnect_social_account'),
 ]
