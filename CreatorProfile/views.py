@@ -37,21 +37,41 @@ class ProfileCompletionStatusView(generics.RetrieveAPIView):
                 if not getattr(profile, field, None):
                     missing_fields.append(field)
 
-            # Calculate field statistics
-            total_fields = 34  # Based on specification
-            filled_fields = total_fields - len([
-                field for field in [
-                    profile.main_platform, profile.niche, profile.experience_level,
-                    profile.primary_goal, profile.time_available, profile.specific_profession,
-                    profile.target_audience, profile.communication_tone, profile.expertise_areas,
-                    profile.preferred_duration, profile.complexity_level, profile.theme_diversity,
-                    profile.publication_frequency, profile.instagram_username, profile.linkedin_url,
-                    profile.twitter_username, profile.tiktok_username, profile.revenue_stage,
-                    profile.team_size, profile.revenue_goal, profile.authority_goal,
-                    profile.leads_goal, profile.has_designer, profile.current_tools,
-                    profile.tools_budget, profile.preferred_hours
-                ] if not field
-            ])
+            # Calculate field statistics using same logic as model
+            def is_field_filled(field_value):
+                if field_value is None:
+                    return False
+                if isinstance(field_value, str):
+                    return bool(field_value.strip())
+                if isinstance(field_value, list):
+                    return len(field_value) > 0
+                if isinstance(field_value, bool):
+                    return True  # Boolean fields are always considered "filled"
+                return bool(field_value)
+
+            profile_fields = [
+                # Required fields
+                profile.main_platform, profile.niche, profile.experience_level,
+                profile.primary_goal, profile.time_available,
+
+                # Important fields
+                profile.specific_profession, profile.target_audience,
+                profile.communication_tone, profile.expertise_areas,
+                profile.preferred_duration, profile.complexity_level,
+                profile.theme_diversity, profile.publication_frequency,
+
+                # Optional fields
+                profile.instagram_username, profile.linkedin_url,
+                profile.twitter_username, profile.tiktok_username,
+                profile.revenue_stage, profile.team_size, profile.revenue_goal,
+                profile.authority_goal, profile.leads_goal, profile.has_designer,
+                profile.current_tools, profile.tools_budget, profile.preferred_hours
+            ]
+
+            filled_fields = sum(
+                1 for field in profile_fields if is_field_filled(field))
+            filled_fields += 2  # Add user fields (name and email)
+            total_fields = len(profile_fields) + 2
 
             data = {
                 'onboarding_completed': profile.onboarding_completed,
@@ -73,7 +93,7 @@ class ProfileCompletionStatusView(generics.RetrieveAPIView):
                     'main_platform', 'niche', 'experience_level',
                     'primary_goal', 'time_available'
                 ],
-                'total_fields': 34,
+                'total_fields': 29,  # 27 profile fields + 2 user fields
                 'filled_fields': 2,  # user.name and user.email
             }
 

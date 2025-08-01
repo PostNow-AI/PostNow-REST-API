@@ -323,30 +323,32 @@ class CreatorProfile(models.Model):
     def calculate_completeness(self):
         """
         Calculate profile completeness percentage based on filled fields.
-        Required fields (7) = 20% when completed
-        Important fields (12) = 50% additional  
-        Optional fields (15) = 30% additional
-        Total = 100%
+        Counts all relevant profile fields dynamically.
         """
-        total_fields = 34  # Based on specification
         filled_fields = 0
 
-        # Required fields (7 fields = 20%)
-        required_fields = [
+        # Helper function to check if field has meaningful value
+        def is_field_filled(field_value):
+            if field_value is None:
+                return False
+            if isinstance(field_value, str):
+                return bool(field_value.strip())
+            if isinstance(field_value, list):
+                return len(field_value) > 0
+            if isinstance(field_value, bool):
+                return True  # Boolean fields are always considered "filled"
+            return bool(field_value)
+
+        # All profile fields (excluding metadata fields)
+        profile_fields = [
+            # Required fields
             self.main_platform,
             self.niche,
             self.experience_level,
             self.primary_goal,
             self.time_available,
-        ]
 
-        required_filled = sum(1 for field in required_fields if field)
-        if required_filled == 5:  # All required fields filled
-            # Count as 7 total (including user.name and user.email)
-            filled_fields += 7
-
-        # Important fields (12 fields = 50% additional)
-        important_fields = [
+            # Important fields
             self.specific_profession,
             self.target_audience,
             self.communication_tone,
@@ -355,13 +357,8 @@ class CreatorProfile(models.Model):
             self.complexity_level,
             self.theme_diversity,
             self.publication_frequency,
-        ]
 
-        important_filled = sum(1 for field in important_fields if field)
-        filled_fields += important_filled
-
-        # Optional fields (15 fields = 30% additional)
-        optional_fields = [
+            # Optional fields
             self.instagram_username,
             self.linkedin_url,
             self.twitter_username,
@@ -377,8 +374,15 @@ class CreatorProfile(models.Model):
             self.preferred_hours,
         ]
 
-        optional_filled = sum(1 for field in optional_fields if field)
-        filled_fields += optional_filled
+        # Count filled fields
+        filled_fields = sum(
+            1 for field in profile_fields if is_field_filled(field))
+
+        # Add user fields (assuming name and email are always filled for authenticated users)
+        if self.user_id:
+            filled_fields += 2  # user.first_name/last_name and user.email
+
+        total_fields = len(profile_fields) + 2  # +2 for user fields
 
         # Calculate percentage
         percentage = min(int((filled_fields / total_fields) * 100), 100)
