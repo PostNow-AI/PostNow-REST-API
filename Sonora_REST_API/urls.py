@@ -39,4 +39,7 @@ urlpatterns = [
          list_social_accounts, name='list_social_accounts'),
     path('api/v1/auth/social-accounts/<int:account_id>/disconnect/',
          disconnect_social_account, name='disconnect_social_account'),
+
+    # Creator Profile endpoints
+    path('api/v1/creator-profile/', include('CreatorProfile.urls')),
 ]
