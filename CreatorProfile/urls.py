@@ -5,9 +5,9 @@ from . import views
 app_name = 'creator_profile'
 
 urlpatterns = [
-    # Profile completion status - used to determine if onboarding is needed
-    path('status/', views.ProfileCompletionStatusView.as_view(),
-         name='completion_status'),
+    # Onboarding status - used to determine if onboarding is needed
+    path('onboarding/status/', views.OnboardingStatusView.as_view(),
+         name='onboarding_status'),
 
     # Onboarding endpoints
     path('onboarding/', views.OnboardingView.as_view(), name='onboarding'),
@@ -21,6 +21,10 @@ urlpatterns = [
     path('behavior/', views.UserBehaviorView.as_view(), name='behavior'),
 
     # Helper endpoints for frontend
-    path('choices/', views.profile_choices, name='profile_choices'),
-    path('suggestions/', views.profile_suggestions, name='profile_suggestions'),
+    path('onboarding/suggestions/', views.onboarding_suggestions,
+         name='onboarding_suggestions'),
+
+    # User profile management
+    path('user/profile/', views.update_user_profile, name='update_user_profile'),
+    path('user/avatar/', views.upload_avatar, name='upload_avatar'),
 ]

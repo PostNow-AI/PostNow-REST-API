@@ -15,13 +15,13 @@ class UserBasicSerializer(serializers.ModelSerializer):
 
 class CreatorProfileSerializer(serializers.ModelSerializer):
     """
-    Comprehensive serializer for CreatorProfile with validation.
-    Supports partial updates for progressive profiling.
+    Simplified serializer for CreatorProfile with new onboarding fields.
+    All fields are optional for flexible onboarding.
     """
 
     user = UserBasicSerializer(read_only=True)
-    completeness_percentage = serializers.IntegerField(read_only=True)
     onboarding_completed = serializers.BooleanField(read_only=True)
+    onboarding_skipped = serializers.BooleanField(read_only=True)
     onboarding_completed_at = serializers.DateTimeField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
@@ -32,83 +32,100 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
             # User relationship
             'user',
 
-            # Required fields (onboarding)
-            'main_platform',
-            'niche',
-            'experience_level',
-            'primary_goal',
-            'time_available',
+            # Basic user info
+            'avatar',
 
-            # Important fields (level 2)
-            'specific_profession',
-            'target_audience',
-            'communication_tone',
-            'expertise_areas',
-            'preferred_duration',
-            'complexity_level',
-            'theme_diversity',
-            'publication_frequency',
+            # Professional information
+            'professional_name',
+            'profession',
+            'specialization',
 
-            # Optional fields (level 3)
-            'instagram_username',
+            # Social media
             'linkedin_url',
-            'twitter_username',
+            'instagram_username',
+            'youtube_channel',
             'tiktok_username',
-            'revenue_stage',
-            'team_size',
-            'revenue_goal',
-            'authority_goal',
-            'leads_goal',
-            'has_designer',
-            'current_tools',
-            'tools_budget',
-            'preferred_hours',
 
-            # Completion tracking
+            # Brandbook - Colors
+            'primary_color',
+            'secondary_color',
+            'accent_color_1',
+            'accent_color_2',
+            'accent_color_3',
+
+            # Brandbook - Typography
+            'primary_font',
+            'secondary_font',
+
+            # Metadata
             'onboarding_completed',
-            'completeness_percentage',
+            'onboarding_skipped',
             'created_at',
             'updated_at',
             'onboarding_completed_at',
         ]
 
-    def validate_niche(self, value):
-        """Validate niche has minimum length."""
-        if len(value.strip()) < 3:
+    def validate_professional_name(self, value):
+        """Validate professional name has minimum length."""
+        if value and len(value.strip()) < 2:
             raise serializers.ValidationError(
-                "Nicho deve ter pelo menos 3 caracteres."
+                "Nome profissional deve ter pelo menos 2 caracteres."
             )
-        return value.strip()
+        return value.strip() if value else value
 
-    def validate_theme_diversity(self, value):
-        """Validate theme diversity is within range."""
-        if value is not None and (value < 0 or value > 10):
+    def validate_profession(self, value):
+        """Validate profession has minimum length."""
+        if value and len(value.strip()) < 2:
             raise serializers.ValidationError(
-                "Diversidade de temas deve estar entre 0 e 10."
+                "Profissão deve ter pelo menos 2 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_specialization(self, value):
+        """Validate specialization has minimum length."""
+        if value and len(value.strip()) < 2:
+            raise serializers.ValidationError(
+                "Especialização deve ter pelo menos 2 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_primary_color(self, value):
+        """Validate primary color is a valid hex color."""
+        if value and not value.startswith('#'):
+            raise serializers.ValidationError(
+                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
             )
         return value
 
-    def validate_expertise_areas(self, value):
-        """Validate expertise areas is a list."""
-        if value is not None and not isinstance(value, list):
+    def validate_secondary_color(self, value):
+        """Validate secondary color is a valid hex color."""
+        if value and not value.startswith('#'):
             raise serializers.ValidationError(
-                "Áreas de expertise deve ser uma lista."
+                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
             )
         return value
 
-    def validate_current_tools(self, value):
-        """Validate current tools is a list."""
-        if value is not None and not isinstance(value, list):
+    def validate_accent_color_1(self, value):
+        """Validate accent color 1 is a valid hex color."""
+        if value and not value.startswith('#'):
             raise serializers.ValidationError(
-                "Ferramentas atuais deve ser uma lista."
+                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
             )
         return value
 
-    def validate_preferred_hours(self, value):
-        """Validate preferred hours is a list."""
-        if value is not None and not isinstance(value, list):
+    def validate_accent_color_2(self, value):
+        """Validate accent color 2 is a valid hex color."""
+        if value and not value.startswith('#'):
             raise serializers.ValidationError(
-                "Horários preferenciais deve ser uma lista."
+                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
+            )
+        return value
+
+    def validate_accent_color_3(self, value):
+        """Validate accent color 3 is a valid hex color."""
+        if value and not value.startswith('#'):
+            raise serializers.ValidationError(
+                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
             )
         return value
 
@@ -116,42 +133,64 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
 class OnboardingSerializer(serializers.ModelSerializer):
     """
     Simplified serializer for onboarding process.
-    Only includes the 5 required fields for quick completion.
+    All fields are optional for flexible onboarding.
     """
 
     class Meta:
         model = CreatorProfile
         fields = [
-            'main_platform',
-            'niche',
-            'experience_level',
-            'primary_goal',
-            'time_available',
+            'professional_name',
+            'profession',
+            'specialization',
+            'linkedin_url',
+            'instagram_username',
+            'youtube_channel',
+            'tiktok_username',
+            'primary_color',
+            'secondary_color',
+            'accent_color_1',
+            'accent_color_2',
+            'accent_color_3',
+            'primary_font',
+            'secondary_font',
         ]
 
-    def validate_niche(self, value):
-        """Validate niche has minimum length."""
-        if len(value.strip()) < 3:
+    def validate_professional_name(self, value):
+        """Validate professional name has minimum length."""
+        if value and len(value.strip()) < 2:
             raise serializers.ValidationError(
-                "Nicho deve ter pelo menos 3 caracteres."
+                "Nome profissional deve ter pelo menos 2 caracteres."
             )
-        return value.strip()
+        return value.strip() if value else value
+
+    def validate_profession(self, value):
+        """Validate profession has minimum length."""
+        if value and len(value.strip()) < 2:
+            raise serializers.ValidationError(
+                "Profissão deve ter pelo menos 2 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_specialization(self, value):
+        """Validate specialization has minimum length."""
+        if value and len(value.strip()) < 2:
+            raise serializers.ValidationError(
+                "Especialização deve ter pelo menos 2 caracteres."
+            )
+        return value.strip() if value else value
 
 
-class ProfileCompletionSerializer(serializers.Serializer):
+class OnboardingStatusSerializer(serializers.Serializer):
     """
-    Serializer for profile completion status response.
-    Used to inform frontend about onboarding requirements.
+    Serializer for onboarding status response.
+    Used to inform frontend about onboarding status.
     """
 
     onboarding_completed = serializers.BooleanField()
-    completeness_percentage = serializers.IntegerField()
-    required_fields_missing = serializers.ListField(
-        child=serializers.CharField(),
-        allow_empty=True
-    )
-    total_fields = serializers.IntegerField()
-    filled_fields = serializers.IntegerField()
+    onboarding_skipped = serializers.BooleanField()
+    has_data = serializers.BooleanField()
+    filled_fields_count = serializers.IntegerField()
+    total_fields_count = serializers.IntegerField()
 
 
 class UserBehaviorSerializer(serializers.ModelSerializer):
@@ -231,7 +270,7 @@ class ProfileStatsSerializer(serializers.Serializer):
 
     total_users = serializers.IntegerField()
     completed_onboarding = serializers.IntegerField()
-    average_completeness = serializers.FloatField()
-    most_common_platform = serializers.CharField()
-    most_common_niche = serializers.CharField()
+    skipped_onboarding = serializers.IntegerField()
+    average_completion_rate = serializers.FloatField()
+    most_common_profession = serializers.CharField()
     completion_rate = serializers.FloatField()

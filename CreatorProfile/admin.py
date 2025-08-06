@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.utils.html import format_html
 
 from .models import CreatorProfile, UserBehavior
 
@@ -7,28 +6,23 @@ from .models import CreatorProfile, UserBehavior
 @admin.register(CreatorProfile)
 class CreatorProfileAdmin(admin.ModelAdmin):
     """
-    Admin interface for CreatorProfile with comprehensive display and filtering.
+    Admin interface for CreatorProfile with simplified display and filtering.
     """
 
     list_display = [
         'user_display',
-        'niche',
-        'main_platform',
-        'experience_level',
-        'primary_goal',
+        'professional_name',
+        'profession',
+        'specialization',
         'onboarding_completed',
-        'completeness_display',
+        'onboarding_skipped',
         'created_at',
     ]
 
     list_filter = [
         'onboarding_completed',
-        'main_platform',
-        'experience_level',
-        'primary_goal',
-        'communication_tone',
-        'revenue_stage',
-        'team_size',
+        'onboarding_skipped',
+        'profession',
         'created_at',
     ]
 
@@ -36,15 +30,15 @@ class CreatorProfileAdmin(admin.ModelAdmin):
         'user__first_name',
         'user__last_name',
         'user__email',
-        'niche',
-        'specific_profession',
-        'target_audience',
+        'professional_name',
+        'profession',
+        'specialization',
     ]
 
     readonly_fields = [
         'user',
-        'completeness_percentage',
         'onboarding_completed',
+        'onboarding_skipped',
         'onboarding_completed_at',
         'created_at',
         'updated_at',
@@ -54,66 +48,44 @@ class CreatorProfileAdmin(admin.ModelAdmin):
         ('Informações do Usuário', {
             'fields': ('user', 'created_at', 'updated_at')
         }),
-        ('Status de Completude', {
+        ('Status do Onboarding', {
             'fields': (
                 'onboarding_completed',
+                'onboarding_skipped',
                 'onboarding_completed_at',
-                'completeness_percentage',
             ),
             'classes': ('collapse',),
         }),
-        ('Campos Obrigatórios (Onboarding)', {
+        ('Informações Profissionais', {
             'fields': (
-                'main_platform',
-                'niche',
-                'experience_level',
-                'primary_goal',
-                'time_available',
+                'professional_name',
+                'profession',
+                'specialization',
             )
         }),
-        ('Contexto Profissional (Nível 2)', {
+        ('Redes Sociais', {
             'fields': (
-                'specific_profession',
-                'target_audience',
-                'communication_tone',
-                'expertise_areas',
-            ),
-            'classes': ('collapse',),
-        }),
-        ('Preferências de Conteúdo (Nível 2)', {
-            'fields': (
-                'preferred_duration',
-                'complexity_level',
-                'theme_diversity',
-                'publication_frequency',
-            ),
-            'classes': ('collapse',),
-        }),
-        ('Redes Sociais (Nível 3)', {
-            'fields': (
-                'instagram_username',
                 'linkedin_url',
-                'twitter_username',
+                'instagram_username',
+                'youtube_channel',
                 'tiktok_username',
             ),
             'classes': ('collapse',),
         }),
-        ('Contexto de Negócio (Nível 3)', {
+        ('Brandbook - Cores', {
             'fields': (
-                'revenue_stage',
-                'team_size',
-                'revenue_goal',
-                'authority_goal',
-                'leads_goal',
+                'primary_color',
+                'secondary_color',
+                'accent_color_1',
+                'accent_color_2',
+                'accent_color_3',
             ),
             'classes': ('collapse',),
         }),
-        ('Recursos Disponíveis (Nível 3)', {
+        ('Brandbook - Tipografia', {
             'fields': (
-                'has_designer',
-                'current_tools',
-                'tools_budget',
-                'preferred_hours',
+                'primary_font',
+                'secondary_font',
             ),
             'classes': ('collapse',),
         }),
@@ -123,23 +95,6 @@ class CreatorProfileAdmin(admin.ModelAdmin):
         """Display user name and email."""
         return f"{obj.user.get_full_name()} ({obj.user.email})"
     user_display.short_description = 'Usuário'
-
-    def completeness_display(self, obj):
-        """Display completeness percentage with color coding."""
-        percentage = obj.completeness_percentage
-        if percentage >= 80:
-            color = 'green'
-        elif percentage >= 50:
-            color = 'orange'
-        else:
-            color = 'red'
-
-        return format_html(
-            '<span style="color: {}; font-weight: bold;">{} %</span>',
-            color,
-            percentage
-        )
-    completeness_display.short_description = 'Completude'
 
     def get_queryset(self, request):
         """Optimize queries by selecting related user."""

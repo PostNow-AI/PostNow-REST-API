@@ -1,3 +1,5 @@
+import base64
+
 from django.db import transaction
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
@@ -7,14 +9,14 @@ from .models import CreatorProfile, UserBehavior
 from .serializers import (
     CreatorProfileSerializer,
     OnboardingSerializer,
-    ProfileCompletionSerializer,
+    OnboardingStatusSerializer,
     UserBehaviorSerializer,
 )
 
 
-class ProfileCompletionStatusView(generics.RetrieveAPIView):
+class OnboardingStatusView(generics.RetrieveAPIView):
     """
-    Get user's profile completion status.
+    Get user's onboarding status.
     Used by frontend to determine if onboarding is required.
     """
     permission_classes = [permissions.IsAuthenticated]
@@ -23,88 +25,59 @@ class ProfileCompletionStatusView(generics.RetrieveAPIView):
         try:
             profile = CreatorProfile.objects.get(user=request.user)
 
-            # Check which required fields are missing
-            required_fields = [
-                'main_platform',
-                'niche',
-                'experience_level',
-                'primary_goal',
-                'time_available',
+            # Check which fields have data
+            onboarding_fields = [
+                'professional_name',
+                'profession',
+                'specialization',
+                'linkedin_url',
+                'instagram_username',
+                'youtube_channel',
+                'tiktok_username',
+                'primary_color',
+                'secondary_color',
+                'accent_color_1',
+                'accent_color_2',
+                'accent_color_3',
+                'primary_font',
+                'secondary_font',
             ]
 
-            missing_fields = []
-            for field in required_fields:
-                if not getattr(profile, field, None):
-                    missing_fields.append(field)
-
-            # Calculate field statistics using same logic as model
-            def is_field_filled(field_value):
-                if field_value is None:
-                    return False
-                if isinstance(field_value, str):
-                    return bool(field_value.strip())
-                if isinstance(field_value, list):
-                    return len(field_value) > 0
-                if isinstance(field_value, bool):
-                    return True  # Boolean fields are always considered "filled"
-                return bool(field_value)
-
-            profile_fields = [
-                # Required fields
-                profile.main_platform, profile.niche, profile.experience_level,
-                profile.primary_goal, profile.time_available,
-
-                # Important fields
-                profile.specific_profession, profile.target_audience,
-                profile.communication_tone, profile.expertise_areas,
-                profile.preferred_duration, profile.complexity_level,
-                profile.theme_diversity, profile.publication_frequency,
-
-                # Optional fields
-                profile.instagram_username, profile.linkedin_url,
-                profile.twitter_username, profile.tiktok_username,
-                profile.revenue_stage, profile.team_size, profile.revenue_goal,
-                profile.authority_goal, profile.leads_goal, profile.has_designer,
-                profile.current_tools, profile.tools_budget, profile.preferred_hours
-            ]
-
-            filled_fields = sum(
-                1 for field in profile_fields if is_field_filled(field))
-            filled_fields += 2  # Add user fields (name and email)
-            total_fields = len(profile_fields) + 2
+            filled_fields = 0
+            for field in onboarding_fields:
+                value = getattr(profile, field, None)
+                if value and str(value).strip():
+                    filled_fields += 1
 
             data = {
                 'onboarding_completed': profile.onboarding_completed,
-                'completeness_percentage': profile.completeness_percentage,
-                'required_fields_missing': missing_fields,
-                'total_fields': total_fields,
-                'filled_fields': filled_fields,
+                'onboarding_skipped': profile.onboarding_skipped,
+                'has_data': filled_fields > 0,
+                'filled_fields_count': filled_fields,
+                'total_fields_count': len(onboarding_fields),
             }
 
-            serializer = ProfileCompletionSerializer(data)
+            serializer = OnboardingStatusSerializer(data)
             return Response(serializer.data)
 
         except CreatorProfile.DoesNotExist:
             # Profile doesn't exist, onboarding required
             data = {
                 'onboarding_completed': False,
-                'completeness_percentage': 0,
-                'required_fields_missing': [
-                    'main_platform', 'niche', 'experience_level',
-                    'primary_goal', 'time_available'
-                ],
-                'total_fields': 29,  # 27 profile fields + 2 user fields
-                'filled_fields': 2,  # user.name and user.email
+                'onboarding_skipped': False,
+                'has_data': False,
+                'filled_fields_count': 0,
+                'total_fields_count': 14,  # 14 onboarding fields
             }
 
-            serializer = ProfileCompletionSerializer(data)
+            serializer = OnboardingStatusSerializer(data)
             return Response(serializer.data)
 
 
 class OnboardingView(generics.CreateAPIView):
     """
     Handle onboarding form submission.
-    Creates or updates profile with required fields only.
+    Creates or updates profile with optional fields.
     """
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = OnboardingSerializer
@@ -131,7 +104,7 @@ class OnboardingView(generics.CreateAPIView):
 
             return Response(
                 {
-                    'message': 'Onboarding completado com sucesso!',
+                    'message': 'Dados salvos com sucesso!',
                     'profile': response_serializer.data
                 },
                 status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
@@ -204,165 +177,133 @@ class UserBehaviorView(generics.RetrieveUpdateAPIView):
 @permission_classes([permissions.IsAuthenticated])
 def skip_onboarding(request):
     """
-    Allow user to skip onboarding after required fields are completed.
-    Only works if minimum required fields are already filled.
+    Allow user to skip onboarding.
+    All fields are optional, so skipping is always allowed.
     """
     try:
         profile = CreatorProfile.objects.get(user=request.user)
+        profile.onboarding_skipped = True
+        profile.save()
 
-        if not profile.onboarding_completed:
-            return Response({
-                'error': 'Campos obrigatórios não preenchidos',
-                'message': 'Complete os campos obrigatórios antes de pular o onboarding',
-                'required_fields': [
-                    'main_platform', 'niche', 'experience_level',
-                    'primary_goal', 'time_available'
-                ]
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # User can skip to main app
         return Response({
             'message': 'Onboarding pulado com sucesso!',
-            'can_skip': True,
-            'completeness_percentage': profile.completeness_percentage
+            'skipped': True
         })
 
     except CreatorProfile.DoesNotExist:
+        # Create profile with skipped status
+        profile = CreatorProfile.objects.create(
+            user=request.user,
+            onboarding_skipped=True
+        )
+
         return Response({
-            'error': 'Perfil não encontrado',
-            'message': 'Complete o onboarding antes de pular',
-            'can_skip': False
-        }, status=status.HTTP_404_NOT_FOUND)
+            'message': 'Onboarding pulado com sucesso!',
+            'skipped': True
+        })
 
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
-def profile_choices(request):
+def onboarding_suggestions(request):
     """
-    Get all available choices for profile fields.
-    Used by frontend to populate select/radio options.
-    """
-    choices = {
-        'platforms': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.PLATFORM_CHOICES
-        ],
-        'experience_levels': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.EXPERIENCE_CHOICES
-        ],
-        'goals': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.GOAL_CHOICES
-        ],
-        'time_options': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.TIME_CHOICES
-        ],
-        'communication_tones': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.TONE_CHOICES
-        ],
-        'content_durations': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.DURATION_CHOICES
-        ],
-        'complexity_levels': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.COMPLEXITY_CHOICES
-        ],
-        'frequencies': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.FREQUENCY_CHOICES
-        ],
-        'revenue_stages': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.REVENUE_CHOICES
-        ],
-        'team_sizes': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CreatorProfile.TEAM_CHOICES
-        ],
-    }
-
-    return Response(choices)
-
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def profile_suggestions(request):
-    """
-    Get suggestions for profile fields based on popular choices.
+    Get suggestions for onboarding fields.
     Used for autocomplete and quick selection.
     """
 
-    # Popular niche suggestions based on specification
-    niche_suggestions = [
-        'Marketing jurídico',
-        'Consultoria empresarial',
-        'Coaching executivo',
-        'Saúde e bem-estar',
-        'Educação financeira',
-        'Produtividade',
-        'Empreendedorismo',
-        'Tecnologia',
-        'Marketing digital',
-        'Recursos humanos',
-        'Direito trabalhista',
-        'Psicologia',
-        'Nutrição',
-        'Arquitetura',
-        'Design gráfico',
+    # Popular profession suggestions
+    profession_suggestions = [
+        'Advogado',
+        'Coach',
+        'Consultor',
+        'Médico',
+        'Psicólogo',
+        'Dentista',
+        'Contador',
+        'Arquiteto',
+        'Designer',
+        'Programador',
+        'Médico',
+        'Professor',
+        'Fisioterapeuta',
+        'Nutricionista',
+        'Personal Trainer',
     ]
 
-    # Popular tools based on specification
-    tool_suggestions = [
-        'Canva',
-        'Notion',
-        'ChatGPT',
-        'Figma',
-        'Adobe Creative Suite',
-        'Trello',
-        'Buffer',
-        'Hootsuite',
-        'Later',
-        'Mailchimp',
-        'Google Analytics',
-        'WordPress',
-        'Shopify',
-        'Zoom',
-        'Slack',
+    # Popular specialization suggestions
+    specialization_suggestions = [
+        'Tributário',
+        'Trabalhista',
+        'Civil',
+        'Executivo',
+        'Empresarial',
+        'Financeiro',
+        'Digital',
+        'Estratégico',
+        'Cardiologia',
+        'Ortopedia',
+        'Psicologia Clínica',
+        'Psicologia Organizacional',
+        'Endodontia',
+        'Ortodontia',
+        'Contabilidade Tributária',
+        'Contabilidade Societária',
+        'Arquitetura Residencial',
+        'Arquitetura Comercial',
+        'Design Gráfico',
+        'Design de Produto',
+        'Desenvolvimento Web',
+        'Desenvolvimento Mobile',
+        'Clínica Geral',
+        'Pediatria',
+        'Educação Física',
+        'Nutrição Esportiva',
+        'Nutrição Clínica',
     ]
 
-    # Popular expertise areas
-    expertise_suggestions = [
-        'Estratégia de negócios',
-        'Marketing de conteúdo',
-        'Vendas consultivas',
-        'Liderança',
-        'Gestão de equipes',
-        'Transformação digital',
-        'Customer success',
-        'Growth hacking',
-        'SEO e SEM',
-        'E-commerce',
-        'Análise de dados',
-        'Automação de processos',
-        'Experiência do cliente',
-        'Inovação',
-        'Sustentabilidade',
+    # Popular font suggestions
+    font_suggestions = [
+        'Inter',
+        'Roboto',
+        'Open Sans',
+        'Poppins',
+        'Montserrat',
+        'Lato',
+        'Source Sans Pro',
+        'Nunito',
+        'Ubuntu',
+        'Raleway',
+        'Playfair Display',
+        'Merriweather',
+        'PT Sans',
+        'Noto Sans',
+        'Work Sans',
+    ]
+
+    # Popular color suggestions
+    color_suggestions = [
+        '#3B82F6',  # Blue
+        '#EF4444',  # Red
+        '#10B981',  # Green
+        '#F59E0B',  # Yellow
+        '#8B5CF6',  # Purple
+        '#F97316',  # Orange
+        '#06B6D4',  # Cyan
+        '#EC4899',  # Pink
+        '#84CC16',  # Lime
+        '#6366F1',  # Indigo
+        '#F43F5E',  # Rose
+        '#14B8A6',  # Teal
+        '#FBBF24',  # Amber
+        '#A855F7',  # Violet
+        '#22C55E',  # Emerald
     ]
 
     suggestions = {
-        'niches': niche_suggestions,
-        'tools': tool_suggestions,
-        'expertise_areas': expertise_suggestions,
-        'preferred_hours': [
-            'Manhã (6h-12h)',
-            'Tarde (12h-18h)',
-            'Noite (18h-24h)',
-            'Madrugada (0h-6h)',
-        ]
+        'professions': profession_suggestions,
+        'specializations': specialization_suggestions,
+        'fonts': font_suggestions,
+        'colors': color_suggestions,
     }
 
     return Response(suggestions)
@@ -389,3 +330,117 @@ def reset_profile(request):
             'message': 'Nenhum perfil encontrado para resetar',
             'reset': False
         }, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['PATCH'])
+@permission_classes([permissions.IsAuthenticated])
+def update_user_profile(request):
+    """
+    Update user's basic profile information (name, surname).
+    """
+    try:
+        first_name = request.data.get('first_name')
+        last_name = request.data.get('last_name')
+
+        if not first_name and not last_name:
+            return Response({
+                'error': 'At least first_name or last_name must be provided'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+
+        if first_name is not None:
+            user.first_name = first_name.strip()
+        if last_name is not None:
+            user.last_name = last_name.strip()
+
+        user.save()
+
+        return Response({
+            'message': 'Perfil atualizado com sucesso!',
+            'user': {
+                'id': user.id,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'email': user.email,
+                'username': user.username
+            }
+        })
+
+    except Exception as e:
+        return Response({
+            'error': f'Erro ao atualizar perfil: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def upload_avatar(request):
+    """
+    Upload user avatar as base64 string.
+    Validates image size and format.
+    """
+    try:
+        avatar_data = request.data.get('avatar')
+
+        if not avatar_data:
+            return Response({
+                'error': 'Avatar data is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate base64 format
+        if not avatar_data.startswith('data:image/'):
+            return Response({
+                'error': 'Invalid image format. Must be base64 encoded image.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Extract base64 data
+        try:
+            # Remove data URL prefix
+            base64_data = avatar_data.split(',')[1]
+            # Decode to check size
+            image_bytes = base64.b64decode(base64_data)
+        except Exception:
+            return Response({
+                'error': 'Invalid base64 encoding'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check file size (1MB = 1,048,576 bytes)
+        if len(image_bytes) > 1048576:
+            return Response({
+                'error': 'Image size exceeds 1MB limit'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate image format
+        image_header = image_bytes[:8]
+        valid_formats = [
+            b'\xff\xd8\xff',  # JPEG
+            b'\x89PNG\r\n\x1a\n',  # PNG
+            b'GIF87a',  # GIF
+            b'GIF89a',  # GIF
+        ]
+
+        is_valid_format = any(image_header.startswith(fmt)
+                              for fmt in valid_formats)
+        if not is_valid_format:
+            return Response({
+                'error': 'Invalid image format. Only JPEG, PNG, and GIF are supported.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get or create profile and save avatar
+        profile, created = CreatorProfile.objects.get_or_create(
+            user=request.user
+        )
+
+        profile.avatar = avatar_data
+        profile.save()
+
+        return Response({
+            'message': 'Avatar atualizado com sucesso!',
+            'avatar': avatar_data
+        })
+
+    except Exception as e:
+        return Response({
+            'error': f'Erro ao fazer upload do avatar: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
