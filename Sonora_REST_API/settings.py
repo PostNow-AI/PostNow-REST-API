@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.twitter',
     # Custom apps
     'CreatorProfile',
+    'IdeaBank',
 ]
 
 SITE_ID = 1

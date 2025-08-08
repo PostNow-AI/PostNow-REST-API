@@ -42,4 +42,5 @@ urlpatterns = [
 
     # Creator Profile endpoints
     path('api/v1/creator-profile/', include('CreatorProfile.urls')),
+    path('api/v1/ideabank/', include('IdeaBank.urls')),
 ]
