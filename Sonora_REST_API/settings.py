@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount.providers.facebook',
     'allauth.socialaccount.providers.twitter',
     # Custom apps
+    'Users',
     'CreatorProfile',
     'IdeaBank',
 ]
