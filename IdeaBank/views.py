@@ -142,15 +142,20 @@ def get_public_options(request):
     """Get available options for idea generation (public endpoint)."""
     from .models import CampaignObjective, ContentType, SocialPlatform
 
+    # Define content types available for each platform
+    platform_content_types = {
+        'instagram': ['post', 'story', 'reel', 'carousel', 'live'],
+        'tiktok': ['video', 'live'],
+        'youtube': ['video', 'live'],
+        'linkedin': ['post', 'carousel', 'video', 'live'],
+    }
+
     return Response({
         'objectives': [
             {'value': choice[0], 'label': choice[1]}
             for choice in CampaignObjective.choices
         ],
-        'content_types': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in ContentType.choices
-        ],
+        'content_types': platform_content_types,
         'platforms': [
             {'value': choice[0], 'label': choice[1]}
             for choice in SocialPlatform.choices
@@ -164,15 +169,20 @@ def get_available_options(request):
     """Get available options for idea generation."""
     from .models import CampaignObjective, ContentType, SocialPlatform
 
+    # Define content types available for each platform
+    platform_content_types = {
+        'instagram': ['post', 'story', 'reel', 'carousel', 'live'],
+        'tiktok': ['video', 'live'],
+        'youtube': ['video', 'live'],
+        'linkedin': ['post', 'carousel', 'video', 'live'],
+    }
+
     return Response({
         'objectives': [
             {'value': choice[0], 'label': choice[1]}
             for choice in CampaignObjective.choices
         ],
-        'content_types': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in ContentType.choices
-        ],
+        'content_types': platform_content_types,
         'platforms': [
             {'value': choice[0], 'label': choice[1]}
             for choice in SocialPlatform.choices
