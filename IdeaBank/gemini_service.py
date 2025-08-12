@@ -124,21 +124,21 @@ Responda em português brasileiro e seja específico e detalhado.
 
     def _build_persona_section(self, config: Dict) -> str:
         """Build the persona section of the prompt."""
-        persona = config.get('persona', {})
-
         sections = []
-        if persona.get('age'):
-            sections.append(f"Idade: {persona['age']}")
-        if persona.get('location'):
-            sections.append(f"Localização: {persona['location']}")
-        if persona.get('income'):
-            sections.append(f"Renda: {persona['income']}")
-        if persona.get('interests'):
-            sections.append(f"Interesses: {persona['interests']}")
-        if persona.get('behavior'):
-            sections.append(f"Comportamento: {persona['behavior']}")
-        if persona.get('pain_points'):
-            sections.append(f"Dores e necessidades: {persona['pain_points']}")
+
+        if config.get('persona_age'):
+            sections.append(f"Idade: {config['persona_age']}")
+        if config.get('persona_location'):
+            sections.append(f"Localização: {config['persona_location']}")
+        if config.get('persona_income'):
+            sections.append(f"Renda: {config['persona_income']}")
+        if config.get('persona_interests'):
+            sections.append(f"Interesses: {config['persona_interests']}")
+        if config.get('persona_behavior'):
+            sections.append(f"Comportamento: {config['persona_behavior']}")
+        if config.get('persona_pain_points'):
+            sections.append(
+                f"Dores e necessidades: {config['persona_pain_points']}")
 
         return '\n'.join(sections) if sections else "Não especificado"
 
@@ -214,6 +214,7 @@ Responda em português brasileiro e seja específico e detalhado.
         try:
             prompt = self._build_prompt(user, config)
 
+            print(prompt)
             response = self.model.generate_content(prompt)
 
             # Parse the response and structure it
