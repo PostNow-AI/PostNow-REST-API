@@ -9,6 +9,9 @@ except ImportError:
     genai = None
 
 from CreatorProfile.models import CreatorProfile
+from django.contrib.auth.models import User
+
+from IdeaBank.models import CampaignIdea
 
 
 class GeminiService:
@@ -26,14 +29,16 @@ class GeminiService:
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-1.5-flash')
 
-    def _build_prompt(self, user: 'User', config: Dict) -> str:
+    def _build_prompt(self, user: User, config: Dict) -> str:
         """Build a comprehensive prompt for idea generation."""
 
-        # Get user's creator profile
-        try:
-            profile = CreatorProfile.objects.get(user=user)
-        except CreatorProfile.DoesNotExist:
-            profile = None
+        # Get user's creator profile (only if user is authenticated)
+        profile = None
+        if user:
+            try:
+                profile = CreatorProfile.objects.get(user=user)
+            except CreatorProfile.DoesNotExist:
+                profile = None
 
         # Build persona section
         persona_section = self._build_persona_section(config)
@@ -45,7 +50,9 @@ class GeminiService:
         creator_section = self._build_creator_section(
             profile) if profile else ""
 
-        prompt = f"""
+        # Adjust prompt based on whether user is authenticated
+        if user and profile:
+            prompt = f"""
 Você é um especialista em marketing digital e criação de conteúdo para redes sociais. 
 Sua tarefa é gerar ideias criativas e estratégicas para campanhas de marketing digital.
 
@@ -69,6 +76,38 @@ Sua tarefa é gerar ideias criativas e estratégicas para campanhas de marketing
 5. Use a paleta de cores e tipografia do criador quando relevante
 6. Seja criativo e estratégico
 7. Forneça ideias práticas e executáveis
+
+## FORMATO DE RESPOSTA:
+Para cada plataforma, forneça:
+- Título da ideia
+- Descrição breve
+- Conteúdo detalhado (texto, hashtags, call-to-action)
+- Tipo de conteúdo específico
+- Estratégia de implementação
+
+Responda em português brasileiro e seja específico e detalhado.
+"""
+        else:
+            prompt = f"""
+Você é um especialista em marketing digital e criação de conteúdo para redes sociais. 
+Sua tarefa é gerar ideias criativas e estratégicas para campanhas de marketing digital.
+
+## OBJETIVOS DA CAMPANHA:
+{', '.join(config['objectives'])}
+
+## PERSONA ALVO:
+{persona_section}
+
+## PLATAFORMAS E TIPOS DE CONTEÚDO:
+{platform_section}
+
+## INSTRUÇÕES:
+1. Gere ideias específicas para cada plataforma selecionada
+2. Foque nos objetivos da campanhas (vendas, branding, engajamento)
+3. Adapte o conteúdo para a persona alvo
+4. Seja criativo e estratégico
+5. Forneça ideias práticas e executáveis
+6. Note: Estas ideias são para usuários sem perfil personalizado, então use estratégias gerais mas eficazes
 
 ## FORMATO DE RESPOSTA:
 Para cada plataforma, forneça:
@@ -170,7 +209,7 @@ Responda em português brasileiro e seja específico e detalhado.
 
         return '\n'.join(sections)
 
-    def generate_ideas(self, user: 'User', config: Dict) -> List[Dict]:
+    def generate_ideas(self, user: User, config: Dict) -> List[Dict]:
         """Generate campaign ideas using Gemini."""
         try:
             prompt = self._build_prompt(user, config)
@@ -205,3 +244,99 @@ Responda em português brasileiro e seja específico e detalhado.
             ideas.append(idea)
 
         return ideas
+
+    def improve_idea(self, user: User, current_idea: CampaignIdea, improvement_prompt: str) -> Dict:
+        """Improve an existing campaign idea using AI."""
+
+        # Get user's creator profile
+        try:
+            profile = CreatorProfile.objects.get(user=user)
+        except CreatorProfile.DoesNotExist:
+            profile = None
+
+        # Get the original configuration if available
+        config_data = {}
+        if hasattr(current_idea, 'config') and current_idea.config:
+            config = current_idea.config
+            config_data = {
+                'objectives': config.objectives,
+                'persona_age': config.persona_age,
+                'persona_location': config.persona_location,
+                'persona_income': config.persona_income,
+                'persona_interests': config.persona_interests,
+                'persona_behavior': config.persona_behavior,
+                'persona_pain_points': config.persona_pain_points,
+                'platforms': config.platforms,
+                'content_types': config.content_types,
+            }
+
+        # Build creator profile section
+        creator_section = self._build_creator_section(
+            profile) if profile else ""
+
+        # Build the improvement prompt
+        prompt = f"""
+Você é um especialista em marketing digital e criação de conteúdo para redes sociais.
+Sua tarefa é melhorar uma ideia de campanha existente baseada no feedback específico do usuário.
+
+{creator_section}
+
+IDEIA ATUAL:
+Título: {current_idea.title}
+Descrição: {current_idea.description}
+Conteúdo: {current_idea.content}
+Plataforma: {current_idea.get_platform_display()}
+Tipo de Conteúdo: {current_idea.get_content_type_display()}
+Status: {current_idea.get_status_display()}
+
+CONTEXTO ORIGINAL DA CAMPANHA:
+{self._build_persona_section(config_data) if config_data else "Informações do contexto original não disponíveis."}
+
+SOLICITAÇÃO DE MELHORIA:
+{improvement_prompt}
+
+INSTRUÇÕES:
+1. Analise a ideia atual e a solicitação de melhoria
+2. Mantenha a essência da ideia original, mas implemente as melhorias solicitadas
+3. Use todas as informações do perfil do criador e contexto da campanha
+4. Mantenha a mesma plataforma e tipo de conteúdo, a menos que especificamente solicitado para mudar
+5. Retorne APENAS um JSON válido com os campos melhorados
+
+Formato de resposta (JSON):
+{{
+    "title": "Título melhorado da ideia",
+    "description": "Descrição melhorada (2-3 frases explicando a ideia)",
+    "content": "Conteúdo detalhado melhorado da campanha"
+}}
+
+IMPORTANTE: Retorne APENAS o JSON válido, sem explicações adicionais.
+"""
+
+        try:
+            response = self.model.generate_content(prompt)
+            response_text = response.text.strip()
+
+            # Clean and parse JSON response
+            if response_text.startswith('```json'):
+                response_text = response_text[7:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+
+            response_text = response_text.strip()
+
+            import json
+            improved_data = json.loads(response_text)
+
+            # Validate that we have the required fields
+            required_fields = ['title', 'description', 'content']
+            for field in required_fields:
+                if field not in improved_data:
+                    raise ValueError(
+                        f"Campo obrigatório '{field}' não encontrado na resposta da IA")
+
+            return improved_data
+
+        except json.JSONDecodeError as e:
+            raise Exception(f"Erro ao processar resposta da IA: {str(e)}")
+        except Exception as e:
+            raise Exception(f"Erro na comunicação com a IA: {str(e)}")

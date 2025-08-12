@@ -84,6 +84,38 @@ def generate_ideas(request):
         )
 
 
+@api_view(['POST'])
+@permission_classes([])  # No authentication required
+def generate_public_ideas(request):
+    """Generate campaign ideas for public users without authentication."""
+    serializer = IdeaGenerationRequestSerializer(data=request.data)
+
+    if not serializer.is_valid():
+        return Response(
+            {'error': 'Dados inválidos', 'details': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        # Generate ideas using Gemini without saving to database
+        gemini_service = GeminiService()
+        ideas_data = gemini_service.generate_ideas(
+            None, serializer.validated_data)
+
+        # Return ideas without saving to database
+        return Response({
+            'message': 'Ideias geradas com sucesso!',
+            'ideas': ideas_data,
+            'note': 'Estas ideias não foram salvas. Crie uma conta para salvar suas ideias.'
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Erro na geração de ideias: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_idea_stats(request):
@@ -101,6 +133,28 @@ def get_idea_stats(request):
         'draft_ideas': draft_ideas,
         'approved_ideas': approved_ideas,
         'archived_ideas': archived_ideas
+    })
+
+
+@api_view(['GET'])
+@permission_classes([])  # No authentication required
+def get_public_options(request):
+    """Get available options for idea generation (public endpoint)."""
+    from .models import CampaignObjective, ContentType, SocialPlatform
+
+    return Response({
+        'objectives': [
+            {'value': choice[0], 'label': choice[1]}
+            for choice in CampaignObjective.choices
+        ],
+        'content_types': [
+            {'value': choice[0], 'label': choice[1]}
+            for choice in ContentType.choices
+        ],
+        'platforms': [
+            {'value': choice[0], 'label': choice[1]}
+            for choice in SocialPlatform.choices
+        ]
     })
 
 
@@ -124,3 +178,54 @@ def get_available_options(request):
             for choice in SocialPlatform.choices
         ]
     })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def improve_idea(request, idea_id):
+    """Improve an existing campaign idea using AI."""
+    try:
+        # Get the idea
+        idea = CampaignIdea.objects.get(id=idea_id, user=request.user)
+    except CampaignIdea.DoesNotExist:
+        return Response(
+            {'error': 'Ideia não encontrada'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    improvement_prompt = request.data.get('improvement_prompt')
+    if not improvement_prompt:
+        return Response(
+            {'error': 'Prompt de melhoria é obrigatório'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        # Use Gemini to improve the idea
+        gemini_service = GeminiService()
+        improved_idea_data = gemini_service.improve_idea(
+            user=request.user,
+            current_idea=idea,
+            improvement_prompt=improvement_prompt
+        )
+
+        # Update the idea with improved content
+        idea.title = improved_idea_data.get('title', idea.title)
+        idea.description = improved_idea_data.get(
+            'description', idea.description)
+        idea.content = improved_idea_data.get('content', idea.content)
+        idea.status = 'draft'  # Set status to draft after improvement
+        idea.save()
+
+        # Serialize and return updated idea
+        serializer = CampaignIdeaSerializer(idea)
+        return Response({
+            'message': 'Ideia melhorada com sucesso!',
+            'idea': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Erro ao melhorar ideia: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
