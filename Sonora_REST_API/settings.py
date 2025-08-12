@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'Users',
     'CreatorProfile',
     'IdeaBank',
+    'GlobalOptions',
 ]
 
 SITE_ID = 1

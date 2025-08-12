@@ -12,6 +12,7 @@ import sys
 import django
 
 # Setup Django BEFORE importing Django models
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Sonora_REST_API.settings')
 django.setup()
 
