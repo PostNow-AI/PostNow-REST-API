@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 from typing import Dict, List
@@ -109,94 +110,121 @@ Tipografia:
 {platform_content_section}
 
 ## INSTRUÇÕES ESPECÍFICAS:
-1. Crie conteúdo ESPECÍFICO para cada plataforma, respeitando suas particularidades
+1. Crie conteúdo ESPECÍFICO APENAS para as plataformas solicitadas: {', '.join(platforms)}
 2. Use a paleta de cores EXATA fornecida na composição visual
 3. Estruture o conteúdo para {objective_detail}
 4. Enderece as dores específicas da persona
 5. Inclua gatilhos mentais apropriados para vendas
 6. Forneça 3 variações IDÊNTICAS de copy para testes A/B (todas devem ter o mesmo conteúdo)
 7. Sugira elementos visuais específicos (não genéricos)
+8. IMPORTANTE: Gere conteúdo APENAS para as plataformas especificadas acima
+9. Para o campo "tipo_conteudo", use APENAS um destes valores: post, story, reel, video, carousel, live, custom
 
 ## FORMATO DE RESPOSTA ESTRUTURADO:
-Para CADA plataforma selecionada, forneça um JSON separado:
+Gere APENAS um JSON para a plataforma solicitada. Se múltiplas plataformas foram solicitadas, gere um JSON para cada uma, mas cada JSON deve ser independente:
 
 {{
-  "plataforma": "youtube",
-  "tipo_conteudo": "video",
-  "titulo_principal": "...",
-  "variacao_a": {{
-    "headline": "...",
-    "copy": "...",
-    "cta": "...",
-    "hashtags": ["..."],
-    "visual_description": "...",
-    "color_composition": "..."
-  }},
-  "variacao_b": {{
-    "headline": "...",
-    "copy": "...",
-    "cta": "...",
-    "hashtags": ["..."],
-    "visual_description": "...",
-    "color_composition": "..."
-  }},
-  "variacao_c": {{
-    "headline": "...",
-    "copy": "...",
-    "cta": "...",
-    "hashtags": ["..."],
-    "visual_description": "...",
-    "color_composition": "..."
-  }},
-  "estrategia_implementacao": "...",
-  "metricas_sucesso": ["..."],
-  "proximos_passos": ["..."]
-}}
-
-{{
-  "plataforma": "linkedin",
+  "plataforma": "{platforms[0] if len(platforms) == 1 else 'plataforma_solicitada'}",
   "tipo_conteudo": "post",
-  "titulo_principal": "...",
+  "titulo_principal": "texto aqui",
   "variacao_a": {{
-    "headline": "...",
-    "copy": "...",
-    "cta": "...",
-    "hashtags": ["..."],
-    "visual_description": "...",
-    "color_composition": "..."
+    "headline": "texto aqui",
+    "copy": "texto aqui",
+    "cta": "texto aqui",
+    "hashtags": ["texto aqui"],
+    "visual_description": "texto aqui",
+    "color_composition": "texto aqui"
   }},
   "variacao_b": {{
-    "headline": "...",
-    "copy": "...",
-    "cta": "...",
-    "hashtags": ["..."],
-    "visual_description": "...",
-    "color_composition": "..."
+    "headline": "texto aqui",
+    "copy": "texto aqui",
+    "cta": "texto aqui",
+    "hashtags": ["texto aqui"],
+    "visual_description": "texto aqui",
+    "color_composition": "texto aqui"
   }},
   "variacao_c": {{
-    "headline": "...",
-    "copy": "...",
-    "cta": "...",
-    "hashtags": ["..."],
-    "visual_description": "...",
-    "color_composition": "..."
+    "headline": "texto aqui",
+    "copy": "texto aqui",
+    "cta": "texto aqui",
+    "hashtags": ["texto aqui"],
+    "visual_description": "texto aqui",
+    "color_composition": "texto aqui"
   }},
-  "estrategia_implementacao": "...",
-  "metricas_sucesso": ["..."],
-  "proximos_passos": ["..."]
+  "estrategia_implementacao": "texto aqui",
+  "metricas_sucesso": ["texto aqui"],
+  "proximos_passos": ["texto aqui"]
 }}
 
 IMPORTANTE: 
 - Retorne um JSON para CADA plataforma solicitada
-- Seja específico e detalhado para cada plataforma
+- Se apenas uma plataforma foi especificada, retorne apenas um JSON
+- Seja específico e detalhado para cada plataforma solicitada
 - Use português brasileiro
 - Foque na conversão e vendas
 - Adapte o tom de voz conforme solicitado
 - As 3 variações (a, b, c) devem ter conteúdo IDÊNTICO para facilitar testes A/B
-- Gere conteúdo específico para cada plataforma (YouTube, LinkedIn, etc.)
+- Gere conteúdo APENAS para as plataformas especificadas pelo usuário
+- NÃO gere conteúdo para plataformas não solicitadas
 """
 
         return prompt
+
+    def _normalize_content_type(self, raw_content_type: str, platform: str) -> str:
+        """Normalize content type to fit database constraints and valid choices."""
+        if not raw_content_type:
+            return 'post'
+
+        # Convert to lowercase and remove extra spaces
+        normalized = raw_content_type.lower().strip()
+
+        # Map common variations to valid choices
+        content_type_mapping = {
+            'post': 'post',
+            'story': 'story',
+            'reel': 'reel',
+            'video': 'video',
+            'carousel': 'carousel',
+            'live': 'live',
+            'custom': 'custom',
+            # Common variations
+            'posts': 'post',
+            'stories': 'story',
+            'reels': 'reel',
+            'videos': 'video',
+            'carousels': 'carousel',
+            'lives': 'live',
+            'customs': 'custom',
+            # Platform-specific variations
+            'tipo_adequado_para_plataforma': 'post',
+            'tipo adequado para plataforma': 'post',
+            'tipo adequado': 'post',
+            'tipo': 'post',
+            # Platform-specific defaults
+            'tiktok': 'video',
+            'youtube': 'video',
+            'instagram': 'post',
+            'linkedin': 'post'
+        }
+
+        # Try exact match first
+        if normalized in content_type_mapping:
+            return content_type_mapping[normalized]
+
+        # Try partial matches
+        for key, value in content_type_mapping.items():
+            if key in normalized or normalized in key:
+                return value
+
+        # Platform-specific fallbacks
+        platform_defaults = {
+            'tiktok': 'video',
+            'youtube': 'video',
+            'instagram': 'post',
+            'linkedin': 'post'
+        }
+
+        return platform_defaults.get(platform, 'post')
 
     def _build_persona_section(self, config: Dict) -> str:
         """Build the persona section of the prompt."""
@@ -259,7 +287,11 @@ IMPORTANTE:
             raise Exception(f"Erro na geração de campanhas: {str(e)}")
 
     def _parse_campaign_response(self, response_text: str, config: Dict) -> List[Dict]:
-        """Parse Gemini response into structured campaign ideas."""
+        """Parse Gemini response into structured campaign ideas.
+
+        This method ensures that only one idea per platform is created,
+        preventing duplicate ideas with different variation types.
+        """
         ideas = []
 
         try:
@@ -279,16 +311,24 @@ IMPORTANTE:
                 matches = re.findall(json_pattern, response_text)
 
                 if len(matches) > 1:
-                    # Multiple JSONs found - parse each one
+                    # Multiple JSONs found - parse each one, but limit to one per platform
+                    platform_ideas = {}
                     for match in matches:
                         try:
                             campaign_data = json.loads(match)
-                            idea = self._create_idea_from_campaign_data(
-                                campaign_data, config)
-                            ideas.append(idea)
+                            platform = campaign_data.get(
+                                'plataforma', 'unknown')
+
+                            # Only keep one idea per platform to prevent duplicates
+                            if platform not in platform_ideas:
+                                idea = self._create_idea_from_campaign_data(
+                                    campaign_data, config)
+                                platform_ideas[platform] = idea
                         except json.JSONDecodeError:
                             continue
 
+                    # Convert to list
+                    ideas = list(platform_ideas.values())
                     if ideas:
                         return ideas
 
@@ -312,7 +352,17 @@ IMPORTANTE:
     def _create_idea_from_campaign_data(self, campaign_data: Dict, config: Dict) -> Dict:
         """Create idea data from parsed campaign response."""
         platform = campaign_data.get('plataforma', 'instagram')
-        content_type = campaign_data.get('tipo_conteudo', 'post')
+        raw_content_type = campaign_data.get('tipo_conteudo', 'post')
+
+        # Normalize and validate content_type to fit database constraints
+        content_type = self._normalize_content_type(raw_content_type, platform)
+
+        # Validate that the platform is one of the requested platforms
+        requested_platforms = config.get('platforms', [])
+        if requested_platforms and platform not in requested_platforms:
+            # If platform is not in requested list, use the first requested platform
+            platform = requested_platforms[0]
+            campaign_data['plataforma'] = platform
 
         # Ensure all variations exist and are equal
         variations = []
@@ -363,6 +413,7 @@ IMPORTANTE:
     def _extract_multiple_json_objects(self, response_text: str, config: Dict) -> List[Dict]:
         """Extract multiple JSON objects from response text."""
         ideas = []
+        platform_ideas = {}
 
         # Simple extraction - look for JSON-like structures
         import re
@@ -372,12 +423,18 @@ IMPORTANTE:
         for match in matches:
             try:
                 campaign_data = json.loads(match)
-                idea = self._create_idea_from_campaign_data(
-                    campaign_data, config)
-                ideas.append(idea)
+                platform = campaign_data.get('plataforma', 'unknown')
+
+                # Only keep one idea per platform
+                if platform not in platform_ideas:
+                    idea = self._create_idea_from_campaign_data(
+                        campaign_data, config)
+                    platform_ideas[platform] = idea
             except json.JSONDecodeError:
                 continue
 
+        # Convert to list
+        ideas = list(platform_ideas.values())
         return ideas if ideas else self._create_fallback_ideas(config)
 
     def _create_fallback_ideas(self, config: Dict) -> List[Dict]:
@@ -385,6 +442,7 @@ IMPORTANTE:
         ideas = []
         platforms = config.get('platforms', ['instagram'])
 
+        # Only create one idea per platform
         for platform in platforms:
             content_types = config.get(
                 'content_types', {}).get(platform, ['post'])
@@ -427,6 +485,8 @@ IMPORTANTE:
             }
 
             ideas.append(idea)
+            # Break after first platform to ensure only one idea is created
+            break
 
         return ideas
 
@@ -556,20 +616,30 @@ IMPORTANTE:
         creator_section = self._build_creator_section(
             profile) if profile else ""
 
-        # Build the improvement prompt
+        # Expor JSON atual (se possível) para orientar a IA
+        try:
+            current_json = json.loads(current_idea.content)
+            current_json_pretty = json.dumps(
+                current_json, ensure_ascii=False, indent=2)
+        except Exception:
+            current_json_pretty = "<sem JSON válido>"
+
+        # Build the improvement prompt exigindo o MESMO schema das ideias geradas
         prompt = f"""
 Você é um especialista em marketing digital e criação de conteúdo para redes sociais.
 Sua tarefa é melhorar uma ideia de campanha existente baseada no feedback específico do usuário.
 
 {creator_section}
 
-IDEIA ATUAL:
-Título: {current_idea.title}
-Descrição: {current_idea.description}
-Conteúdo: {current_idea.content}
-Plataforma: {current_idea.get_platform_display()}
-Tipo de Conteúdo: {current_idea.get_content_type_display()}
-Status: {current_idea.get_status_display()}
+IDEIA ATUAL (metadados):
+- Título: {current_idea.title}
+- Descrição: {current_idea.description}
+- Plataforma: {current_idea.platform}
+- Tipo de Conteúdo: {current_idea.content_type}
+- Status: {current_idea.status}
+
+CONTEÚDO ATUAL (JSON, quando disponível):
+{current_json_pretty}
 
 CONTEXTO ORIGINAL DA CAMPANHA:
 {self._build_persona_section(config_data) if config_data else "Informações do contexto original não disponíveis."}
@@ -577,21 +647,51 @@ CONTEXTO ORIGINAL DA CAMPANHA:
 SOLICITAÇÃO DE MELHORIA:
 {improvement_prompt}
 
-INSTRUÇÕES:
-1. Analise a ideia atual e a solicitação de melhoria
-2. Mantenha a essência da ideia original, mas implemente as melhorias solicitadas
-3. Use todas as informações do perfil do criador e contexto da campanha
-4. Mantenha a mesma plataforma e tipo de conteúdo, a menos que especificamente solicitado para mudar
-5. Retorne APENAS um JSON válido com os campos melhorados
+INSTRUÇÕES CRÍTICAS (SIGA À RISCA):
+1. Mantenha a mesma plataforma (plataforma) e o mesmo tipo de conteúdo (tipo_conteudo) da ideia atual, salvo instrução explícita em contrário.
+2. Retorne APENAS um JSON VÁLIDO (RFC 8259) usando aspas duplas em chaves e strings.
+3. O JSON DEVE seguir EXATAMENTE o mesmo schema usado na geração de ideias (abaixo).
+4. As variações variacao_a, variacao_b e variacao_c DEVEM ter o MESMO conteúdo (cópias idênticas) para testes A/B.
+5. Campos de lista devem ser arrays JSON (por exemplo: hashtags, metricas_sucesso, proximos_passos).
+6. Não inclua comentários, texto fora do JSON, explicações ou markdown. Apenas o objeto JSON.
+7. IMPORTANTE: Gere conteúdo APENAS para a plataforma {current_idea.platform}, não para outras plataformas.
+8. Para o campo "tipo_conteudo", use APENAS um destes valores: post, story, reel, video, carousel, live, custom
 
-Formato de resposta (JSON):
+SCHEMA OBRIGATÓRIO (substitua pelos seus valores, mantendo as chaves):
 {{
-    "title": "Título melhorado da ideia",
-    "description": "Descrição melhorada (2-3 frases explicando a ideia)",
-    "content": "Conteúdo detalhado melhorado da campanha"
+            "plataforma": "{current_idea.platform}",
+  "tipo_conteudo": "post",
+  "titulo_principal": "texto aqui",
+  "variacao_a": {{
+                "headline": "texto aqui",
+    "copy": "texto aqui",
+    "cta": "texto aqui",
+    "hashtags": ["texto aqui"],
+    "visual_description": "texto aqui",
+    "color_composition": "texto aqui"
+  }},
+  "variacao_b": {{
+                "headline": "texto aqui",
+    "copy": "texto aqui",
+    "cta": "texto aqui",
+    "hashtags": ["texto aqui"],
+    "visual_description": "texto aqui",
+    "color_composition": "texto aqui"
+  }},
+  "variacao_c": {{
+                "headline": "texto aqui",
+    "copy": "texto aqui",
+    "cta": "texto aqui",
+    "hashtags": ["texto aqui"],
+    "visual_description": "texto aqui",
+    "color_composition": "texto aqui"
+  }},
+  "estrategia_implementacao": "texto aqui",
+  "metricas_sucesso": ["texto aqui"],
+  "proximos_passos": ["texto aqui"]
 }}
 
-IMPORTANTE: Retorne APENAS o JSON válido, sem explicações adicionais.
+RETORNE APENAS este objeto JSON único, válido e completo.
 """
 
         try:
@@ -606,14 +706,56 @@ IMPORTANTE: Retorne APENAS o JSON válido, sem explicações adicionais.
 
             response_text = response_text.strip()
 
-            improved_data = json.loads(response_text)
+            # Parse robusto do JSON
+            try:
+                campaign_data = json.loads(response_text)
+            except json.JSONDecodeError:
+                try:
+                    py_obj = ast.literal_eval(response_text)
+                    campaign_data = json.loads(json.dumps(py_obj))
+                except Exception as e:
+                    raise Exception(
+                        f"Resposta da IA não é JSON válido: {str(e)}")
 
-            # Validate that we have the required fields
-            required_fields = ['title', 'description', 'content']
-            for field in required_fields:
-                if field not in improved_data:
-                    raise ValueError(
-                        f"Campo obrigatório '{field}' não encontrado na resposta da IA")
+            if not isinstance(campaign_data, dict):
+                raise Exception("Resposta da IA não é um objeto JSON.")
+
+            # Garantias mínimas de schema
+            campaign_data.setdefault('plataforma', current_idea.platform)
+            campaign_data.setdefault(
+                'tipo_conteudo', current_idea.content_type)
+
+            # Normalizar variações (replicar base se faltar)
+            base_variation = None
+            for key in ['variacao_a', 'variacao_b', 'variacao_c']:
+                if key in campaign_data and campaign_data[key]:
+                    base_variation = campaign_data[key]
+                    break
+            if not base_variation:
+                base_variation = {
+                    'headline': campaign_data.get('titulo_principal', current_idea.title),
+                    'copy': campaign_data.get('estrategia_implementacao', current_idea.description),
+                    'cta': 'Clique para saber mais!',
+                    'hashtags': ['#campanha', '#marketing', '#conteudo'],
+                    'visual_description': 'Descrição visual padrão',
+                    'color_composition': 'Paleta de cores padrão'
+                }
+            for key in ['variacao_a', 'variacao_b', 'variacao_c']:
+                campaign_data[key] = {
+                    'headline': base_variation.get('headline', ''),
+                    'copy': base_variation.get('copy', ''),
+                    'cta': base_variation.get('cta', ''),
+                    'hashtags': base_variation.get('hashtags', []),
+                    'visual_description': base_variation.get('visual_description', ''),
+                    'color_composition': base_variation.get('color_composition', ''),
+                }
+
+            # Saída padronizada para o frontend
+            improved_data = {
+                'title': campaign_data.get('titulo_principal', current_idea.title),
+                'description': campaign_data.get('estrategia_implementacao', current_idea.description),
+                'content': json.dumps(campaign_data, ensure_ascii=False)
+            }
 
             return improved_data
 

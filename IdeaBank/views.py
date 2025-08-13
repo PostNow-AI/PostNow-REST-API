@@ -92,15 +92,15 @@ def generate_campaign_ideas(request):
         ideas_data = gemini_service.generate_campaign_ideas(
             request.user, campaign_data)
 
-        # Create campaign ideas with variations
+        # Create a single CampaignIdea per platform (store variations inside content JSON)
         ideas = []
         for idea_data in ideas_data:
-            # Create main idea (variation A)
             main_idea = CampaignIdea.objects.create(
                 campaign=campaign,
                 title=idea_data['title'],
                 description=idea_data['description'],
-                content=idea_data['content'],  # Full JSON content
+                # Full JSON content includes variacao_a/b/c
+                content=idea_data['content'],
                 platform=idea_data['platform'],
                 content_type=idea_data['content_type'],
                 variation_type='a',
@@ -118,30 +118,6 @@ def generate_campaign_ideas(request):
                     'color_composition', '') if idea_data.get('variations') else ''
             )
             ideas.append(main_idea)
-
-            # Create variations B and C with the same full content
-            variations = idea_data.get('variations', [])
-            for variation in variations:
-                if variation['variation_type'] in ['b', 'c']:
-                    variation_idea = CampaignIdea.objects.create(
-                        campaign=campaign,
-                        title=f"{idea_data['title']} - Variação {variation['variation_type'].upper()}",
-                        description=variation.get('copy', ''),
-                        # Same full JSON content for all variations
-                        content=idea_data['content'],
-                        platform=idea_data['platform'],
-                        content_type=idea_data['content_type'],
-                        variation_type=variation['variation_type'],
-                        headline=variation.get('headline', ''),
-                        copy=variation.get('copy', ''),
-                        cta=variation.get('cta', ''),
-                        hashtags=variation.get('hashtags', []),
-                        visual_description=variation.get(
-                            'visual_description', ''),
-                        color_composition=variation.get(
-                            'color_composition', '')
-                    )
-                    ideas.append(variation_idea)
 
         # Serialize response
         campaign_serializer = CampaignSerializer(campaign)
