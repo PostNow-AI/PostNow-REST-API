@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Dict, List
 
@@ -11,7 +12,7 @@ except ImportError:
 from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
 
-from IdeaBank.models import CampaignIdea
+from IdeaBank.models import CampaignIdea, VoiceTone
 
 
 class GeminiService:
@@ -29,10 +30,10 @@ class GeminiService:
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-1.5-flash')
 
-    def _build_prompt(self, user: User, config: Dict) -> str:
-        """Build a comprehensive prompt for idea generation."""
+    def _build_campaign_prompt(self, user: User, config: Dict) -> str:
+        """Build the new structured prompt for campaign generation."""
 
-        # Get user's creator profile (only if user is authenticated)
+        # Get user's creator profile
         profile = None
         if user:
             try:
@@ -41,83 +42,158 @@ class GeminiService:
                 profile = None
 
         # Build persona section
-        persona_section = self._build_persona_section(config)
+        persona_complete = self._build_persona_section(config)
 
-        # Build platform section
-        platform_section = self._build_platform_section(config)
+        # Build social media details
+        social_media_details = self._build_social_media_section(
+            profile) if profile else "Não especificado"
 
         # Build creator profile section
-        creator_section = self._build_creator_section(
-            profile) if profile else ""
+        professional_name = profile.professional_name if profile else "Não especificado"
+        profession = profile.profession if profile else "Não especificado"
+        specialization = profile.specialization if profile else "Não especificado"
+        primary_font = profile.primary_font if profile else "Não especificado"
+        secondary_font = profile.secondary_font if profile else "Não especificado"
 
-        # Adjust prompt based on whether user is authenticated
-        if user and profile:
-            prompt = f"""
-Você é um especialista em marketing digital e criação de conteúdo para redes sociais. 
-Sua tarefa é gerar ideias criativas e estratégicas para campanhas de marketing digital.
+        # Campaign details
+        objective_detail = config.get('title', 'Não especificado')
+        product_description = config.get(
+            'product_description', 'Não especificado')
+        value_proposition = config.get('value_proposition', 'Não especificado')
+        campaign_urgency = config.get('campaign_urgency', 'Não especificado')
+        voice_tone = config.get('voice_tone', 'professional')
 
-## PERFIL DO CRIADOR:
-{creator_section}
+        # Get voice tone display name
+        voice_tone_display = dict(VoiceTone.choices).get(
+            voice_tone, voice_tone)
 
-## OBJETIVOS DA CAMPANHA:
-{', '.join(config['objectives'])}
+        # Build platform and content type section
+        platforms = config.get('platforms', [])
+        content_types = config.get('content_types', {})
 
-## PERSONA ALVO:
-{persona_section}
+        platform_content_section = ""
+        for platform in platforms:
+            platform_content_types = content_types.get(platform, [])
+            if platform_content_types:
+                platform_content_section += f"- {platform}: {', '.join(platform_content_types)}\n"
+            else:
+                platform_content_section += f"- {platform}: Todos os tipos\n"
 
-## PLATAFORMAS E TIPOS DE CONTEÚDO:
-{platform_section}
+        prompt = f"""
+Você é um especialista em marketing digital e criação de conteúdo para redes sociais,
+especializado em coaching executivo e desenvolvimento de liderança.
 
-## INSTRUÇÕES:
-1. Gere ideias específicas para cada plataforma selecionada
-2. Considere o perfil do criador e sua expertise
-3. Foque nos objetivos da campanhas (vendas, branding, engajamento)
-4. Adapte o conteúdo para a persona alvo
-5. Use a paleta de cores e tipografia do criador quando relevante
-6. Seja criativo e estratégico
-7. Forneça ideias práticas e executáveis
+## 🎯 CONTEXTO DA CAMPANHA
+Objetivo Principal: {objective_detail}
+Produto/Serviço: {product_description}
+Proposta de Valor: {value_proposition}
+Urgência: {campaign_urgency}
+Tom de Voz: {voice_tone_display}
 
-## FORMATO DE RESPOSTA:
-Para cada plataforma, forneça:
-- Título da ideia
-- Descrição breve
-- Conteúdo detalhado (texto, hashtags, call-to-action)
-- Tipo de conteúdo específico
-- Estratégia de implementação
+## 👤 PERFIL DO CRIADOR
+Nome: {professional_name}
+Expertise: {profession} especializado em {specialization}
 
-Responda em português brasileiro e seja específico e detalhado.
-"""
-        else:
-            prompt = f"""
-Você é um especialista em marketing digital e criação de conteúdo para redes sociais. 
-Sua tarefa é gerar ideias criativas e estratégicas para campanhas de marketing digital.
+Redes Sociais Ativas:
+{social_media_details}
 
-## OBJETIVOS DA CAMPANHA:
-{', '.join(config['objectives'])}
+## 🎨 IDENTIDADE VISUAL DA MARCA
+Tipografia:
+- Títulos: {primary_font}
+- Corpo: {secondary_font}
 
-## PERSONA ALVO:
-{persona_section}
+## 🎯 PERSONA ALVO DETALHADA
+{persona_complete}
 
-## PLATAFORMAS E TIPOS DE CONTEÚDO:
-{platform_section}
+## 📱 PLATAFORMAS E TIPOS DE CONTEÚDO:
+{platform_content_section}
 
-## INSTRUÇÕES:
-1. Gere ideias específicas para cada plataforma selecionada
-2. Foque nos objetivos da campanhas (vendas, branding, engajamento)
-3. Adapte o conteúdo para a persona alvo
-4. Seja criativo e estratégico
-5. Forneça ideias práticas e executáveis
-6. Note: Estas ideias são para usuários sem perfil personalizado, então use estratégias gerais mas eficazes
+## INSTRUÇÕES ESPECÍFICAS:
+1. Crie conteúdo ESPECÍFICO para cada plataforma, respeitando suas particularidades
+2. Use a paleta de cores EXATA fornecida na composição visual
+3. Estruture o conteúdo para {objective_detail}
+4. Enderece as dores específicas da persona
+5. Inclua gatilhos mentais apropriados para vendas
+6. Forneça 3 variações IDÊNTICAS de copy para testes A/B (todas devem ter o mesmo conteúdo)
+7. Sugira elementos visuais específicos (não genéricos)
 
-## FORMATO DE RESPOSTA:
-Para cada plataforma, forneça:
-- Título da ideia
-- Descrição breve
-- Conteúdo detalhado (texto, hashtags, call-to-action)
-- Tipo de conteúdo específico
-- Estratégia de implementação
+## FORMATO DE RESPOSTA ESTRUTURADO:
+Para CADA plataforma selecionada, forneça um JSON separado:
 
-Responda em português brasileiro e seja específico e detalhado.
+{{
+  "plataforma": "youtube",
+  "tipo_conteudo": "video",
+  "titulo_principal": "...",
+  "variacao_a": {{
+    "headline": "...",
+    "copy": "...",
+    "cta": "...",
+    "hashtags": ["..."],
+    "visual_description": "...",
+    "color_composition": "..."
+  }},
+  "variacao_b": {{
+    "headline": "...",
+    "copy": "...",
+    "cta": "...",
+    "hashtags": ["..."],
+    "visual_description": "...",
+    "color_composition": "..."
+  }},
+  "variacao_c": {{
+    "headline": "...",
+    "copy": "...",
+    "cta": "...",
+    "hashtags": ["..."],
+    "visual_description": "...",
+    "color_composition": "..."
+  }},
+  "estrategia_implementacao": "...",
+  "metricas_sucesso": ["..."],
+  "proximos_passos": ["..."]
+}}
+
+{{
+  "plataforma": "linkedin",
+  "tipo_conteudo": "post",
+  "titulo_principal": "...",
+  "variacao_a": {{
+    "headline": "...",
+    "copy": "...",
+    "cta": "...",
+    "hashtags": ["..."],
+    "visual_description": "...",
+    "color_composition": "..."
+  }},
+  "variacao_b": {{
+    "headline": "...",
+    "copy": "...",
+    "cta": "...",
+    "hashtags": ["..."],
+    "visual_description": "...",
+    "color_composition": "..."
+  }},
+  "variacao_c": {{
+    "headline": "...",
+    "copy": "...",
+    "cta": "...",
+    "hashtags": ["..."],
+    "visual_description": "...",
+    "color_composition": "..."
+  }},
+  "estrategia_implementacao": "...",
+  "metricas_sucesso": ["..."],
+  "proximos_passos": ["..."]
+}}
+
+IMPORTANTE: 
+- Retorne um JSON para CADA plataforma solicitada
+- Seja específico e detalhado para cada plataforma
+- Use português brasileiro
+- Foque na conversão e vendas
+- Adapte o tom de voz conforme solicitado
+- As 3 variações (a, b, c) devem ter conteúdo IDÊNTICO para facilitar testes A/B
+- Gere conteúdo específico para cada plataforma (YouTube, LinkedIn, etc.)
 """
 
         return prompt
@@ -142,8 +218,229 @@ Responda em português brasileiro e seja específico e detalhado.
 
         return '\n'.join(sections) if sections else "Não especificado"
 
+    def _build_social_media_section(self, profile: CreatorProfile) -> str:
+        """Build the social media section of the prompt."""
+        if not profile:
+            return "Não especificado"
+
+        social_media = []
+        if profile.linkedin_url:
+            social_media.append(f"LinkedIn: {profile.linkedin_url}")
+        if profile.instagram_username:
+            social_media.append(f"Instagram: @{profile.instagram_username}")
+        if profile.youtube_channel:
+            social_media.append(f"YouTube: {profile.youtube_channel}")
+        if profile.tiktok_username:
+            social_media.append(f"TikTok: @{profile.tiktok_username}")
+
+        return '\n'.join(social_media) if social_media else "Não especificado"
+
+    def generate_campaign_ideas(self, user: User, config: Dict) -> List[Dict]:
+        """Generate campaign ideas using the new structured prompt."""
+        try:
+            prompt = self._build_campaign_prompt(user, config)
+
+            print("=== PROMPT ENVIADO PARA GEMINI ===")
+            print(prompt)
+            print("=====================================")
+
+            response = self.model.generate_content(prompt)
+            response_text = response.text.strip()
+
+            print("=== RESPOSTA DO GEMINI ===")
+            print(response_text)
+            print("=============================")
+
+            # Parse the response and structure it
+            ideas = self._parse_campaign_response(response_text, config)
+            return ideas
+
+        except Exception as e:
+            raise Exception(f"Erro na geração de campanhas: {str(e)}")
+
+    def _parse_campaign_response(self, response_text: str, config: Dict) -> List[Dict]:
+        """Parse Gemini response into structured campaign ideas."""
+        ideas = []
+
+        try:
+            # Clean the response text
+            if response_text.startswith('```json'):
+                response_text = response_text[7:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+
+            response_text = response_text.strip()
+
+            # Try to parse as multiple JSONs first
+            try:
+                # Look for multiple JSON objects
+                import re
+                json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+                matches = re.findall(json_pattern, response_text)
+
+                if len(matches) > 1:
+                    # Multiple JSONs found - parse each one
+                    for match in matches:
+                        try:
+                            campaign_data = json.loads(match)
+                            idea = self._create_idea_from_campaign_data(
+                                campaign_data, config)
+                            ideas.append(idea)
+                        except json.JSONDecodeError:
+                            continue
+
+                    if ideas:
+                        return ideas
+
+                # If multiple JSONs didn't work, try single JSON
+                campaign_data = json.loads(response_text)
+                ideas.append(self._create_idea_from_campaign_data(
+                    campaign_data, config))
+
+            except json.JSONDecodeError:
+                # If parsing fails, try to extract multiple JSONs
+                ideas = self._extract_multiple_json_objects(
+                    response_text, config)
+
+            return ideas
+
+        except Exception as e:
+            print(f"Erro ao processar resposta: {str(e)}")
+            # Fallback: create basic ideas for each platform
+            return self._create_fallback_ideas(config)
+
+    def _create_idea_from_campaign_data(self, campaign_data: Dict, config: Dict) -> Dict:
+        """Create idea data from parsed campaign response."""
+        platform = campaign_data.get('plataforma', 'instagram')
+        content_type = campaign_data.get('tipo_conteudo', 'post')
+
+        # Ensure all variations exist and are equal
+        variations = []
+        base_variation = None
+
+        # Find the first complete variation as base
+        for var_type in ['a', 'b', 'c']:
+            var_key = f'variacao_{var_type}'
+            if var_key in campaign_data and campaign_data[var_key]:
+                base_variation = campaign_data[var_key]
+                break
+
+        # If no base variation found, create a default one
+        if not base_variation:
+            base_variation = {
+                'headline': campaign_data.get('titulo_principal', f'Campanha para {platform}'),
+                'copy': campaign_data.get('estrategia_implementacao', ''),
+                'cta': 'Clique para saber mais!',
+                'hashtags': ['#campanha', '#marketing', '#conteudo'],
+                'visual_description': 'Descrição visual padrão',
+                'color_composition': 'Paleta de cores padrão'
+            }
+
+        # Create all three variations with the same content
+        for var_type in ['a', 'b', 'c']:
+            variations.append({
+                'variation_type': var_type,
+                'headline': base_variation.get('headline', ''),
+                'copy': base_variation.get('copy', ''),
+                'cta': base_variation.get('cta', ''),
+                'hashtags': base_variation.get('hashtags', []),
+                'visual_description': base_variation.get('visual_description', ''),
+                'color_composition': base_variation.get('color_composition', ''),
+            })
+
+        return {
+            'platform': platform,
+            'content_type': content_type,
+            'title': campaign_data.get('titulo_principal', f'Ideia para {platform}'),
+            'description': campaign_data.get('estrategia_implementacao', ''),
+            'content': json.dumps(campaign_data, ensure_ascii=False),
+            'variations': variations,
+            'strategy': campaign_data.get('estrategia_implementacao', ''),
+            'metrics': campaign_data.get('metricas_sucesso', []),
+            'next_steps': campaign_data.get('proximos_passos', [])
+        }
+
+    def _extract_multiple_json_objects(self, response_text: str, config: Dict) -> List[Dict]:
+        """Extract multiple JSON objects from response text."""
+        ideas = []
+
+        # Simple extraction - look for JSON-like structures
+        import re
+        json_pattern = r'\{[^{}]*\}'
+        matches = re.findall(json_pattern, response_text)
+
+        for match in matches:
+            try:
+                campaign_data = json.loads(match)
+                idea = self._create_idea_from_campaign_data(
+                    campaign_data, config)
+                ideas.append(idea)
+            except json.JSONDecodeError:
+                continue
+
+        return ideas if ideas else self._create_fallback_ideas(config)
+
+    def _create_fallback_ideas(self, config: Dict) -> List[Dict]:
+        """Create fallback ideas when parsing fails."""
+        ideas = []
+        platforms = config.get('platforms', ['instagram'])
+
+        for platform in platforms:
+            content_types = config.get(
+                'content_types', {}).get(platform, ['post'])
+            content_type = content_types[0] if content_types else 'post'
+
+            # Create base variation data
+            base_variation = {
+                'headline': f'Campanha para {platform}',
+                'copy': f'Conteúdo para {platform} - {config.get("title", "Campanha")}',
+                'cta': 'Clique para saber mais!',
+                'hashtags': ['#campanha', '#marketing', '#conteudo'],
+                'visual_description': f'Descrição visual para {platform}',
+                'color_composition': 'Paleta de cores padrão'
+            }
+
+            idea = {
+                'platform': platform,
+                'content_type': content_type,
+                'title': f'Campanha para {platform}',
+                'description': config.get('description', ''),
+                'content': json.dumps({
+                    'plataforma': platform,
+                    'tipo_conteudo': content_type,
+                    'titulo_principal': f'Campanha para {platform}',
+                    'variacao_a': base_variation,
+                    'variacao_b': base_variation,
+                    'variacao_c': base_variation,
+                    'estrategia_implementacao': f'Implementar campanha no {platform}',
+                    'metricas_sucesso': ['Engajamento', 'Alcance', 'Conversões'],
+                    'proximos_passos': ['Monitorar resultados', 'Otimizar campanha']
+                }, ensure_ascii=False),
+                'variations': [
+                    {**base_variation, 'variation_type': 'a'},
+                    {**base_variation, 'variation_type': 'b'},
+                    {**base_variation, 'variation_type': 'c'}
+                ],
+                'strategy': f'Implementar campanha no {platform}',
+                'metrics': ['Engajamento', 'Alcance', 'Conversões'],
+                'next_steps': ['Monitorar resultados', 'Otimizar campanha']
+            }
+
+            ideas.append(idea)
+
+        return ideas
+
+    # Legacy methods for backward compatibility
+    def generate_ideas(self, user: User, config: Dict) -> List[Dict]:
+        """Legacy method - now redirects to generate_campaign_ideas."""
+        return self.generate_campaign_ideas(user, config)
+
+    def _build_prompt(self, user: User, config: Dict) -> str:
+        """Legacy method - now redirects to _build_campaign_prompt."""
+        return self._build_campaign_prompt(user, config)
+
     def _build_platform_section(self, config: Dict) -> str:
-        """Build the platform section of the prompt."""
+        """Legacy method - kept for backward compatibility."""
         platforms = config.get('platforms', [])
         content_types = config.get('content_types', {})
 
@@ -157,7 +454,7 @@ Responda em português brasileiro e seja específico e detalhado.
         return '\n'.join(sections)
 
     def _build_creator_section(self, profile: CreatorProfile) -> str:
-        """Build the creator profile section of the prompt."""
+        """Legacy method - kept for backward compatibility."""
         sections = []
 
         if profile.professional_name:
@@ -209,24 +506,8 @@ Responda em português brasileiro e seja específico e detalhado.
 
         return '\n'.join(sections)
 
-    def generate_ideas(self, user: User, config: Dict) -> List[Dict]:
-        """Generate campaign ideas using Gemini."""
-        try:
-            prompt = self._build_prompt(user, config)
-
-            print(prompt)
-            response = self.model.generate_content(prompt)
-
-            # Parse the response and structure it
-            ideas = self._parse_gemini_response(response.text, config)
-
-            return ideas
-
-        except Exception as e:
-            raise Exception(f"Erro na geração de ideias: {str(e)}")
-
     def _parse_gemini_response(self, response_text: str, config: Dict) -> List[Dict]:
-        """Parse Gemini response into structured ideas."""
+        """Legacy method - kept for backward compatibility."""
         ideas = []
 
         # Simple parsing - in production, you might want more sophisticated parsing
@@ -257,18 +538,18 @@ Responda em português brasileiro e seja específico e detalhado.
 
         # Get the original configuration if available
         config_data = {}
-        if hasattr(current_idea, 'config') and current_idea.config:
-            config = current_idea.config
+        if hasattr(current_idea, 'campaign') and current_idea.campaign:
+            campaign = current_idea.campaign
             config_data = {
-                'objectives': config.objectives,
-                'persona_age': config.persona_age,
-                'persona_location': config.persona_location,
-                'persona_income': config.persona_income,
-                'persona_interests': config.persona_interests,
-                'persona_behavior': config.persona_behavior,
-                'persona_pain_points': config.persona_pain_points,
-                'platforms': config.platforms,
-                'content_types': config.content_types,
+                'objectives': campaign.objectives,
+                'persona_age': campaign.persona_age,
+                'persona_location': campaign.persona_location,
+                'persona_income': campaign.persona_income,
+                'persona_interests': campaign.persona_interests,
+                'persona_behavior': campaign.persona_behavior,
+                'persona_pain_points': campaign.persona_pain_points,
+                'platforms': campaign.platforms,
+                'content_types': campaign.content_types,
             }
 
         # Build creator profile section
@@ -325,7 +606,6 @@ IMPORTANTE: Retorne APENAS o JSON válido, sem explicações adicionais.
 
             response_text = response_text.strip()
 
-            import json
             improved_data = json.loads(response_text)
 
             # Validate that we have the required fields
