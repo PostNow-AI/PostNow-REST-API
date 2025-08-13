@@ -89,6 +89,18 @@ def generate_campaign_ideas(request):
 
         # Generate ideas using Gemini
         gemini_service = GeminiService()
+
+        # Inject user's Gemini API key if present
+        try:
+            from APIKeys.models import UserAPIKey
+            user_key = UserAPIKey.objects.filter(
+                user=request.user, provider='gemini').first()
+            if user_key:
+                campaign_data['gemini_api_key'] = user_key.api_key
+        except ImportError:
+            # APIKeys app not available, continue without user key
+            pass
+
         ideas_data = gemini_service.generate_campaign_ideas(
             request.user, campaign_data)
 
@@ -149,16 +161,38 @@ def generate_public_ideas(request):
         )
 
     try:
+        # Check if user is authenticated and has API key
+        user = request.user if request.user.is_authenticated else None
+        api_key = None
+
+        if user:
+            try:
+                from APIKeys.models import UserAPIKey
+                user_key = UserAPIKey.objects.filter(
+                    user=user, provider='gemini').first()
+                if user_key:
+                    api_key = user_key.api_key
+            except ImportError:
+                # APIKeys app not available, continue without user key
+                pass
+
         # Generate ideas using Gemini without saving to database
         gemini_service = GeminiService()
+
+        # Add API key to config if user has one
+        config_data = serializer.validated_data.copy()
+        if api_key:
+            config_data['gemini_api_key'] = api_key
+
         ideas_data = gemini_service.generate_campaign_ideas(
-            None, serializer.validated_data)
+            user, config_data)
 
         # Return ideas without saving to database
         return Response({
             'message': 'Ideias geradas com sucesso!',
             'ideas': ideas_data,
-            'note': 'Estas ideias não foram salvas. Crie uma conta para salvar suas ideias.'
+            'note': 'Estas ideias não foram salvas. Crie uma conta para salvar suas ideias.',
+            'api_key_used': 'user' if api_key else 'default'
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
@@ -288,10 +322,24 @@ def improve_idea(request, idea_id):
     try:
         # Use Gemini to improve the idea
         gemini_service = GeminiService()
+
+        # Get user's Gemini API key if present
+        api_key = None
+        try:
+            from APIKeys.models import UserAPIKey
+            user_key = UserAPIKey.objects.filter(
+                user=request.user, provider='gemini').first()
+            if user_key:
+                api_key = user_key.api_key
+        except ImportError:
+            # APIKeys app not available, continue without user key
+            pass
+
         improved_idea_data = gemini_service.improve_idea(
             user=request.user,
             current_idea=idea,
-            improvement_prompt=improvement_prompt
+            improvement_prompt=improvement_prompt,
+            api_key=api_key
         )
 
         # Update the idea with improved content

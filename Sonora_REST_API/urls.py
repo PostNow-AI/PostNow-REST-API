@@ -40,6 +40,9 @@ urlpatterns = [
     path('api/v1/auth/social-accounts/<int:account_id>/disconnect/',
          disconnect_social_account, name='disconnect_social_account'),
 
+    # API Key management endpoints
+    path('api/v1/api-keys/', include('APIKeys.urls')),
+
     # Creator Profile endpoints
     path('api/v1/creator-profile/', include('CreatorProfile.urls')),
     path('api/v1/ideabank/', include('IdeaBank.urls')),

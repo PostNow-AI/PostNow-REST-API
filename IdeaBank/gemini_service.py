@@ -24,11 +24,11 @@ class GeminiService:
             raise ImportError(
                 "google-generativeai não está instalado. Execute: pip install google-generativeai")
 
-        api_key = os.getenv('GEMINI_API_KEY')
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY environment variable is required")
+        # Get default API key from environment
+        self.default_api_key = os.getenv('GEMINI_API_KEY', '')
 
-        genai.configure(api_key=api_key)
+        # Initialize without API key - will be set per request
+        genai.configure(api_key="")
         self.model = genai.GenerativeModel('gemini-1.5-flash')
 
     def _build_campaign_prompt(self, user: User, config: Dict) -> str:
@@ -263,9 +263,23 @@ IMPORTANTE:
 
         return '\n'.join(social_media) if social_media else "Não especificado"
 
+    def _configure_api_key(self, api_key: str = None):
+        """Configure the Gemini API key for this request."""
+        # Use provided key, fallback to user key, then to default env key
+        if api_key:
+            genai.configure(api_key=api_key)
+        elif self.default_api_key:
+            genai.configure(api_key=self.default_api_key)
+        else:
+            raise ValueError("API key é obrigatória para usar o Gemini")
+
     def generate_campaign_ideas(self, user: User, config: Dict) -> List[Dict]:
         """Generate campaign ideas using the new structured prompt."""
         try:
+            # Configure API key if provided, otherwise use default
+            api_key = config.get('gemini_api_key')
+            self._configure_api_key(api_key)
+
             prompt = self._build_campaign_prompt(user, config)
 
             print("=== PROMPT ENVIADO PARA GEMINI ===")
@@ -587,8 +601,11 @@ IMPORTANTE:
 
         return ideas
 
-    def improve_idea(self, user: User, current_idea: CampaignIdea, improvement_prompt: str) -> Dict:
+    def improve_idea(self, user: User, current_idea: CampaignIdea, improvement_prompt: str, api_key: str = None) -> Dict:
         """Improve an existing campaign idea using AI."""
+
+        # Configure API key if provided, otherwise use default
+        self._configure_api_key(api_key)
 
         # Get user's creator profile
         try:
