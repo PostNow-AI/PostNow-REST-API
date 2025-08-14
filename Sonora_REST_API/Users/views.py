@@ -1,20 +1,22 @@
 
-from urllib.parse import urljoin
+import os
+from urllib.parse import urlencode, urljoin
 
 import requests
 from allauth.socialaccount.models import SocialAccount
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
+from django.shortcuts import redirect
 from django.urls import reverse
 from dotenv import load_dotenv
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from urllib.parse import urlencode
 
-from django.shortcuts import redirect
+from .models import UserProfile
+from .serializers import UserSubscriptionStatusSerializer
 
 load_dotenv()
 
@@ -103,26 +105,29 @@ def google_callback(request):
 @permission_classes([AllowAny])
 def google_auth(request):
     """
-    Google OAuth authentication endpoint
-    Expected payload: {'access_token': 'google_access_token'} or {'code': 'authorization_code'}
+    Google OAuth authentication endpoint - generates the Google OAuth URL
     """
-    access_token = request.data.get('access_token')
-    auth_code = request.data.get('code')
-
-    if not access_token and not auth_code:
-        return Response(
-            {'error': 'access_token or code is required'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
     try:
-        # Use the GoogleLogin view properly through the class-based view approach
-        view = GoogleLogin.as_view()
-        return view(request)
+        # Generate Google OAuth URL
+        client_id = os.getenv('GOOGLE_OAUTH2_CLIENT_ID')
+        redirect_uri = "http://localhost:8000/api/v1/auth/google/callback/"
+        scope = "email profile"
+        
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?" + \
+                   f"client_id={client_id}&" + \
+                   f"redirect_uri={redirect_uri}&" + \
+                   f"scope={scope}&" + \
+                   f"response_type=code&" + \
+                   f"access_type=offline"
+        
+        return Response({
+            'auth_url': auth_url
+        }, status=status.HTTP_200_OK)
+        
     except Exception as e:
         return Response(
             {'error': str(e)},
-            status=status.HTTP_400_BAD_REQUEST
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
@@ -189,5 +194,42 @@ def disconnect_social_account(request, account_id):
     except Exception as e:
         return Response(
             {'error': f'Failed to disconnect social account: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_subscription_status(request):
+    """Get user's subscription status."""
+    try:
+        profile = request.user.profile
+        message = ""
+
+        if not profile.subscribed:
+            message = "Para acessar todas as funcionalidades, entre em contato com Rogério Resende: WhatsApp +55 61 99993-0263"
+
+        data = {
+            'subscribed': profile.subscribed,
+            'subscription_date': profile.subscription_date,
+            'message': message
+        }
+
+        serializer = UserSubscriptionStatusSerializer(data)
+        return Response(serializer.data)
+
+    except UserProfile.DoesNotExist:
+        # Create profile if it doesn't exist
+        profile = UserProfile.objects.create(user=request.user)
+        data = {
+            'subscribed': False,
+            'subscription_date': None,
+            'message': "Para acessar todas as funcionalidades, entre em contato com Rogério Resende: WhatsApp +55 61 99993-0263"
+        }
+        serializer = UserSubscriptionStatusSerializer(data)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response(
+            {'error': f'Erro ao verificar status de assinatura: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
