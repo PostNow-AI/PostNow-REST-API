@@ -5,10 +5,15 @@ This will help you get a Google access token for testing in Postman
 """
 
 import os
+import sys
 import webbrowser
 
 import django
 from google_auth_oauthlib.flow import Flow
+
+# Add parent directory to Python path so we can import Sonora_REST_API
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 # Setup Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Sonora_REST_API.settings')

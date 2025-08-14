@@ -8,21 +8,21 @@ import os
 import sys
 
 import django
-from allauth.socialaccount.models import SocialApp
-from django.contrib.sites.models import Site
 
 # Setup Django BEFORE importing Django models
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Sonora_REST_API.settings')
 django.setup()
 
-# Import Django models AFTER setup
-
 
 def setup_google_oauth(client_id, client_secret):
     """
     Set up Google OAuth application in Django
     """
+    # Import Django models AFTER setup
+    from allauth.socialaccount.models import SocialApp
+    from django.contrib.sites.models import Site
+
     # Get the default site
     site = Site.objects.get(pk=1)
 
