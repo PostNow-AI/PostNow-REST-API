@@ -36,17 +36,18 @@ def google_callback(request):
 
     code = request.GET.get('code')
     error = request.GET.get('error')
+    frontend_url = os.getenv('FRONTEND_URL')
 
     # Handle OAuth errors (user denied access, etc.)
     if error:
         error_params = urlencode(
             {'error': error, 'error_description': 'Google authentication failed'})
-        return redirect(f'http://localhost:5173/auth/google/callback?{error_params}')
+        return redirect(f'{frontend_url}/auth/google/callback?{error_params}')
 
     if not code:
         error_params = urlencode(
             {'error': 'no_code', 'error_description': 'No authorization code received'})
-        return redirect(f'http://localhost:5173/auth/google/callback?{error_params}')
+        return redirect(f'{frontend_url}/auth/google/callback?{error_params}')
 
     try:
         # Process the OAuth code using the GoogleLogin view
@@ -64,7 +65,7 @@ def google_callback(request):
             # Create redirect response
             success_params = urlencode({'success': 'true'})
             redirect_response = redirect(
-                f'http://localhost:5173/auth/google/callback?{success_params}')
+                f'{frontend_url}/auth/google/callback?{success_params}')
 
             # Set JWT tokens as cookies
             if access_token:
@@ -92,13 +93,13 @@ def google_callback(request):
             # API error - redirect to frontend with error
             error_params = urlencode(
                 {'error': 'auth_failed', 'error_description': 'Google authentication failed'})
-            return redirect(f'http://localhost:5173/auth/google/callback?{error_params}')
+            return redirect(f'{frontend_url}/auth/google/callback?{error_params}')
 
     except Exception as e:
         # Server error - redirect to frontend with error
         error_params = urlencode(
             {'error': 'server_error', 'error_description': str(e)})
-        return redirect(f'http://localhost:5173/auth/google/callback?{error_params}')
+        return redirect(f'{frontend_url}/auth/google/callback?{error_params}')
 
 
 @api_view(['POST'])
@@ -112,18 +113,18 @@ def google_auth(request):
         client_id = os.getenv('GOOGLE_OAUTH2_CLIENT_ID')
         redirect_uri = "http://localhost:8000/api/v1/auth/google/callback/"
         scope = "email profile"
-        
-        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?" + \
+
+        auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + \
                    f"client_id={client_id}&" + \
                    f"redirect_uri={redirect_uri}&" + \
                    f"scope={scope}&" + \
-                   f"response_type=code&" + \
-                   f"access_type=offline"
-        
+                   "response_type=code&" + \
+                   "access_type=offline"
+
         return Response({
             'auth_url': auth_url
         }, status=status.HTTP_200_OK)
-        
+
     except Exception as e:
         return Response(
             {'error': str(e)},

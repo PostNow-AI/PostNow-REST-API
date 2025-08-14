@@ -62,6 +62,7 @@ class Command(BaseCommand):
         self.stdout.write('')
         self.stdout.write('   Authorized JavaScript origins:')
         self.stdout.write('   - http://localhost:5173')
+        self.stdout.write('   - https://sonora-ui.vercel.app')
         self.stdout.write('   - http://127.0.0.1:5173')
         self.stdout.write('   - http://localhost:8000')
         self.stdout.write('   - http://127.0.0.1:8000')
