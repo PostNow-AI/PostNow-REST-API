@@ -20,10 +20,16 @@ from .serializers import UserSubscriptionStatusSerializer
 
 load_dotenv()
 
+# Get base URL from environment or settings
+
+
+def get_base_url():
+    return os.getenv('BACKEND_BASE_URL', 'http://localhost:8000')
+
 
 class GoogleLogin(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
-    callback_url = "http://localhost:8000/api/v1/auth/google/callback/"
+    callback_url = f"{get_base_url()}/api/v1/auth/google/callback/"
     client_class = OAuth2Client
 
 
@@ -52,7 +58,7 @@ def google_callback(request):
     try:
         # Process the OAuth code using the GoogleLogin view
         token_endpoint_url = urljoin(
-            "http://localhost:8000", reverse("google_login"))
+            get_base_url(), reverse("google_login"))
         response = requests.post(url=token_endpoint_url, data={"code": code})
 
         if response.status_code == 200:
@@ -62,32 +68,16 @@ def google_callback(request):
             access_token = token_data.get('access')
             refresh_token = token_data.get('refresh')  # or 'refresh_token'
 
-            # Create redirect response
-            success_params = urlencode({'success': 'true'})
+            # Create redirect response with tokens in URL parameters
+            success_params = urlencode({
+                'success': 'true',
+                'access_token': access_token,
+                'refresh_token': refresh_token
+            })
             redirect_response = redirect(
                 f'{frontend_url}/auth/google/callback?{success_params}')
 
-            # Set JWT tokens as cookies
-            if access_token:
-                redirect_response.set_cookie(
-                    'access',
-                    access_token,
-                    max_age=86400,  # 24 hours (1 day)
-                    httponly=False,  # Frontend needs to access these
-                    secure=False,   # Set to True in production with HTTPS
-                    samesite='Strict'
-                )
-
-            if refresh_token:
-                redirect_response.set_cookie(
-                    'refresh',
-                    refresh_token,
-                    max_age=604800,  # 7 days
-                    httponly=False,  # Frontend needs to access these
-                    secure=False,   # Set to True in production with HTTPS
-                    samesite='Strict'
-                )
-
+            # No need to set cookies - tokens are passed in URL
             return redirect_response
         else:
             # API error - redirect to frontend with error
@@ -111,7 +101,7 @@ def google_auth(request):
     try:
         # Generate Google OAuth URL
         client_id = os.getenv('GOOGLE_OAUTH2_CLIENT_ID')
-        redirect_uri = "http://localhost:8000/api/v1/auth/google/callback/"
+        redirect_uri = f"{get_base_url()}/api/v1/auth/google/callback/"
         scope = "email profile"
 
         auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + \
