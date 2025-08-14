@@ -1,4 +1,5 @@
 
+import os
 from urllib.parse import urlencode, urljoin
 
 import requests
@@ -104,26 +105,29 @@ def google_callback(request):
 @permission_classes([AllowAny])
 def google_auth(request):
     """
-    Google OAuth authentication endpoint
-    Expected payload: {'access_token': 'google_access_token'} or {'code': 'authorization_code'}
+    Google OAuth authentication endpoint - generates the Google OAuth URL
     """
-    access_token = request.data.get('access_token')
-    auth_code = request.data.get('code')
-
-    if not access_token and not auth_code:
-        return Response(
-            {'error': 'access_token or code is required'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
     try:
-        # Use the GoogleLogin view properly through the class-based view approach
-        view = GoogleLogin.as_view()
-        return view(request)
+        # Generate Google OAuth URL
+        client_id = os.getenv('GOOGLE_OAUTH2_CLIENT_ID')
+        redirect_uri = "http://localhost:8000/api/v1/auth/google/callback/"
+        scope = "email profile"
+        
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?" + \
+                   f"client_id={client_id}&" + \
+                   f"redirect_uri={redirect_uri}&" + \
+                   f"scope={scope}&" + \
+                   f"response_type=code&" + \
+                   f"access_type=offline"
+        
+        return Response({
+            'auth_url': auth_url
+        }, status=status.HTTP_200_OK)
+        
     except Exception as e:
         return Response(
             {'error': str(e)},
-            status=status.HTTP_400_BAD_REQUEST
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
