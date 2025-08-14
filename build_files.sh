@@ -1,6 +1,12 @@
-echo "BUILD START"
- python3 -m venv venv
- source venv/bin/activate
- pip3 install -r requirements.txt
- python3 manage.py collectstatic --noinput --clear
- echo "BUILD END"
+#!/bin/bash
+# Build script for Vercel deployment
+
+# Install requirements using pip3
+pip3 install -r requirements-vercel.txt
+
+# Collect static files using python3
+python3 manage.py collectstatic --noinput
+
+# Create staticfiles_build directory
+mkdir -p staticfiles_build
+cp -r staticfiles/* staticfiles_build/

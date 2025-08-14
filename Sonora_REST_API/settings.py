@@ -14,10 +14,15 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+import pymysql
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Configure PyMySQL for Vercel compatibility
+
+pymysql.install_as_MySQLdb()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -245,7 +250,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite default
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
+    "https://sonora-ui.vercel.app",  # Vercel frontend
 ]
+
+# Add additional CORS origins from environment variable
+ADDITIONAL_CORS_ORIGINS = os.getenv('ADDITIONAL_CORS_ORIGINS', '')
+if ADDITIONAL_CORS_ORIGINS:
+    CORS_ALLOWED_ORIGINS.extend(ADDITIONAL_CORS_ORIGINS.split(','))
 
 # Allow credentials to be included in CORS requests (needed for cookies)
 CORS_ALLOW_CREDENTIALS = True

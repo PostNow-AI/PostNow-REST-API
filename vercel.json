@@ -3,12 +3,10 @@
     {
       "src": "Sonora_REST_API/wsgi.py",
       "use": "@vercel/python",
-      "config": { "maxLambdaSize": "15mb", "runtime": "python3" }
-    },
-    {
-      "src": "build_files.sh",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "staticfiles_build" }
+      "config": {
+        "maxLambdaSize": "15mb",
+        "runtime": "python3.11"
+      }
     }
   ],
   "routes": [
@@ -18,7 +16,11 @@
     },
     {
       "src": "/(.*)",
-      "dest": "Sonora_REST_API/wsgi.py"
+      "dest": "/Sonora_REST_API/wsgi.py"
     }
-  ]
+  ],
+  "env": {
+    "PYTHONPATH": ".",
+    "DJANGO_SETTINGS_MODULE": "Sonora_REST_API.settings"
+  }
 }
