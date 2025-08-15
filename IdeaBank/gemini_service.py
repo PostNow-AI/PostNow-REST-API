@@ -780,3 +780,289 @@ RETORNE APENAS este objeto JSON único, válido e completo.
             raise Exception(f"Erro ao processar resposta da IA: {str(e)}")
         except Exception as e:
             raise Exception(f"Erro na comunicação com a IA: {str(e)}")
+
+    def generate_single_idea(self, user: User, campaign: Dict, idea_params: Dict) -> Dict:
+        """Generate a single idea for an existing campaign."""
+
+        # Get user's creator profile
+        profile = None
+        if user:
+            try:
+                profile = CreatorProfile.objects.get(user=user)
+            except CreatorProfile.DoesNotExist:
+                profile = None
+
+        # Build persona section
+        persona_complete = self._build_persona_section(campaign)
+
+        # Build creator profile section
+        professional_name = profile.professional_name if profile else "Não especificado"
+        profession = profile.profession if profile else "Não especificado"
+        specialization = profile.specialization if profile else "Não especificado"
+        primary_font = profile.primary_font if profile else "Não especificado"
+        secondary_font = profile.secondary_font if profile else "Não especificado"
+
+        # Campaign details
+        objective_detail = campaign.get('title', 'Não especificado')
+        product_description = campaign.get(
+            'product_description', 'Não especificado')
+        value_proposition = campaign.get(
+            'value_proposition', 'Não especificado')
+        campaign_urgency = campaign.get('campaign_urgency', 'Não especificado')
+        voice_tone = campaign.get('voice_tone', 'professional')
+
+        # Get voice tone display name
+        voice_tone_display = dict(VoiceTone.choices).get(
+            voice_tone, voice_tone)
+
+        # Idea specific parameters
+        platform = idea_params.get('platform', 'instagram')
+        content_type = idea_params.get('content_type', 'post')
+        variation_type = idea_params.get('variation_type', 'a')
+
+        # Optional pre-filled content
+        title = idea_params.get('title', '')
+        description = idea_params.get('description', '')
+        content = idea_params.get('content', '')
+
+        prompt = f"""
+Você é um especialista em marketing digital e criação de conteúdo para redes sociais,
+especializado em coaching executivo e desenvolvimento de liderança.
+
+## 🎯 CONTEXTO DA CAMPANHA EXISTENTE
+Título da Campanha: {objective_detail}
+Produto/Serviço: {product_description}
+Proposta de Valor: {value_proposition}
+Urgência: {campaign_urgency}
+Tom de Voz: {voice_tone_display}
+
+## 👤 PERFIL DO CRIADOR
+Nome: {professional_name}
+Expertise: {profession} especializado em {specialization}
+
+## 🎨 IDENTIDADE VISUAL DA MARCA
+Tipografia:
+- Títulos: {primary_font}
+- Corpo: {secondary_font}
+
+## 🎯 PERSONA ALVO DETALHADA
+{persona_complete}
+
+## 📱 IDEIA ESPECÍFICA SOLICITADA
+Plataforma: {platform}
+Tipo de Conteúdo: {content_type}
+Variação: {variation_type}
+
+## 📝 CONTEÚDO PRÉ-PREENCHIDO (OPCIONAL)
+Título: {title if title else 'Gerar automaticamente'}
+Descrição: {description if description else 'Gerar automaticamente'}
+Conteúdo: {content if content else 'Gerar automaticamente'}
+
+## INSTRUÇÕES ESPECÍFICAS:
+1. Crie conteúdo ESPECÍFICO para a plataforma {platform}
+2. Use a paleta de cores EXATA fornecida na composição visual
+3. Estruture o conteúdo para {objective_detail}
+4. Enderece as dores específicas da persona
+5. Inclua gatilhos mentais apropriados para vendas
+6. Se o usuário forneceu título/descrição/conteúdo, use como base mas melhore
+7. Se não forneceu, gere conteúdo completo e original
+8. Sugira elementos visuais específicos para {platform}
+9. Adapte o tom de voz conforme solicitado
+10. Foque na conversão e engajamento
+11. IMPORTANTE: Gere 3 variações (A, B, C) com conteúdo IDÊNTICO para testes A/B
+
+## FORMATO DE RESPOSTA ESTRUTURADO:
+Gere APENAS um JSON válido com a seguinte estrutura (sem quebras de linha no conteúdo):
+
+{{
+  "title": "Título da ideia gerada",
+  "description": "Descrição detalhada da ideia",
+  "content": {{
+    "plataforma": "{platform}",
+    "tipo_conteudo": "{content_type}",
+    "titulo_principal": "Título principal da ideia",
+    "variacao_a": {{
+      "headline": "Headline para capturar atenção",
+      "copy": "Copy principal do conteúdo - deve ser um texto rico e detalhado, não apenas uma linha. Para {platform}, gere conteúdo específico e envolvente. Use parágrafos bem estruturados e linguagem persuasiva.",
+      "cta": "Call-to-action específico",
+      "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+      "visual_description": "Descrição detalhada dos elementos visuais",
+      "color_composition": "Composição de cores específica para {platform}"
+    }},
+    "variacao_b": {{
+      "headline": "Headline para capturar atenção",
+      "copy": "Copy principal do conteúdo - deve ser um texto rico e detalhado, não apenas uma linha. Para {platform}, gere conteúdo específico e envolvente. Use parágrafos bem estruturados e linguagem persuasiva.",
+      "cta": "Call-to-action específico",
+      "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+      "visual_description": "Descrição detalhada dos elementos visuais",
+      "color_composition": "Composição de cores específica para {platform}"
+    }},
+    "variacao_c": {{
+      "headline": "Headline para capturar atenção",
+      "copy": "Copy principal do conteúdo - deve ser um texto rico e detalhado, não apenas uma linha. Para {platform}, gere conteúdo específico e envolvente. Use parágrafos bem estruturados e linguagem persuasiva.",
+      "cta": "Call-to-action específico",
+      "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+      "visual_description": "Descrição detalhada dos elementos visuais",
+      "color_composition": "Composição de cores específica para {platform}"
+    }},
+    "estrategia_implementacao": "Como implementar esta ideia",
+    "metricas_sucesso": ["Métrica 1", "Métrica 2"],
+    "proximos_passos": ["Passo 1", "Passo 2"]
+  }},
+  "headline": "Headline principal para capturar atenção",
+  "copy": "Copy principal do conteúdo",
+  "cta": "Call-to-action específico",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+  "visual_description": "Descrição detalhada dos elementos visuais",
+  "color_composition": "Composição de cores específica para {platform}",
+  "estrategia_implementacao": "Como implementar esta ideia",
+  "metricas_sucesso": ["Métrica 1", "Métrica 2"],
+  "proximos_passos": ["Passo 1", "Passo 2"]
+}}
+
+EXEMPLO DE ESTRUTURA CORRETA:
+{{
+  "title": "Transforme sua Liderança com Coaching Executivo",
+  "description": "Descubra como o coaching executivo pode elevar sua performance e resultados",
+  "content": {{
+    "plataforma": "{platform}",
+    "tipo_conteudo": "{content_type}",
+    "titulo_principal": "Transforme sua Liderança com Coaching Executivo",
+    "variacao_a": {{
+      "headline": "Eleve sua Liderança ao Próximo Nível",
+      "copy": "O coaching executivo é uma ferramenta poderosa para líderes que desejam alcançar seu potencial máximo. Através de sessões personalizadas, você desenvolverá habilidades essenciais como comunicação eficaz, tomada de decisão estratégica e gestão de equipes de alto desempenho. Nossa metodologia comprovada já transformou centenas de executivos em líderes excepcionais.",
+      "cta": "Agende sua sessão gratuita agora",
+      "hashtags": ["#coachingexecutivo", "#liderança", "#desenvolvimento"],
+      "visual_description": "Imagem de um executivo confiante em ambiente corporativo",
+      "color_composition": "Tons profissionais de azul e cinza"
+    }},
+    "variacao_b": {{
+      "headline": "Eleve sua Liderança ao Próximo Nível",
+      "copy": "O coaching executivo é uma ferramenta poderosa para líderes que desejam alcançar seu potencial máximo. Através de sessões personalizadas, você desenvolverá habilidades essenciais como comunicação eficaz, tomada de decisão estratégica e gestão de equipes de alto desempenho. Nossa metodologia comprovada já transformou centenas de executivos em líderes excepcionais.",
+      "cta": "Agende sua sessão gratuita agora",
+      "hashtags": ["#coachingexecutivo", "#liderança", "#desenvolvimento"],
+      "visual_description": "Imagem de um executivo confiante em ambiente corporativo",
+      "color_composition": "Tons profissionais de azul e cinza"
+    }},
+    "variacao_c": {{
+      "headline": "Eleve sua Liderança ao Próximo Nível",
+      "copy": "O coaching executivo é uma ferramenta poderosa para líderes que desejam alcançar seu potencial máximo. Através de sessões personalizadas, você desenvolverá habilidades essenciais como comunicação eficaz, tomada de decisão estratégica e gestão de equipes de alto desempenho. Nossa metodologia comprovada já transformou centenas de executivos em líderes excepcionais.",
+      "cta": "Agende sua sessão gratuita agora",
+      "hashtags": ["#coachingexecutivo", "#liderança", "#desenvolvimento"],
+      "visual_description": "Imagem de um executivo confiante em ambiente corporativo",
+      "color_composition": "Tons profissionais de azul e cinza"
+    }},
+    "estrategia_implementacao": "Implemente em 3 fases: diagnóstico, desenvolvimento e acompanhamento",
+    "metricas_sucesso": ["Aumento de produtividade", "Melhoria na gestão de equipes"],
+    "proximos_passos": ["Agendar consulta inicial", "Definir objetivos específicos"]
+  }},
+  "headline": "Eleve sua Liderança ao Próximo Nível",
+  "copy": "Descubra o poder do coaching executivo personalizado",
+  "cta": "Agende sua sessão gratuita agora",
+  "hashtags": ["#coachingexecutivo", "#liderança", "#desenvolvimento"],
+  "visual_description": "Imagem de um executivo confiante em ambiente corporativo",
+  "color_composition": "Tons profissionais de azul e cinza",
+  "estrategia_implementacao": "Implemente em 3 fases: diagnóstico, desenvolvimento e acompanhamento",
+  "metricas_sucesso": ["Aumento de produtividade", "Melhoria na gestão de equipes"],
+  "proximos_passos": ["Agendar consulta inicial", "Definir objetivos específicos"]
+}}
+
+IMPORTANTE: 
+- Retorne APENAS o JSON acima
+- Use português brasileiro
+- Seja específico para {platform}
+- Gere conteúdo original e criativo
+- Foque na conversão e engajamento
+- O campo "content" é OBRIGATÓRIO e deve conter um objeto JSON válido
+- NÃO deixe o campo "content" vazio ou com texto genérico
+- O campo "content.copy" deve conter pelo menos 3-4 parágrafos de conteúdo
+- NÃO use quebras de linha ou caracteres especiais no JSON
+- Certifique-se de que o JSON seja válido e parseável
+- O campo "content" deve ser um objeto JSON, não uma string
+- As 3 variações (A, B, C) devem ter conteúdo IDÊNTICO para facilitar testes A/B
+- Cada variação deve ter headline, copy, cta, hashtags, visual_description e color_composition
+"""
+
+        try:
+            # Configure API key for this request
+            api_key = campaign.get('gemini_api_key') or self.default_api_key
+            if api_key:
+                genai.configure(api_key=api_key)
+
+            # Generate content
+            response = self.model.generate_content(prompt)
+
+            if response and response.text:
+                # Parse JSON response
+                content_text = response.text.strip()
+
+                print(
+                    f"=== DEBUG: Raw AI response: {content_text[:500]}... ===")
+
+                # Remove markdown code blocks if present
+                if content_text.startswith('```json'):
+                    content_text = content_text[7:]
+                if content_text.endswith('```'):
+                    content_text = content_text[:-3]
+
+                content_text = content_text.strip()
+                print(
+                    f"=== DEBUG: Cleaned content text: {content_text[:500]}... ===")
+
+                # Parse JSON
+                try:
+                    parsed_content = json.loads(content_text)
+                    print(
+                        f"=== DEBUG: Successfully parsed JSON with keys: {list(parsed_content.keys())} ===")
+
+                    # Validate that content field exists and is not empty
+                    if 'content' not in parsed_content or not parsed_content['content']:
+                        print(
+                            "=== DEBUG: Content field missing or empty in parsed JSON ===")
+                        # Generate fallback content
+                        parsed_content[
+                            'content'] = f"Conteúdo gerado para {platform} - {content_type}. {parsed_content.get('title', '')} - {parsed_content.get('description', '')}"
+                        print(
+                            f"=== DEBUG: Generated fallback content: {parsed_content['content']} ===")
+
+                    return parsed_content
+                except json.JSONDecodeError as e:
+                    print(f"JSON decode error: {e}")
+                    print(f"Raw content: {content_text}")
+
+                    # Try to extract content using regex as fallback
+                    import re
+                    content_match = re.search(
+                        r'"content"\s*:\s*"([^"]+)"', content_text)
+                    title_match = re.search(
+                        r'"title"\s*:\s*"([^"]+)"', content_text)
+                    description_match = re.search(
+                        r'"description"\s*:\s*"([^"]+)"', content_text)
+
+                    if content_match or title_match or description_match:
+                        fallback_content = {
+                            'title': title_match.group(1) if title_match else 'Título Gerado por IA',
+                            'description': description_match.group(1) if description_match else 'Descrição Gerada por IA',
+                            'content': content_match.group(1) if content_match else f'Conteúdo para {platform} - {content_type}',
+                            'headline': 'Headline Gerado por IA',
+                            'copy': 'Copy Gerado por IA',
+                            'cta': 'Call-to-Action Gerado por IA',
+                            'hashtags': ['#ia', '#conteudo', '#marketing'],
+                            'visual_description': 'Descrição visual gerada por IA',
+                            'color_composition': 'Composição de cores gerada por IA',
+                            'estrategia_implementacao': 'Estratégia gerada por IA',
+                            'metricas_sucesso': ['Métrica 1', 'Métrica 2'],
+                            'proximos_passos': ['Passo 1', 'Passo 2']
+                        }
+                        print(
+                            f"=== DEBUG: Using fallback content: {fallback_content} ===")
+                        return fallback_content
+
+                    return None
+            else:
+                print("No response from Gemini")
+                return None
+
+        except Exception as e:
+            print(f"Error generating single idea: {e}")
+            return None

@@ -9,25 +9,34 @@ urlpatterns = [
     path('campaigns/', views.CampaignListView.as_view(), name='campaign-list'),
     path('campaigns/<int:pk>/', views.CampaignDetailView.as_view(),
          name='campaign-detail'),
+    path('campaigns-with-ideas/', views.campaigns_with_ideas,
+         name='campaigns-with-ideas'),
 
-    # Campaign ideas
-    path('campaigns/<int:campaign_id>/ideas/',
-         views.CampaignIdeaListView.as_view(), name='campaign-ideas'),
+    # Ideas
     path('ideas/', views.CampaignIdeaListView.as_view(), name='idea-list'),
     path('ideas/<int:pk>/', views.CampaignIdeaDetailView.as_view(), name='idea-detail'),
     path('ideas/<int:idea_id>/improve/',
          views.improve_idea, name='improve-idea'),
 
-    # Campaign idea generation
+    # Add idea to campaign
+    path('campaigns/<int:campaign_id>/ideas/',
+         views.add_idea_to_campaign, name='add-idea-to-campaign'),
+
+    # Generate single idea with AI
+    path('campaigns/<int:campaign_id>/generate-idea/',
+         views.generate_single_idea, name='generate-single-idea'),
+
+    # Generation
     path('campaigns/generate/', views.generate_campaign_ideas,
          name='generate-campaign-ideas'),
 
-    # Public idea generation (no authentication required)
-    path('public/generate/', views.generate_public_ideas,
-         name='generate-public-ideas'),
-    path('public/options/', views.get_public_options, name='public-options'),
-
-    # Statistics and options
+    # Stats
     path('campaigns/stats/', views.get_campaign_stats, name='campaign-stats'),
+
+    # Options
     path('options/', views.get_available_options, name='available-options'),
+
+    # Public options (no authentication required)
+    path('public/options/', views.get_public_options, name='public-options'),
+    path('public/generate/', views.generate_public_ideas, name='public-generate'),
 ]
