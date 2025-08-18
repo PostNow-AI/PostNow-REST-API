@@ -16,7 +16,7 @@ class CustomProfessionAdmin(admin.ModelAdmin):
     list_display = ['name', 'created_by',
                     'usage_count', 'is_active', 'created_at']
     list_filter = ['is_active', 'created_at']
-    search_fields = ['name', 'created_by__username', 'created_by__email']
+    search_fields = ['name', 'created_by__email', 'created_by__first_name']
     readonly_fields = ['usage_count', 'created_at', 'updated_at']
     ordering = ['-usage_count', 'name']
 
@@ -39,7 +39,7 @@ class CustomSpecializationAdmin(admin.ModelAdmin):
     list_display = ['name', 'profession', 'created_by',
                     'usage_count', 'is_active', 'created_at']
     list_filter = ['profession', 'is_active', 'created_at']
-    search_fields = ['name', 'profession__name', 'created_by__username']
+    search_fields = ['name', 'profession__name', 'created_by__email']
     readonly_fields = ['usage_count', 'created_at', 'updated_at']
     ordering = ['profession__name', '-usage_count', 'name']
 
@@ -62,7 +62,7 @@ class CustomFontAdmin(admin.ModelAdmin):
     list_display = ['name', 'created_by',
                     'usage_count', 'is_active', 'created_at']
     list_filter = ['is_active', 'created_at']
-    search_fields = ['name', 'created_by__username', 'created_by__email']
+    search_fields = ['name', 'created_by__email']
     readonly_fields = ['usage_count', 'created_at', 'updated_at']
     ordering = ['-usage_count', 'name']
 
@@ -142,7 +142,7 @@ class CustomSpecializationForProfessionAdmin(admin.ModelAdmin):
     list_display = ['name', 'profession_name', 'created_by',
                     'usage_count', 'is_active', 'created_at']
     list_filter = ['profession_name', 'is_active', 'created_at']
-    search_fields = ['name', 'profession_name', 'created_by__username']
+    search_fields = ['name', 'profession_name', 'created_by__email']
     readonly_fields = ['usage_count', 'created_at', 'updated_at']
     ordering = ['profession_name', '-usage_count', 'name']
 

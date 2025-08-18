@@ -7,7 +7,7 @@ from .models import UserAPIKey
 class UserAPIKeyAdmin(admin.ModelAdmin):
     list_display = ['user', 'provider', 'created_at', 'updated_at']
     list_filter = ['provider', 'created_at']
-    search_fields = ['user__username', 'user__email']
+    search_fields = ['user__email', 'provider']
     readonly_fields = ['created_at', 'updated_at']
 
     def get_queryset(self, request):

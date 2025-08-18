@@ -120,17 +120,39 @@ WSGI_APPLICATION = 'Sonora_REST_API.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Get database configuration from environment variables with defaults
+DB_NAME = os.getenv('DB_NAME', 'sonora_db')
+DB_USER = os.getenv('DB_USER', 'sonora_user')
+DB_PASSWORD = os.getenv('DB_USER_PASSWORD', 'sonora_password')
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = os.getenv('DB_PORT', '3306')
+
+# Validate database configuration
+if not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST]):
+    print("⚠️  WARNING: Database environment variables not fully configured!")
+    print(f"   DB_NAME: {DB_NAME}")
+    print(f"   DB_USER: {DB_USER}")
+    print(f"   DB_HOST: {DB_HOST}")
+    print(f"   DB_PORT: {DB_PORT}")
+
+    # For Vercel, we might want to use a different database or fail gracefully
+    if os.getenv('VERCEL_ENV'):
+        print("🚀 Vercel environment detected - using fallback configuration")
+        # You can set up a different database here for Vercel
+        # For now, we'll use the environment variables as-is
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.getenv('DB_NAME'),  # Set to your database name
-        'USER': os.getenv('DB_USER'),  # Set to your database user
-        # Set to your database password
-        'PASSWORD': os.getenv('DB_USER_PASSWORD'),
-        # Set to the MySQL server's host, e.g., 'localhost'
-        'HOST': os.getenv('DB_HOST'),
-        # Set to the MySQL server's port, if different from the default (3306)
-        'PORT': os.getenv('DB_PORT'),
+        'NAME': DB_NAME,
+        'USER': DB_USER,
+        'PASSWORD': DB_PASSWORD,
+        'HOST': DB_HOST,
+        'PORT': DB_PORT,
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
     }
 }
 

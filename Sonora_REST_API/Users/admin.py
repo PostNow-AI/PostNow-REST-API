@@ -31,8 +31,7 @@ class UserProfileAdmin(admin.ModelAdmin):
     """Admin for UserProfile model."""
     list_display = ['user', 'subscribed', 'subscription_date', 'created_at']
     list_filter = ['subscribed', 'created_at', 'subscription_date']
-    search_fields = ['user__username', 'user__email',
-                     'user__first_name', 'user__last_name']
+    search_fields = ['user__email', 'user__first_name', 'user__last_name']
     readonly_fields = ['created_at', 'updated_at']
 
     def get_queryset(self, request):

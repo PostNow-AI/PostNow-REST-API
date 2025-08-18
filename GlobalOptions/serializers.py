@@ -38,43 +38,33 @@ class PredefinedFontSerializer(serializers.ModelSerializer):
 
 
 class CustomProfessionSerializer(serializers.ModelSerializer):
-    """Serializer para profissões customizadas."""
+    """Serializer for CustomProfession model."""
 
-    created_by_username = serializers.CharField(
-        source='created_by.username', read_only=True)
+    created_by = serializers.PrimaryKeyRelatedField(
+        read_only=True, default=serializers.CurrentUserDefault())
 
     class Meta:
         model = CustomProfession
         fields = [
-            'id', 'name', 'created_by', 'created_by_username',
-            'usage_count', 'is_active', 'created_at'
+            'id', 'name', 'created_by',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_by', 'usage_count', 'created_at']
-
-    def create(self, validated_data):
-        """Define automaticamente o usuário que criou a profissão."""
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            validated_data['created_by'] = request.user
-        return super().create(validated_data)
+        read_only_fields = ['created_at', 'updated_at']
 
 
 class CustomSpecializationSerializer(serializers.ModelSerializer):
-    """Serializer para especializações customizadas."""
+    """Serializer for CustomSpecialization model."""
 
-    profession_name = serializers.CharField(
-        source='profession.name', read_only=True)
-    created_by_username = serializers.CharField(
-        source='created_by.username', read_only=True)
+    created_by = serializers.PrimaryKeyRelatedField(
+        read_only=True, default=serializers.CurrentUserDefault())
 
     class Meta:
         model = CustomSpecialization
         fields = [
-            'id', 'name', 'profession', 'profession_name',
-            'created_by', 'created_by_username', 'usage_count',
-            'is_active', 'created_at'
+            'id', 'name', 'profession', 'created_by',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_by', 'usage_count', 'created_at']
+        read_only_fields = ['created_at', 'updated_at']
 
     def create(self, validated_data):
         """Define automaticamente o usuário que criou a especialização."""
@@ -94,18 +84,18 @@ class CustomSpecializationSerializer(serializers.ModelSerializer):
 
 
 class CustomFontSerializer(serializers.ModelSerializer):
-    """Serializer para fontes customizadas."""
+    """Serializer for CustomFont model."""
 
-    created_by_username = serializers.CharField(
-        source='created_by.username', read_only=True)
+    created_by = serializers.PrimaryKeyRelatedField(
+        read_only=True, default=serializers.CurrentUserDefault())
 
     class Meta:
         model = CustomFont
         fields = [
-            'id', 'name', 'created_by', 'created_by_username',
-            'usage_count', 'is_active', 'created_at'
+            'id', 'name', 'created_by',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_by', 'usage_count', 'created_at']
+        read_only_fields = ['created_at', 'updated_at']
 
     def create(self, validated_data):
         """Define automaticamente o usuário que criou a fonte."""

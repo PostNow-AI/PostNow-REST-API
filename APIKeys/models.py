@@ -21,4 +21,4 @@ class UserAPIKey(models.Model):
         db_table = 'user_api_keys'
 
     def __str__(self):
-        return f"{self.user.username}:{self.provider}"
+        return f"{self.user.email}:{self.provider}"
