@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from .gemini_service import GeminiService
-from .models import Campaign, CampaignIdea, VoiceTone
+from .models import Campaign, CampaignIdea, CampaignObjective, SocialPlatform, VoiceTone
 from .serializers import (
     CampaignDetailSerializer,
     CampaignIdeaSerializer,
@@ -83,6 +83,26 @@ def generate_campaign_ideas(request):
     try:
         # Create campaign first
         campaign_data = serializer.validated_data.copy()
+
+        # Generate automatic title if none provided
+        if not campaign_data.get('title') or campaign_data['title'].strip() == '':
+            # Create a descriptive title based on objectives and platforms
+            objectives = campaign_data.get('objectives', [])
+            platforms = campaign_data.get('platforms', [])
+
+            if objectives and platforms:
+                objective_names = [dict(CampaignObjective.choices)[
+                    obj] for obj in objectives if obj in dict(CampaignObjective.choices)]
+                platform_names = [dict(SocialPlatform.choices)[
+                    plat] for plat in platforms if plat in dict(SocialPlatform.choices)]
+
+                if objective_names and platform_names:
+                    campaign_data['title'] = f"Campanha de {', '.join(objective_names[:2])} para {', '.join(platform_names[:2])}"
+                else:
+                    campaign_data['title'] = "Campanha Gerada por IA"
+            else:
+                campaign_data['title'] = "Campanha Gerada por IA"
+
         campaign = Campaign.objects.create(
             user=request.user,
             **campaign_data

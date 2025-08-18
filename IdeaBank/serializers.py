@@ -114,7 +114,7 @@ class CampaignCreateSerializer(serializers.ModelSerializer):
 class IdeaGenerationRequestSerializer(serializers.Serializer):
     """Serializer for idea generation requests."""
     # Campaign info
-    title = serializers.CharField(max_length=200, required=True)
+    title = serializers.CharField(max_length=200, required=False, allow_blank=True)
     description = serializers.CharField(required=False, allow_blank=True)
 
     # Campaign objective
@@ -144,7 +144,8 @@ class IdeaGenerationRequestSerializer(serializers.Serializer):
         child=serializers.ListField(
             child=serializers.ChoiceField(choices=ContentType.choices)
         ),
-        required=True
+        required=False,
+        allow_empty=True
     )
 
     # Voice tone
