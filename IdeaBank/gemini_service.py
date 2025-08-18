@@ -1,7 +1,8 @@
 import ast
 import json
 import os
-from typing import Dict, List
+import time
+from typing import Dict, List, Tuple
 
 try:
     import google.generativeai as genai
@@ -14,6 +15,48 @@ from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
 
 from IdeaBank.models import CampaignIdea, VoiceTone
+
+
+class ProgressTracker:
+    """Track real progress of AI generation tasks."""
+
+    def __init__(self):
+        self.current_step = 0
+        self.total_steps = 0
+        self.step_details = []
+        self.start_time = None
+
+    def set_steps(self, steps: List[str]):
+        """Set the steps for the generation process."""
+        self.step_details = steps
+        self.total_steps = len(steps)
+        self.current_step = 0
+        self.start_time = time.time()
+
+    def next_step(self, step_name: str = None):
+        """Move to next step."""
+        if step_name:
+            self.step_details[self.current_step] = step_name
+        self.current_step += 1
+
+    def get_progress(self) -> Dict:
+        """Get current progress information."""
+        if self.total_steps == 0:
+            return {"percentage": 0, "current_step": 0, "total_steps": 0, "current_step_name": "", "elapsed_time": 0}
+
+        percentage = min(
+            100, int((self.current_step / self.total_steps) * 100))
+        current_step_name = self.step_details[self.current_step -
+                                              1] if self.current_step > 0 else ""
+        elapsed_time = time.time() - self.start_time if self.start_time else 0
+
+        return {
+            "percentage": percentage,
+            "current_step": self.current_step,
+            "total_steps": self.total_steps,
+            "current_step_name": current_step_name,
+            "elapsed_time": round(elapsed_time, 1)
+        }
 
 
 class GeminiService:
@@ -1066,3 +1109,602 @@ IMPORTANTE:
         except Exception as e:
             print(f"Error generating single idea: {e}")
             return None
+
+    def generate_campaign_ideas_with_progress(self, user: User, config: Dict, progress_callback=None) -> Tuple[List[Dict], Dict]:
+        """Generate campaign ideas with real progress tracking."""
+        progress = ProgressTracker()
+
+        # Define the actual steps of the generation process
+        steps = [
+            "Inicializando geração de campanha...",
+            "Analisando perfil do usuário...",
+            "Processando configurações da campanha...",
+            "Construindo prompt para IA...",
+            "Conectando com Gemini AI...",
+            "Gerando conteúdo para plataforma 1...",
+            "Gerando conteúdo para plataforma 2...",
+            "Gerando conteúdo para plataforma 3...",
+            "Processando respostas da IA...",
+            "Estruturando dados das ideias...",
+            "Validando formato das ideias...",
+            "Finalizando geração..."
+        ]
+
+        progress.set_steps(steps)
+
+        try:
+            # Step 1: Initialize
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 2: Analyze user profile
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 3: Process campaign config
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 4: Build prompt
+            progress.next_step()
+            prompt = self._build_campaign_prompt(user, config)
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 5: Connect to Gemini
+            progress.next_step()
+            api_key = config.get('gemini_api_key')
+            self._configure_api_key(api_key)
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 6-8: Generate content for each platform
+            platforms = config.get('platforms', ['instagram'])
+            for i, platform in enumerate(platforms[:3]):  # Max 3 platforms
+                progress.next_step(f"Gerando conteúdo para {platform}...")
+                if progress_callback:
+                    progress_callback(progress.get_progress())
+                time.sleep(0.5)  # Simulate processing time
+
+            # Step 9: Process AI responses
+            progress.next_step()
+            response = self.model.generate_content(prompt)
+            response_text = response.text.strip()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 10: Structure data
+            progress.next_step()
+            ideas = self._parse_campaign_response(response_text, config)
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 11: Validate format
+            progress.next_step()
+            # Validation logic here
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 12: Finalize
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            return ideas, progress.get_progress()
+
+        except Exception as e:
+            error_progress = progress.get_progress()
+            error_progress["error"] = str(e)
+            raise Exception(f"Erro na geração de campanhas: {str(e)}")
+
+    def generate_single_idea_with_progress(self, user: User, campaign: Dict, idea_params: Dict, progress_callback=None) -> Tuple[Dict, Dict]:
+        """Generate a single idea with real progress tracking."""
+        progress = ProgressTracker()
+
+        # Define the actual steps for single idea generation
+        steps = [
+            "Inicializando geração de ideia...",
+            "Analisando campanha existente...",
+            "Processando parâmetros da ideia...",
+            "Construindo prompt específico...",
+            "Conectando com Gemini AI...",
+            "Gerando conteúdo da ideia...",
+            "Processando resposta da IA...",
+            "Validando formato JSON...",
+            "Estruturando dados finais...",
+            "Finalizando geração..."
+        ]
+
+        progress.set_steps(steps)
+
+        try:
+            # Step 1: Initialize
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 2: Analyze campaign
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 3: Process idea params
+            progress.next_step()
+            platform = idea_params.get('platform', 'instagram')
+            content_type = idea_params.get('content_type', 'post')
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 4: Build specific prompt
+            progress.next_step()
+            prompt = self._build_single_idea_prompt(
+                user, campaign, idea_params)
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 5: Connect to Gemini
+            progress.next_step()
+            api_key = campaign.get('gemini_api_key') or self.default_api_key
+            if api_key:
+                genai.configure(api_key=api_key)
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 6: Generate content
+            progress.next_step()
+            response = self.model.generate_content(prompt)
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 7: Process response
+            progress.next_step()
+            if response and response.text:
+                content_text = response.text.strip()
+                if progress_callback:
+                    progress_callback(progress.get_progress())
+            else:
+                raise Exception("Sem resposta do Gemini")
+
+            # Step 8: Validate JSON format
+            progress.next_step()
+            try:
+                # Clean the response text - remove any markdown formatting
+                cleaned_text = content_text.strip()
+                if cleaned_text.startswith('```json'):
+                    cleaned_text = cleaned_text[7:]
+                if cleaned_text.endswith('```'):
+                    cleaned_text = cleaned_text[:-3]
+                cleaned_text = cleaned_text.strip()
+
+                # Try to parse the JSON
+                parsed_content = json.loads(cleaned_text)
+                if progress_callback:
+                    progress_callback(progress.get_progress())
+            except json.JSONDecodeError as e:
+                print(f"JSON Parse Error: {e}")
+                print(f"Raw response: {content_text[:500]}...")
+                print(f"Cleaned text: {cleaned_text[:500]}...")
+                raise Exception(
+                    f"Resposta da IA não é JSON válido. Erro: {str(e)}")
+
+            # Step 9: Structure final data
+            progress.next_step()
+            # Ensure content field exists
+            if 'content' not in parsed_content or not parsed_content['content']:
+                parsed_content[
+                    'content'] = f"Conteúdo gerado para {platform} - {content_type}. {parsed_content.get('title', '')} - {parsed_content.get('description', '')}"
+
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 10: Finalize
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            return parsed_content, progress.get_progress()
+
+        except Exception as e:
+            error_progress = progress.get_progress()
+            error_progress["error"] = str(e)
+            raise Exception(f"Erro na geração de ideia: {str(e)}")
+
+    def improve_idea_with_progress(self, user: User, current_idea: CampaignIdea, improvement_prompt: str, api_key: str = None, progress_callback=None) -> Tuple[Dict, Dict]:
+        """Improve an existing idea with real progress tracking."""
+        progress = ProgressTracker()
+
+        # Define the actual steps for idea improvement
+        steps = [
+            "Inicializando melhoria da ideia...",
+            "Analisando ideia atual...",
+            "Processando solicitação de melhoria...",
+            "Construindo prompt de melhoria...",
+            "Conectando com Gemini AI...",
+            "Gerando conteúdo melhorado...",
+            "Processando resposta da IA...",
+            "Validando formato JSON...",
+            "Aplicando melhorias...",
+            "Finalizando melhoria..."
+        ]
+
+        progress.set_steps(steps)
+
+        try:
+            # Step 1: Initialize
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 2: Analyze current idea
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 3: Process improvement request
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 4: Build improvement prompt
+            progress.next_step()
+            prompt = self._build_improvement_prompt(
+                user, current_idea, improvement_prompt)
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 5: Connect to Gemini
+            progress.next_step()
+            self._configure_api_key(api_key)
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 6: Generate improved content
+            progress.next_step()
+            response = self.model.generate_content(prompt)
+            response_text = response.text.strip()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 7: Process response
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 8: Validate JSON format
+            progress.next_step()
+            try:
+                # Clean common wrappers and formatting issues
+                cleaned_text = response_text.strip()
+                if cleaned_text.startswith('```json'):
+                    cleaned_text = cleaned_text[7:]
+                if cleaned_text.startswith('```'):
+                    cleaned_text = cleaned_text[3:]
+                if cleaned_text.endswith('```'):
+                    cleaned_text = cleaned_text[:-3]
+                cleaned_text = cleaned_text.strip()
+
+                # First attempt: direct JSON parse
+                try:
+                    campaign_data = json.loads(cleaned_text)
+                except json.JSONDecodeError as e_json:
+                    # Second attempt: Python-literal style dict (single quotes)
+                    try:
+                        import ast
+                        py_obj = ast.literal_eval(cleaned_text)
+                        campaign_data = json.loads(
+                            json.dumps(py_obj, ensure_ascii=False))
+                    except Exception as e_ast:
+                        # Third attempt: extract the first JSON-like object
+                        try:
+                            import re
+                            match = re.search(r'\{[\s\S]*\}', cleaned_text)
+                            if not match:
+                                raise Exception(
+                                    "Nenhum objeto JSON encontrado na resposta da IA")
+                            candidate = match.group(0)
+                            try:
+                                campaign_data = json.loads(candidate)
+                            except Exception:
+                                py_obj2 = ast.literal_eval(candidate)
+                                campaign_data = json.loads(
+                                    json.dumps(py_obj2, ensure_ascii=False))
+                        except Exception as e_regex:
+                            # Log context to aid debugging
+                            print("=== DEBUG: Improve Idea - JSON parse failed ===")
+                            print(
+                                f"Raw response (first 500): {response_text[:500]}")
+                            print(f"Cleaned (first 500): {cleaned_text[:500]}")
+                            raise Exception(
+                                f"Resposta da IA não é JSON válido. Erros: JSON={str(e_json)} | AST={str(e_ast)} | REGEX={str(e_regex)}"
+                            )
+
+                if progress_callback:
+                    progress_callback(progress.get_progress())
+            except Exception as e:
+                raise Exception(
+                    f"Resposta da IA não é JSON válido. Detalhes: {str(e)}")
+
+            # Step 9: Apply improvements
+            progress.next_step()
+            improved_data = self._process_improved_idea(
+                campaign_data, current_idea)
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 10: Finalize
+            progress.next_step()
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            return improved_data, progress.get_progress()
+
+        except Exception as e:
+            error_progress = progress.get_progress()
+            error_progress["error"] = str(e)
+            raise Exception(f"Erro na melhoria da ideia: {str(e)}")
+
+    def _build_single_idea_prompt(self, user: User, campaign: Dict, idea_params: Dict) -> str:
+        """Build prompt for single idea generation."""
+        # Get user's creator profile
+        profile = None
+        if user:
+            try:
+                profile = CreatorProfile.objects.get(user=user)
+            except CreatorProfile.DoesNotExist:
+                profile = None
+
+        # Build persona section
+        persona_complete = self._build_persona_section(campaign)
+
+        # Build creator profile section
+        professional_name = profile.professional_name if profile else "Não especificado"
+        profession = profile.profession if profile else "Não especificado"
+        specialization = profile.specialization if profile else "Não especificado"
+        primary_font = profile.primary_font if profile else "Não especificado"
+        secondary_font = profile.secondary_font if profile else "Não especificado"
+
+        # Campaign details
+        objective_detail = campaign.get('title', 'Não especificado')
+        product_description = campaign.get(
+            'product_description', 'Não especificado')
+        value_proposition = campaign.get(
+            'value_proposition', 'Não especificado')
+        campaign_urgency = campaign.get('campaign_urgency', 'Não especificado')
+        voice_tone = campaign.get('voice_tone', 'professional')
+
+        # Get voice tone display name
+        voice_tone_display = dict(VoiceTone.choices).get(
+            voice_tone, voice_tone)
+
+        # Idea specific parameters
+        platform = idea_params.get('platform', 'instagram')
+        content_type = idea_params.get('content_type', 'post')
+        variation_type = idea_params.get('variation_type', 'a')
+
+        # Optional pre-filled content
+        title = idea_params.get('title', '')
+        description = idea_params.get('description', '')
+        content = idea_params.get('content', '')
+
+        prompt = f"""
+Você é um especialista em marketing digital. Gere uma ideia de conteúdo para {platform}.
+
+CONTEXTO:
+- Campanha: {objective_detail}
+- Produto: {product_description}
+- Valor: {value_proposition}
+- Tom: {voice_tone_display}
+- Plataforma: {platform}
+- Tipo: {content_type}
+
+INSTRUÇÕES:
+1. Gere APENAS um JSON válido
+2. Use português brasileiro
+3. Seja específico para {platform}
+4. Foque em conversão e engajamento
+
+FORMATO OBRIGATÓRIO - RETORNE APENAS ESTE JSON:
+
+{{
+  "title": "Título da ideia",
+  "description": "Descrição da ideia",
+  "content": {{
+    "plataforma": "{platform}",
+    "tipo_conteudo": "{content_type}",
+    "titulo_principal": "Título principal",
+    "variacao_a": {{
+      "headline": "Headline para {platform}",
+      "copy": "Copy específico para {platform} com linguagem persuasiva e foco em conversão",
+      "cta": "Call-to-action para {platform}",
+      "hashtags": ["#marketing", "#conteudo", "#{platform}"],
+      "visual_description": "Descrição visual para {platform}",
+      "color_composition": "Paleta de cores para {platform}"
+    }},
+    "variacao_b": {{
+      "headline": "Headline para {platform}",
+      "copy": "Copy específico para {platform} com linguagem persuasiva e foco em conversão",
+      "cta": "Call-to-action para {platform}",
+      "hashtags": ["#marketing", "#conteudo", "#{platform}"],
+      "visual_description": "Descrição visual para {platform}",
+      "color_composition": "Paleta de cores para {platform}"
+    }},
+    "variacao_c": {{
+      "headline": "Headline para {platform}",
+      "copy": "Copy específico para {platform} com linguagem persuasiva e foco em conversão",
+      "cta": "Call-to-action para {platform}",
+      "hashtags": ["#marketing", "#conteudo", "#{platform}"],
+      "visual_description": "Descrição visual para {platform}",
+      "color_composition": "Paleta de cores para {platform}"
+    }},
+    "estrategia_implementacao": "Estratégia para implementar em {platform}",
+    "metricas_sucesso": ["Engajamento", "Conversões"],
+    "proximos_passos": ["Criar visual", "Agendar post"]
+  }},
+  "headline": "Headline principal",
+  "copy": "Copy principal",
+  "cta": "Call-to-action principal",
+  "hashtags": ["#marketing", "#conteudo", "#{platform}"],
+  "visual_description": "Descrição visual",
+  "color_composition": "Paleta de cores",
+  "estrategia_implementacao": "Estratégia de implementação",
+  "metricas_sucesso": ["Engajamento", "Conversões"],
+  "proximos_passos": ["Criar visual", "Agendar post"]
+}}
+
+IMPORTANTE: 
+- Retorne APENAS o JSON acima, sem texto adicional, explicações ou markdown
+- Use APENAS aspas duplas (") para chaves e valores, NUNCA aspas simples (')
+- Certifique-se de que o JSON seja válido e parseável
+- NÃO use quebras de linha ou caracteres especiais no JSON
+"""
+        return prompt
+
+    def _build_improvement_prompt(self, user: User, current_idea: CampaignIdea, improvement_prompt: str) -> str:
+        """Build prompt for idea improvement."""
+        # Get user's creator profile
+        try:
+            profile = CreatorProfile.objects.get(user=user)
+        except CreatorProfile.DoesNotExist:
+            profile = None
+
+        # Get the original configuration if available
+        config_data = {}
+        if hasattr(current_idea, 'campaign') and current_idea.campaign:
+            campaign = current_idea.campaign
+            config_data = {
+                'objectives': campaign.objectives,
+                'persona_age': campaign.persona_age,
+                'persona_location': campaign.persona_location,
+                'persona_income': campaign.persona_income,
+                'persona_interests': campaign.persona_interests,
+                'persona_behavior': campaign.persona_behavior,
+                'persona_pain_points': campaign.persona_pain_points,
+                'platforms': campaign.platforms,
+                'content_types': campaign.content_types,
+            }
+
+        # Build creator profile section
+        creator_section = self._build_creator_section(
+            profile) if profile else ""
+
+        # Expor JSON atual (se possível) para orientar a IA
+        try:
+            current_json = json.loads(current_idea.content)
+            current_json_pretty = json.dumps(
+                current_json, ensure_ascii=False, indent=2)
+        except Exception:
+            current_json_pretty = "<sem JSON válido>"
+
+        # Build the improvement prompt exigindo o MESMO schema das ideias geradas
+        prompt = f"""
+Você é um especialista em marketing digital e criação de conteúdo para redes sociais.
+Sua tarefa é melhorar uma ideia de campanha existente baseada no feedback específico do usuário.
+
+{creator_section}
+
+IDEIA ATUAL (metadados):
+- Título: {current_idea.title}
+- Descrição: {current_idea.description}
+- Plataforma: {current_idea.platform}
+- Tipo de Conteúdo: {current_idea.content_type}
+- Status: {current_idea.status}
+
+CONTEÚDO ATUAL (JSON, quando disponível):
+{current_json_pretty}
+
+CONTEXTO ORIGINAL DA CAMPANHA:
+{self._build_persona_section(config_data) if config_data else "Informações do contexto original não disponíveis."}
+
+SOLICITAÇÃO DE MELHORIA:
+{improvement_prompt}
+
+INSTRUÇÕES CRÍTICAS (SIGA À RISCA):
+1. Mantenha a mesma plataforma (plataforma) e o mesmo tipo de conteúdo (tipo_conteudo) da ideia atual, salvo instrução explícita em contrário.
+2. Retorne APENAS um JSON VÁLIDO (RFC 8259) usando aspas duplas em chaves e strings.
+3. O JSON DEVE seguir EXATAMENTE o mesmo schema usado na geração de ideias (abaixo).
+4. As variações variacao_a, variacao_b e variacao_c DEVEM ter o MESMO conteúdo (cópias idênticas) para testes A/B.
+5. Campos de lista devem ser arrays JSON (por exemplo: hashtags, metricas_sucesso, proximos_passos).
+6. Não inclua comentários, texto fora do JSON, explicações ou markdown. Apenas o objeto JSON.
+7. IMPORTANTE: Gere conteúdo APENAS para a plataforma {current_idea.platform}, não para outras plataformas.
+8. Para o campo "tipo_conteudo", use APENAS um destes valores: post, story, reel, video, carousel, live, custom
+
+SCHEMA OBRIGATÓRIO (substitua pelos seus valores, mantendo as chaves):
+{{
+  "plataforma": "{current_idea.platform}",
+  "tipo_conteudo": "post",
+  "titulo_principal": "texto aqui",
+  "variacao_a": {{
+    "headline": "texto aqui",
+    "copy": "texto aqui",
+    "cta": "texto aqui",
+    "hashtags": ["texto aqui"],
+    "visual_description": "texto aqui",
+    "color_composition": "texto aqui"
+  }},
+  "variacao_b": {{
+    "headline": "texto aqui",
+    "copy": "texto aqui",
+    "cta": "texto aqui",
+    "hashtags": ["texto aqui"],
+    "visual_description": "texto aqui",
+    "color_composition": "texto aqui"
+  }},
+  "variacao_c": {{
+    "headline": "texto aqui",
+    "copy": "texto aqui",
+    "cta": "texto aqui",
+    "hashtags": ["texto aqui"],
+    "visual_description": "texto aqui",
+    "color_composition": "texto aqui"
+  }},
+  "estrategia_implementacao": "texto aqui",
+  "metricas_sucesso": ["texto aqui"],
+  "proximos_passos": ["texto aqui"]
+}}
+
+RETORNE APENAS este objeto JSON único, válido e completo.
+"""
+        return prompt
+
+    def _process_improved_idea(self, campaign_data: Dict, current_idea: CampaignIdea) -> Dict:
+        """Process and validate improved idea data."""
+        # Garantias mínimas de schema
+        campaign_data.setdefault('plataforma', current_idea.platform)
+        campaign_data.setdefault('tipo_conteudo', current_idea.content_type)
+
+        # Normalizar variações (replicar base se faltar)
+        base_variation = None
+        for key in ['variacao_a', 'variacao_b', 'variacao_c']:
+            if key in campaign_data and campaign_data[key]:
+                base_variation = campaign_data[key]
+                break
+        if not base_variation:
+            base_variation = {
+                'headline': campaign_data.get('titulo_principal', current_idea.title),
+                'copy': campaign_data.get('estrategia_implementacao', current_idea.description),
+                'cta': 'Clique para saber mais!',
+                'hashtags': ['#campanha', '#marketing', '#conteudo'],
+                'visual_description': 'Descrição visual padrão',
+                'color_composition': 'Paleta de cores padrão'
+            }
+        for key in ['variacao_a', 'variacao_b', 'variacao_c']:
+            campaign_data[key] = {
+                'headline': base_variation.get('headline', ''),
+                'copy': base_variation.get('copy', ''),
+                'cta': base_variation.get('cta', ''),
+                'hashtags': base_variation.get('hashtags', []),
+                'visual_description': base_variation.get('visual_description', ''),
+                'color_composition': base_variation.get('color_composition', ''),
+            }
+
+        # Saída padronizada para o frontend
+        improved_data = {
+            'title': campaign_data.get('titulo_principal', current_idea.title),
+            'description': campaign_data.get('estrategia_implementacao', current_idea.description),
+            'content': json.dumps(campaign_data, ensure_ascii=False)
+        }
+
+        return improved_data

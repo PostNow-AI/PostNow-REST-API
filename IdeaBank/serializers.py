@@ -64,6 +64,19 @@ class CampaignIdeaSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(
         source='get_status_display', read_only=True)
 
+    def to_representation(self, instance):
+        """Custom representation with debug logging."""
+        data = super().to_representation(instance)
+
+        # Debug logging for content field
+        if 'content' in data:
+            print("=== DEBUG: Serializer content ===")
+            print(f"Content type: {type(data['content'])}")
+            print(f"Content value: {data['content'][:200]}...")
+            print(f"Content length: {len(str(data['content']))}")
+
+        return data
+
     class Meta:
         model = CampaignIdea
         fields = [
