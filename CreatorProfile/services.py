@@ -21,10 +21,18 @@ class CreatorProfileService:
         """Update profile with provided data."""
         with transaction.atomic():
             profile = CreatorProfileService.get_or_create_profile(user)
+
+            # Update only the fields that were provided
             for key, value in data.items():
                 if hasattr(profile, key):
+                    # Clean the value before setting
+                    if isinstance(value, str):
+                        value = value.strip() if value else None
                     setattr(profile, key, value)
+
+            # Force save to trigger the custom save method
             profile.save()
+
         return profile
 
     @staticmethod
@@ -42,8 +50,12 @@ class CreatorProfileService:
             if getattr(profile, field, None) and str(getattr(profile, field)).strip()
         )
 
+        # Ensure onboarding is only marked as completed if there are actual filled fields
+        # and the profile wasn't manually marked as completed
+        actual_onboarding_completed = filled_fields > 0 and profile.onboarding_completed
+
         return {
-            'onboarding_completed': profile.onboarding_completed,
+            'onboarding_completed': actual_onboarding_completed,
             'onboarding_skipped': profile.onboarding_skipped,
             'has_data': filled_fields > 0,
             'filled_fields_count': filled_fields,

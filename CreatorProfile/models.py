@@ -154,29 +154,34 @@ class CreatorProfile(models.Model):
 
     def save(self, *args, **kwargs):
         """Override save to automatically set onboarding status."""
-        # Check if any onboarding data is filled
+        # Check if any onboarding data is filled with valid content
         has_data = any([
-            self.professional_name,
-            self.profession,
-            self.specialization,
-            self.linkedin_url,
-            self.instagram_username,
-            self.youtube_channel,
-            self.tiktok_username,
-            self.primary_color,
-            self.secondary_color,
-            self.accent_color_1,
-            self.accent_color_2,
-            self.accent_color_3,
-            self.primary_font,
-            self.secondary_font,
+            self.professional_name and str(self.professional_name).strip(),
+            self.profession and str(self.profession).strip(),
+            self.specialization and str(self.specialization).strip(),
+            self.linkedin_url and str(self.linkedin_url).strip(),
+            self.instagram_username and str(self.instagram_username).strip(),
+            self.youtube_channel and str(self.youtube_channel).strip(),
+            self.tiktok_username and str(self.tiktok_username).strip(),
+            self.primary_color and str(self.primary_color).strip(),
+            self.secondary_color and str(self.secondary_color).strip(),
+            self.accent_color_1 and str(self.accent_color_1).strip(),
+            self.accent_color_2 and str(self.accent_color_2).strip(),
+            self.accent_color_3 and str(self.accent_color_3).strip(),
+            self.primary_font and str(self.primary_font).strip(),
+            self.secondary_font and str(self.secondary_font).strip(),
         ])
 
+        # Only mark as completed if there's actual data and it wasn't already completed
         if has_data and not self.onboarding_completed:
             self.onboarding_completed = True
             if not self.onboarding_completed_at:
                 from django.utils import timezone
                 self.onboarding_completed_at = timezone.now()
+        elif not has_data and self.onboarding_completed:
+            # If no data, ensure onboarding is not marked as completed
+            self.onboarding_completed = False
+            self.onboarding_completed_at = None
 
         super().save(*args, **kwargs)
 

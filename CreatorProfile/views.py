@@ -25,12 +25,16 @@ class OnboardingStatusView(generics.RetrieveAPIView):
     def get(self, request):
         try:
             profile = CreatorProfileService.get_or_create_profile(request.user)
+
+            # Force save to ensure onboarding status is correctly calculated
+            profile.save()
+
             status_data = CreatorProfileService.calculate_onboarding_status(
                 profile)
             serializer = OnboardingStatusSerializer(status_data)
             return Response(serializer.data)
         except Exception:
-            # Profile doesn't exist, onboarding required
+            # Profile doesn't exist or error occurred, onboarding required
             status_data = {
                 'onboarding_completed': False,
                 'onboarding_skipped': False,
