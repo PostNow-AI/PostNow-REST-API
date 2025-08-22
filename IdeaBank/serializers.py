@@ -154,11 +154,15 @@ class IdeaGenerationRequestSerializer(serializers.Serializer):
     preferred_provider = serializers.CharField(
         max_length=50,
         required=False,
+        allow_blank=True,
+        default='google',
         help_text="Preferred AI provider (e.g., 'Google', 'OpenAI', 'Anthropic')"
     )
     preferred_model = serializers.CharField(
         max_length=100,
         required=False,
+        allow_blank=True,
+        default='',
         help_text="Specific AI model name (e.g., 'gemini-1.5-flash', 'gpt-4')"
     )
 

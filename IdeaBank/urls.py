@@ -14,6 +14,8 @@ urlpatterns = [
 
     # AI-powered idea generation
     path('generate-ideas/', views.generate_campaign_ideas, name='generate-ideas'),
+    path('public/generate-ideas/', views.generate_public_ideas,
+         name='generate-public-ideas'),
     path('generate-single-idea/', views.generate_single_idea,
          name='generate-single-idea'),
 

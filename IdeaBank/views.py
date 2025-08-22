@@ -21,6 +21,14 @@ except ImportError:
     AI_MODEL_SERVICE_AVAILABLE = False
     AIModelService = None
 
+# Import AI services
+try:
+    from .services.ai_service_factory import AIServiceFactory
+    AI_SERVICE_FACTORY_AVAILABLE = True
+except ImportError:
+    AI_SERVICE_FACTORY_AVAILABLE = False
+    AIServiceFactory = None
+
 
 class CampaignListView(generics.ListCreateAPIView):
     """List and create campaigns."""
@@ -92,6 +100,13 @@ def generate_campaign_ideas(request):
         # Create campaign first
         campaign_data = serializer.validated_data.copy()
 
+        # Extract AI service configuration (not campaign fields)
+        ai_config = {
+            'preferred_provider': campaign_data.pop('preferred_provider', ''),
+            'preferred_model': campaign_data.pop('preferred_model', ''),
+            'gemini_api_key': campaign_data.pop('gemini_api_key', '')
+        }
+
         # Generate automatic title if none provided
         if not campaign_data.get('title') or campaign_data['title'].strip() == '':
             # Create a descriptive title based on objectives and platforms
@@ -116,19 +131,64 @@ def generate_campaign_ideas(request):
             **campaign_data
         )
 
-        # Generate ideas using Gemini with progress tracking
-        gemini_service = GeminiService()
+        # Generate ideas using AI with progress tracking
+        # Determine which AI service to use based on user preferences
+        preferred_provider = ai_config.get(
+            'preferred_provider', '').strip().lower()
+        preferred_model = ai_config.get('preferred_model', '').strip()
 
-        # Inject user's Gemini API key if present
+        # Set defaults if empty
+        if not preferred_provider:
+            preferred_provider = 'google'
+        if not preferred_model:
+            if preferred_provider == 'google':
+                preferred_model = 'gemini-1.5-flash'
+            elif preferred_provider == 'openai':
+                preferred_model = 'gpt-3.5-turbo'
+            elif preferred_provider == 'anthropic':
+                preferred_model = 'claude-3-sonnet'
+            else:
+                preferred_model = 'gemini-1.5-flash'
+
+        # For now, we'll use Gemini as the default, but this can be extended
+        # to support other providers like OpenAI and Anthropic
+        if preferred_provider in ['openai', 'anthropic']:
+            # TODO: Implement OpenAI and Anthropic services
+            # For now, fallback to Gemini
+            pass
+
+        if not AI_SERVICE_FACTORY_AVAILABLE:
+            return Response(
+                {'error': 'Serviço de IA não disponível'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        # Create AI service with selected model
+        ai_service = AIServiceFactory.create_service(
+            preferred_provider or 'google',
+            preferred_model
+        )
+
+        if not ai_service:
+            return Response(
+                {'error': 'Provedor de IA não disponível'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        # Inject user's API key if present
         try:
             from APIKeys.models import UserAPIKey
+            provider_for_key = preferred_provider if preferred_provider != 'google' else 'gemini'
             user_key = UserAPIKey.objects.filter(
-                user=request.user, provider='gemini').first()
+                user=request.user, provider=provider_for_key).first()
             if user_key:
-                campaign_data['gemini_api_key'] = user_key.api_key
+                ai_config['gemini_api_key'] = user_key.api_key
         except ImportError:
             # APIKeys app not available, continue without user key
             pass
+
+        # Create complete config for AI service (combines campaign data + AI config)
+        complete_config = {**campaign_data, **ai_config}
 
         # Progress tracking function
         def progress_callback(progress_data):
@@ -137,40 +197,48 @@ def generate_campaign_ideas(request):
             print(
                 f"Progress: {progress_data['percentage']}% - {progress_data['current_step_name']}")
 
-        # Generate 3 ideas for the campaign with progress
-        ideas_data, final_progress = gemini_service.generate_campaign_ideas_with_progress(
-            request.user, campaign_data, progress_callback)
+        # Generate 1 idea with 3 variations for the campaign with progress
+        ideas_data, final_progress = ai_service.generate_campaign_ideas_with_progress(
+            request.user, complete_config, progress_callback)
 
-        # Create 3 CampaignIdea objects (variations A, B, C)
+        # Create a single CampaignIdea object with all variations stored together
         ideas = []
-        variation_types = ['a', 'b', 'c']
 
-        for i, idea_data in enumerate(ideas_data):
-            if i >= 3:  # Ensure we only create 3 ideas
-                break
+        for idea_data in ideas_data:
+            # Extract the structured content
+            content = idea_data.get('content', {})
 
-            variation_type = variation_types[i]
+            # Get the first variation as the primary content for the main fields
+            primary_variation = None
+            if 'variacao_a' in content:
+                primary_variation = content['variacao_a']
+            elif 'variacao_b' in content:
+                primary_variation = content['variacao_b']
+            elif 'variacao_c' in content:
+                primary_variation = content['variacao_c']
 
-            # Get variation content if available, otherwise use main content
-            variations = idea_data.get('variations', [])
-            variation_content = variations[i] if i < len(variations) else {}
-
+            # Create single idea object with all variations stored in content
             idea = CampaignIdea.objects.create(
                 campaign=campaign,
                 title=idea_data['title'],
                 description=idea_data['description'],
-                content=idea_data['content'],
+                # Store the full structured content with all variations
+                content=str(content),
                 platform=idea_data['platform'],
                 content_type=idea_data['content_type'],
-                variation_type=variation_type,
-                headline=variation_content.get('headline', ''),
-                copy=variation_content.get('copy', ''),
-                cta=variation_content.get('cta', ''),
-                hashtags=variation_content.get('hashtags', []),
-                visual_description=variation_content.get(
-                    'visual_description', ''),
-                color_composition=variation_content.get(
-                    'color_composition', '')
+                variation_type='a',  # Default to 'a' as primary variation
+                headline=primary_variation.get(
+                    'headline', '') if primary_variation else '',
+                copy=primary_variation.get(
+                    'copy', '') if primary_variation else '',
+                cta=primary_variation.get(
+                    'cta', '') if primary_variation else '',
+                hashtags=primary_variation.get(
+                    'hashtags', []) if primary_variation else [],
+                visual_description=primary_variation.get(
+                    'visual_description', '') if primary_variation else '',
+                color_composition=primary_variation.get(
+                    'color_composition', '') if primary_variation else ''
             )
             ideas.append(idea)
 
@@ -179,7 +247,7 @@ def generate_campaign_ideas(request):
         ideas_serializer = CampaignIdeaSerializer(ideas, many=True)
 
         return Response({
-            'message': 'Campanha e 3 ideias geradas com sucesso!',
+            'message': 'Campanha e ideia com 3 variações geradas com sucesso!',
             'campaign': campaign_serializer.data,
             'ideas': ideas_serializer.data,
             'progress': final_progress
@@ -220,21 +288,63 @@ def generate_public_ideas(request):
                 # APIKeys app not available, continue without user key
                 pass
 
-        # Generate ideas using Gemini without saving to database
-        gemini_service = GeminiService()
+        # Extract AI service configuration (not campaign fields)
+        config_data = serializer.validated_data.copy()
+        ai_config = {
+            'preferred_provider': config_data.pop('preferred_provider', ''),
+            'preferred_model': config_data.pop('preferred_model', ''),
+            'gemini_api_key': config_data.pop('gemini_api_key', '')
+        }
+
+        # Set defaults if empty
+        preferred_provider = ai_config.get(
+            'preferred_provider', '').strip().lower()
+        preferred_model = ai_config.get('preferred_model', '').strip()
+
+        if not preferred_provider:
+            preferred_provider = 'google'
+        if not preferred_model:
+            if preferred_provider == 'google':
+                preferred_model = 'gemini-1.5-flash'
+            elif preferred_provider == 'openai':
+                preferred_model = 'gpt-3.5-turbo'
+            elif preferred_provider == 'anthropic':
+                preferred_model = 'claude-3-sonnet'
+            else:
+                preferred_model = 'gemini-1.5-flash'
+
+        # Create AI service with selected model
+        if not AI_SERVICE_FACTORY_AVAILABLE:
+            return Response(
+                {'error': 'Serviço de IA não disponível'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        ai_service = AIServiceFactory.create_service(
+            preferred_provider,
+            preferred_model
+        )
+
+        if not ai_service:
+            return Response(
+                {'error': 'Provedor de IA não disponível'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
         # Add API key to config if user has one
-        config_data = serializer.validated_data.copy()
         if api_key:
-            config_data['gemini_api_key'] = api_key
+            ai_config['gemini_api_key'] = api_key
+
+        # Create complete config for AI service
+        complete_config = {**config_data, **ai_config}
 
         # Progress tracking function
         def progress_callback(progress_data):
             print(
                 f"Public Progress: {progress_data['percentage']}% - {progress_data['current_step_name']}")
 
-        ideas_data, final_progress = gemini_service.generate_campaign_ideas_with_progress(
-            user, config_data, progress_callback)
+        ideas_data, final_progress = ai_service.generate_campaign_ideas_with_progress(
+            user, complete_config, progress_callback)
 
         # Return ideas without saving to database
         return Response({
@@ -355,35 +465,69 @@ def improve_idea(request, idea_id):
         idea = CampaignIdea.objects.get(
             id=idea_id, campaign__user=request.user)
 
-        # Get improvement prompt
+        # Get improvement prompt and AI model preferences
         improvement_prompt = request.data.get('improvement_prompt', '')
+        preferred_provider = request.data.get(
+            'preferred_provider', '').strip().lower()
+        preferred_model = request.data.get('preferred_model', '').strip()
+
+        # Set defaults if empty
+        if not preferred_provider:
+            preferred_provider = 'google'
+        if not preferred_model:
+            if preferred_provider == 'google':
+                preferred_model = 'gemini-1.5-flash'
+            elif preferred_provider == 'openai':
+                preferred_model = 'gpt-3.5-turbo'
+            elif preferred_provider == 'anthropic':
+                preferred_model = 'claude-3-sonnet'
+            else:
+                preferred_model = 'gemini-1.5-flash'
+
         if not improvement_prompt:
             return Response(
                 {'error': 'Prompt de melhoria é obrigatório'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Get user's Gemini API key if present
+        # Get user's API key based on preferred provider
         api_key = None
         try:
             from APIKeys.models import UserAPIKey
+            provider = preferred_provider if preferred_provider else 'gemini'
             user_key = UserAPIKey.objects.filter(
-                user=request.user, provider='gemini').first()
+                user=request.user, provider=provider).first()
             if user_key:
                 api_key = user_key.api_key
         except ImportError:
             # APIKeys app not available, continue without user key
             pass
 
-        # Improve idea using Gemini with progress tracking
-        gemini_service = GeminiService()
+        # Improve idea using AI with progress tracking
+        if not AI_SERVICE_FACTORY_AVAILABLE:
+            return Response(
+                {'error': 'Serviço de IA não disponível'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        # Create AI service with selected model
+        ai_service = AIServiceFactory.create_service(
+            preferred_provider or 'google',
+            preferred_model
+        )
+
+        if not ai_service:
+            return Response(
+                {'error': 'Provedor de IA não disponível'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
         # Progress tracking function
         def progress_callback(progress_data):
             print(
                 f"Idea Improvement Progress: {progress_data['percentage']}% - {progress_data['current_step_name']}")
 
-        improved_data, final_progress = gemini_service.improve_idea_with_progress(
+        improved_data, final_progress = ai_service.improve_idea_with_progress(
             request.user, idea, improvement_prompt, api_key, progress_callback)
 
         if improved_data:
@@ -392,6 +536,21 @@ def improve_idea(request, idea_id):
             idea.description = improved_data.get(
                 'description', idea.description)
             idea.content = improved_data.get('content', idea.content)
+
+            # Update individual fields for frontend display
+            if improved_data.get('headline'):
+                idea.headline = improved_data['headline']
+            if improved_data.get('copy'):
+                idea.copy = improved_data['copy']
+            if improved_data.get('cta'):
+                idea.cta = improved_data['cta']
+            if improved_data.get('hashtags'):
+                idea.hashtags = improved_data['hashtags']
+            if improved_data.get('visual_description'):
+                idea.visual_description = improved_data['visual_description']
+            if improved_data.get('color_composition'):
+                idea.color_composition = improved_data['color_composition']
+
             idea.save()
 
             # Serialize response
