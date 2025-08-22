@@ -54,4 +54,7 @@ urlpatterns = [
 
     # Global Options endpoints
     path('api/v1/global-options/', include('GlobalOptions.urls')),
+
+    # Credit System endpoints
+    path('api/v1/credits/', include('CreditSystem.urls')),
 ]
