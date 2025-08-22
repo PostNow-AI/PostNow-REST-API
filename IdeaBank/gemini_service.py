@@ -11,10 +11,18 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None
 
-from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
 
+from CreatorProfile.models import CreatorProfile
 from IdeaBank.models import CampaignIdea, VoiceTone
+
+# Import AI model service for credit management
+try:
+    from .services.ai_model_service import AIModelService
+    AI_MODEL_SERVICE_AVAILABLE = True
+except ImportError:
+    AI_MODEL_SERVICE_AVAILABLE = False
+    AIModelService = None
 
 
 class ProgressTracker:
@@ -73,6 +81,89 @@ class GeminiService:
         # Initialize without API key - will be set per request
         genai.configure(api_key="")
         self.model = genai.GenerativeModel('gemini-1.5-flash')
+
+    def _validate_credits(self, user: User, estimated_tokens: int = 1000, model_name: str = 'gemini-1.5-flash') -> bool:
+        """
+        Validate if user has sufficient credits for the AI operation.
+
+        Args:
+            user: User requesting the operation
+            estimated_tokens: Estimated number of tokens for the operation
+            model_name: Name of the AI model to use
+
+        Returns:
+            bool: True if user has sufficient credits, False otherwise
+        """
+        if not AI_MODEL_SERVICE_AVAILABLE:
+            return True  # Skip credit validation if service not available
+
+        try:
+            return AIModelService.validate_user_credits(user, model_name, estimated_tokens)
+        except Exception as e:
+            print(f"Error validating credits: {str(e)}")
+            return False
+
+    def _deduct_credits(self, user: User, actual_tokens: int, model_name: str = 'gemini-1.5-flash', description: str = "Campaign idea generation") -> bool:
+        """
+        Deduct credits after successful AI operation.
+
+        Args:
+            user: User who used the service
+            actual_tokens: Actual number of tokens used
+            model_name: Name of the AI model used
+            description: Description of the operation
+
+        Returns:
+            bool: True if deduction was successful, False otherwise
+        """
+        if not AI_MODEL_SERVICE_AVAILABLE:
+            return True  # Skip credit deduction if service not available
+
+        try:
+            return AIModelService.deduct_credits(user, model_name, actual_tokens, description)
+        except Exception as e:
+            print(f"Error deducting credits: {str(e)}")
+            return False
+
+    def _estimate_tokens(self, prompt: str, model_name: str = 'gemini-1.5-flash') -> int:
+        """
+        Estimate the number of tokens in a prompt.
+
+        Args:
+            prompt: The prompt text
+            model_name: Name of the AI model for token estimation
+
+        Returns:
+            int: Estimated token count
+        """
+        if AI_MODEL_SERVICE_AVAILABLE:
+            return AIModelService.estimate_tokens(prompt, model_name)
+
+        # Fallback estimation if service not available
+        estimated_tokens = len(prompt) // 4
+        total_estimated = estimated_tokens * 3
+        return max(total_estimated, 100)
+
+    def _select_optimal_model(self, user: User, estimated_tokens: int, preferred_provider: str = None) -> str:
+        """
+        Select the optimal AI model based on user credits and preferences.
+
+        Args:
+            user: User requesting the operation
+            estimated_tokens: Estimated number of tokens needed
+            preferred_provider: Preferred AI provider (optional)
+
+        Returns:
+            str: Name of the optimal model
+        """
+        if AI_MODEL_SERVICE_AVAILABLE:
+            optimal_model = AIModelService.select_optimal_model(
+                user, estimated_tokens, preferred_provider)
+            if optimal_model:
+                return optimal_model
+
+        # Fallback to default model
+        return 'gemini-1.5-flash'
 
     def _build_campaign_prompt(self, user: User, config: Dict) -> str:
         """Build the new structured prompt for campaign generation."""
@@ -325,12 +416,28 @@ IMPORTANTE:
 
             prompt = self._build_campaign_prompt(user, config)
 
+            # Select optimal model and validate credits
+            estimated_tokens = self._estimate_tokens(prompt)
+            model_name = self._select_optimal_model(
+                user, estimated_tokens, config.get('preferred_provider'))
+
+            if not self._validate_credits(user, estimated_tokens, model_name):
+                raise Exception(
+                    "Insufficient credits for this operation. Please purchase more credits.")
+
             print("=== PROMPT ENVIADO PARA GEMINI ===")
             print(prompt)
             print("=====================================")
 
             response = self.model.generate_content(prompt)
             response_text = response.text.strip()
+
+            # Calculate actual tokens used and deduct credits
+            actual_tokens = self._estimate_tokens(
+                prompt + response_text, model_name)
+            if not self._deduct_credits(user, actual_tokens, model_name, "Campaign idea generation"):
+                print(
+                    "Warning: Failed to deduct credits, but operation completed successfully")
 
             print("=== RESPOSTA DO GEMINI ===")
             print(response_text)
@@ -1120,6 +1227,7 @@ IMPORTANTE:
             "Analisando perfil do usuário...",
             "Processando configurações da campanha...",
             "Construindo prompt para IA...",
+            "Validando créditos disponíveis...",
             "Conectando com Gemini AI...",
             "Gerando conteúdo para plataforma 1...",
             "Gerando conteúdo para plataforma 2...",
@@ -1154,14 +1262,26 @@ IMPORTANTE:
             if progress_callback:
                 progress_callback(progress.get_progress())
 
-            # Step 5: Connect to Gemini
+            # Step 5: Validate credits
+            progress.next_step()
+            estimated_tokens = self._estimate_tokens(prompt)
+            model_name = self._select_optimal_model(
+                user, estimated_tokens, config.get('preferred_provider'))
+
+            if not self._validate_credits(user, estimated_tokens, model_name):
+                raise Exception(
+                    "Insufficient credits for this operation. Please purchase more credits.")
+            if progress_callback:
+                progress_callback(progress.get_progress())
+
+            # Step 6: Connect to Gemini
             progress.next_step()
             api_key = config.get('gemini_api_key')
             self._configure_api_key(api_key)
             if progress_callback:
                 progress_callback(progress.get_progress())
 
-            # Step 6-8: Generate content for each platform
+            # Step 7-9: Generate content for each platform
             platforms = config.get('platforms', ['instagram'])
             for i, platform in enumerate(platforms[:3]):  # Max 3 platforms
                 progress.next_step(f"Gerando conteúdo para {platform}...")
@@ -1169,26 +1289,34 @@ IMPORTANTE:
                     progress_callback(progress.get_progress())
                 time.sleep(0.5)  # Simulate processing time
 
-            # Step 9: Process AI responses
+            # Step 10: Process AI responses
             progress.next_step()
             response = self.model.generate_content(prompt)
             response_text = response.text.strip()
+
+            # Calculate actual tokens used and deduct credits
+            actual_tokens = self._estimate_tokens(
+                prompt + response_text, model_name)
+            if not self._deduct_credits(user, actual_tokens, model_name, "Campaign idea generation with progress"):
+                print(
+                    "Warning: Failed to deduct credits, but operation completed successfully")
+
             if progress_callback:
                 progress_callback(progress.get_progress())
 
-            # Step 10: Structure data
+            # Step 11: Structure data
             progress.next_step()
             ideas = self._parse_campaign_response(response_text, config)
             if progress_callback:
                 progress_callback(progress.get_progress())
 
-            # Step 11: Validate format
+            # Step 12: Validate format
             progress.next_step()
             # Validation logic here
             if progress_callback:
                 progress_callback(progress.get_progress())
 
-            # Step 12: Finalize
+            # Step 13: Finalize
             progress.next_step()
             if progress_callback:
                 progress_callback(progress.get_progress())

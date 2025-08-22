@@ -13,6 +13,14 @@ from .serializers import (
     IdeaGenerationRequestSerializer,
 )
 
+# Import AI model service for model information
+try:
+    from .services.ai_model_service import AIModelService
+    AI_MODEL_SERVICE_AVAILABLE = True
+except ImportError:
+    AI_MODEL_SERVICE_AVAILABLE = False
+    AIModelService = None
+
 
 class CampaignListView(generics.ListCreateAPIView):
     """List and create campaigns."""
@@ -494,10 +502,12 @@ def add_idea_to_campaign(request, campaign_id):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def generate_single_idea(request, campaign_id):
+def generate_single_idea(request):
     """Generate a single idea for an existing campaign with progress tracking."""
     try:
         # Get campaign
+        campaign_id = request.data.get('campaign_id')
+
         campaign = Campaign.objects.get(id=campaign_id, user=request.user)
 
         # Get idea parameters
@@ -622,3 +632,108 @@ def generate_single_idea(request, campaign_id):
 
 # Legacy views for backward compatibility
 # Removed problematic legacy views that were causing type conflicts
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_available_models(request):
+    """Get available AI models with their credit costs and capabilities."""
+    try:
+        if not AI_MODEL_SERVICE_AVAILABLE:
+            return Response(
+                {'error': 'AI model service not available'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        # Get available models
+        models = AIModelService.get_available_models()
+
+        # Get user's current credit balance
+        user_balance = AIModelService.get_user_credit_balance(request.user)
+
+        # Calculate estimated costs for a typical campaign generation
+        typical_tokens = 2000  # Typical tokens for campaign generation
+        models_with_costs = []
+
+        for model in models:
+            estimated_cost = AIModelService.calculate_cost(
+                model['name'], typical_tokens)
+            models_with_costs.append({
+                **model,
+                'estimated_cost_for_typical_use': estimated_cost,
+                'can_afford': user_balance >= estimated_cost
+            })
+
+        return Response({
+            'models': models_with_costs,
+            'user_credit_balance': user_balance,
+            'typical_usage_tokens': typical_tokens,
+            'credit_currency': 'credits'
+        })
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error retrieving models: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def estimate_campaign_cost(request):
+    """Estimate the credit cost for generating a campaign."""
+    try:
+        # Get campaign configuration from request
+        config = request.data.get('config', {})
+
+        # Simple token estimation based on config complexity
+        base_tokens = 500
+        platform_multiplier = len(config.get('platforms', [])) * 200
+        objective_multiplier = len(config.get('objectives', [])) * 150
+        persona_multiplier = 100 if any(config.get(f'persona_{field}') for field in [
+                                        'age', 'location', 'income', 'interests', 'behavior', 'pain_points']) else 0
+
+        estimated_tokens = base_tokens + platform_multiplier + \
+            objective_multiplier + persona_multiplier
+
+        # Simple cost calculation (1 credit per 1000 tokens)
+        estimated_cost = estimated_tokens / 1000
+
+        # Mock available models
+        available_models = [
+            {
+                'name': 'gemini-1.5-flash',
+                'provider': 'Google',
+                'cost_per_token': 0.000001,
+                'estimated_cost': estimated_cost * 0.8,  # 20% cheaper
+                'can_afford': True
+            },
+            {
+                'name': 'gpt-3.5-turbo',
+                'provider': 'OpenAI',
+                'cost_per_token': 0.000002,
+                'estimated_cost': estimated_cost,
+                'can_afford': True
+            },
+            {
+                'name': 'claude-3-haiku',
+                'provider': 'Anthropic',
+                'cost_per_token': 0.00000025,
+                'estimated_cost': estimated_cost * 0.5,  # 50% cheaper
+                'can_afford': True
+            }
+        ]
+
+        return Response({
+            'estimated_tokens': estimated_tokens,
+            'estimated_cost': estimated_cost,
+            'available_models': available_models,
+            'recommended_model': available_models[2],  # Claude (cheapest)
+            'message': 'Estimativa baseada em configuração da campanha'
+        })
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error estimating cost: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

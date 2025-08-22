@@ -4,7 +4,6 @@ from .models import (
     Campaign,
     CampaignIdea,
     CampaignObjective,
-    ContentType,
     IdeaGenerationConfig,
     SocialPlatform,
     VoiceTone,
@@ -112,53 +111,83 @@ class CampaignCreateSerializer(serializers.ModelSerializer):
 
 
 class IdeaGenerationRequestSerializer(serializers.Serializer):
-    """Serializer for idea generation requests."""
-    # Campaign info
-    title = serializers.CharField(max_length=200, required=False, allow_blank=True)
-    description = serializers.CharField(required=False, allow_blank=True)
+    """Serializer for AI idea generation requests."""
 
-    # Campaign objective
+    # Campaign details
+    title = serializers.CharField(
+        max_length=200, required=False, allow_blank=True)
     objectives = serializers.ListField(
         child=serializers.ChoiceField(choices=CampaignObjective.choices),
         required=True
     )
-
-    # Target persona
-    persona_age = serializers.CharField(
-        max_length=50, required=False, allow_blank=True)
-    persona_location = serializers.CharField(
-        max_length=100, required=False, allow_blank=True)
-    persona_income = serializers.CharField(
-        max_length=50, required=False, allow_blank=True)
-    persona_interests = serializers.CharField(required=False, allow_blank=True)
-    persona_behavior = serializers.CharField(required=False, allow_blank=True)
-    persona_pain_points = serializers.CharField(
-        required=False, allow_blank=True)
-
-    # Social platforms and content types
     platforms = serializers.ListField(
         child=serializers.ChoiceField(choices=SocialPlatform.choices),
         required=True
     )
     content_types = serializers.DictField(
-        child=serializers.ListField(
-            child=serializers.ChoiceField(choices=ContentType.choices)
-        ),
-        required=False,
-        allow_empty=True
+        child=serializers.ListField(child=serializers.CharField()),
+        required=False
     )
 
-    # Voice tone
-    voice_tone = serializers.ChoiceField(
-        choices=VoiceTone.choices,
-        default=VoiceTone.PROFESSIONAL
-    )
-
-    # Campaign details for AI generation
+    # Product/service details
     product_description = serializers.CharField(
         required=False, allow_blank=True)
     value_proposition = serializers.CharField(required=False, allow_blank=True)
     campaign_urgency = serializers.CharField(required=False, allow_blank=True)
+
+    # Voice and style
+    voice_tone = serializers.ChoiceField(
+        choices=VoiceTone.choices,
+        default='professional'
+    )
+
+    # Persona details
+    persona_age = serializers.CharField(required=False, allow_blank=True)
+    persona_location = serializers.CharField(required=False, allow_blank=True)
+    persona_income = serializers.CharField(required=False, allow_blank=True)
+    persona_interests = serializers.CharField(required=False, allow_blank=True)
+    persona_behavior = serializers.CharField(required=False, allow_blank=True)
+    persona_pain_points = serializers.CharField(
+        required=False, allow_blank=True)
+
+    # AI model preferences
+    preferred_provider = serializers.CharField(
+        max_length=50,
+        required=False,
+        help_text="Preferred AI provider (e.g., 'Google', 'OpenAI', 'Anthropic')"
+    )
+    preferred_model = serializers.CharField(
+        max_length=100,
+        required=False,
+        help_text="Specific AI model name (e.g., 'gemini-1.5-flash', 'gpt-4')"
+    )
+
+    # Optional fields
+    gemini_api_key = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, data):
+        """Validate the request data."""
+        # Ensure at least one platform is selected
+        if not data.get('platforms'):
+            raise serializers.ValidationError(
+                "At least one platform must be selected.")
+
+        # Ensure at least one objective is selected
+        if not data.get('objectives'):
+            raise serializers.ValidationError(
+                "At least one objective must be selected.")
+
+        # Validate content types if provided
+        platforms = data.get('platforms', [])
+        content_types = data.get('content_types', {})
+
+        for platform in platforms:
+            if platform in content_types and not content_types[platform]:
+                raise serializers.ValidationError(
+                    f"Content types for {platform} cannot be empty if specified."
+                )
+
+        return data
 
 
 class IdeaGenerationResponseSerializer(serializers.Serializer):
