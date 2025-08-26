@@ -3,7 +3,6 @@ from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .gemini_service import GeminiService
 from .models import Campaign, CampaignIdea, CampaignObjective, SocialPlatform, VoiceTone
 from .serializers import (
     CampaignDetailSerializer,
@@ -103,8 +102,7 @@ def generate_campaign_ideas(request):
         # Extract AI service configuration (not campaign fields)
         ai_config = {
             'preferred_provider': campaign_data.pop('preferred_provider', ''),
-            'preferred_model': campaign_data.pop('preferred_model', ''),
-            'gemini_api_key': campaign_data.pop('gemini_api_key', '')
+            'preferred_model': campaign_data.pop('preferred_model', '')
         }
 
         # Generate automatic title if none provided
@@ -174,18 +172,6 @@ def generate_campaign_ideas(request):
                 {'error': 'Provedor de IA não disponível'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
-
-        # Inject user's API key if present
-        try:
-            from APIKeys.models import UserAPIKey
-            provider_for_key = preferred_provider if preferred_provider != 'google' else 'gemini'
-            user_key = UserAPIKey.objects.filter(
-                user=request.user, provider=provider_for_key).first()
-            if user_key:
-                ai_config['gemini_api_key'] = user_key.api_key
-        except ImportError:
-            # APIKeys app not available, continue without user key
-            pass
 
         # Create complete config for AI service (combines campaign data + AI config)
         complete_config = {**campaign_data, **ai_config}
@@ -273,27 +259,14 @@ def generate_public_ideas(request):
         )
 
     try:
-        # Check if user is authenticated and has API key
+        # Check if user is authenticated
         user = request.user if request.user.is_authenticated else None
-        api_key = None
-
-        if user:
-            try:
-                from APIKeys.models import UserAPIKey
-                user_key = UserAPIKey.objects.filter(
-                    user=user, provider='gemini').first()
-                if user_key:
-                    api_key = user_key.api_key
-            except ImportError:
-                # APIKeys app not available, continue without user key
-                pass
 
         # Extract AI service configuration (not campaign fields)
         config_data = serializer.validated_data.copy()
         ai_config = {
             'preferred_provider': config_data.pop('preferred_provider', ''),
-            'preferred_model': config_data.pop('preferred_model', ''),
-            'gemini_api_key': config_data.pop('gemini_api_key', '')
+            'preferred_model': config_data.pop('preferred_model', '')
         }
 
         # Set defaults if empty
@@ -330,10 +303,6 @@ def generate_public_ideas(request):
                 {'error': 'Provedor de IA não disponível'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
-
-        # Add API key to config if user has one
-        if api_key:
-            ai_config['gemini_api_key'] = api_key
 
         # Create complete config for AI service
         complete_config = {**config_data, **ai_config}
@@ -705,17 +674,6 @@ def generate_single_idea(request):
             'campaign_urgency': campaign.campaign_urgency,
         }
 
-        # Inject user's Gemini API key if present
-        try:
-            from APIKeys.models import UserAPIKey
-            user_key = UserAPIKey.objects.filter(
-                user=request.user, provider='gemini').first()
-            if user_key:
-                campaign_data['gemini_api_key'] = user_key.api_key
-        except ImportError:
-            # APIKeys app not available, continue without user key
-            pass
-
         # Prepare idea parameters
         idea_params = {
             'platform': platform,
@@ -726,15 +684,49 @@ def generate_single_idea(request):
             'content': content,
         }
 
-        # Generate idea using Gemini with progress tracking
-        gemini_service = GeminiService()
+        # Get AI service preferences from request
+        preferred_provider = request.data.get(
+            'preferred_provider', 'google').strip().lower()
+        preferred_model = request.data.get('preferred_model', '').strip()
+
+        # Set defaults if empty
+        if not preferred_provider:
+            preferred_provider = 'google'
+        if not preferred_model:
+            if preferred_provider == 'google':
+                preferred_model = 'gemini-1.5-flash'
+            elif preferred_provider == 'openai':
+                preferred_model = 'gpt-3.5-turbo'
+            elif preferred_provider == 'anthropic':
+                preferred_model = 'claude-3-sonnet'
+            else:
+                preferred_model = 'gemini-1.5-flash'
+
+        # Create AI service with selected model
+        if not AI_SERVICE_FACTORY_AVAILABLE:
+            return Response(
+                {'error': 'Serviço de IA não disponível'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        ai_service = AIServiceFactory.create_service(
+            preferred_provider,
+            preferred_model
+        )
+
+        if not ai_service:
+            return Response(
+                {'error': 'Provedor de IA não disponível'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
         # Progress tracking function
+
         def progress_callback(progress_data):
             print(
                 f"Single Idea Progress: {progress_data['percentage']}% - {progress_data['current_step_name']}")
 
-        generated_idea, final_progress = gemini_service.generate_single_idea_with_progress(
+        generated_idea, final_progress = ai_service.generate_single_idea_with_progress(
             request.user, campaign_data, idea_params, progress_callback)
 
         if generated_idea:

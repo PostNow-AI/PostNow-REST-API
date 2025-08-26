@@ -71,7 +71,6 @@ INSTALLED_APPS = [
     'CreatorProfile',
     'IdeaBank',
     'GlobalOptions',
-    'APIKeys',
     'CreditSystem',
 ]
 

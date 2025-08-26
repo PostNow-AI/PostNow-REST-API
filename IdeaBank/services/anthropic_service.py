@@ -1,4 +1,6 @@
 
+import os
+
 try:
     import anthropic
     ANTHROPIC_AVAILABLE = True
@@ -21,8 +23,11 @@ class AnthropicService(BaseAIService):
 
         super().__init__(model_name)
 
+        # Set provider identifier
+        self.provider = 'anthropic'
+
         # Set default API key from environment
-        self.default_api_key = None  # Will be set per request
+        self.default_api_key = os.getenv('ANTHROPIC_API_KEY', '')
 
     def _validate_credits(self, user: User, estimated_tokens: int, model_name: str) -> bool:
         """Validate if user has sufficient credits for the AI operation."""
@@ -71,6 +76,7 @@ class AnthropicService(BaseAIService):
     def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None) -> str:
         """Make the actual AI API request to Anthropic Claude."""
         # Configure API key
+        api_key = api_key or self.default_api_key
         if not api_key:
             raise ValueError("API key is required for Anthropic requests")
 

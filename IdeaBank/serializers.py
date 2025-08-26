@@ -167,7 +167,6 @@ class IdeaGenerationRequestSerializer(serializers.Serializer):
     )
 
     # Optional fields
-    gemini_api_key = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, data):
         """Validate the request data."""

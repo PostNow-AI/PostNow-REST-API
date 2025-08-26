@@ -441,11 +441,11 @@ REGRAS OBRIGATÓRIAS:
             if progress_callback:
                 progress_callback(self.progress_tracker.get_progress())
 
-            # Step 4: Connect to AI
+                # Step 4: Connect to AI
             self.progress_tracker.next_step()
-            api_key = config.get('gemini_api_key')
+            # API keys are now handled by each service from environment variables
             response_text = self._make_ai_request(
-                prompt, self.model_name, api_key)
+                prompt, self.model_name)
 
             if progress_callback:
                 progress_callback(self.progress_tracker.get_progress())
@@ -772,3 +772,199 @@ REGRAS OBRIGATÓRIAS:
         except Exception as e:
             print(f"Error processing improved idea: {e}")
             return None
+
+    def generate_single_idea_with_progress(self, user: User, campaign: Dict, idea_params: Dict, progress_callback=None) -> Tuple[Dict, Dict]:
+        """Generate a single idea with progress tracking."""
+        steps = [
+            "Inicializando geração de ideia...",
+            "Validando créditos do usuário...",
+            "Construindo prompt da ideia...",
+            "Conectando com IA...",
+            "Gerando ideia...",
+            "Processando resposta da IA...",
+            "Validando formato dos dados...",
+            "Estruturando ideia final...",
+            "Finalizando geração..."
+        ]
+
+        self.progress_tracker.set_steps(steps)
+
+        try:
+            # Step 1: Initialize
+            self.progress_tracker.next_step()
+            if progress_callback:
+                progress_callback(self.progress_tracker.get_progress())
+
+            # Step 2: Validate credits (skip for public users)
+            self.progress_tracker.next_step()
+            if user and user.is_authenticated:
+                estimated_tokens = self._estimate_tokens(
+                    self._build_single_idea_prompt(campaign, idea_params), self.model_name)
+                if not self._validate_credits(user, estimated_tokens, self.model_name):
+                    raise Exception(
+                        "Créditos insuficientes para gerar ideia")
+
+            if progress_callback:
+                progress_callback(self.progress_tracker.get_progress())
+
+            # Step 3: Build prompt
+            self.progress_tracker.next_step()
+            prompt = self._build_single_idea_prompt(campaign, idea_params)
+
+            if progress_callback:
+                progress_callback(self.progress_tracker.get_progress())
+
+                # Step 4: Connect to AI
+            self.progress_tracker.next_step()
+            # API keys are now handled by each service from environment variables
+            response_text = self._make_ai_request(
+                prompt, self.model_name)
+
+            if progress_callback:
+                progress_callback(self.progress_tracker.get_progress())
+
+            # Step 5: Generate idea
+            self.progress_tracker.next_step()
+
+            if progress_callback:
+                progress_callback(self.progress_tracker.get_progress())
+
+            # Step 6: Process response
+            self.progress_tracker.next_step()
+            idea_data = self._parse_single_idea_response(
+                response_text, idea_params)
+
+            if progress_callback:
+                progress_callback(self.progress_tracker.get_progress())
+
+            # Step 7: Validate data
+            self.progress_tracker.next_step()
+            if not idea_data:
+                raise Exception("Falha ao gerar ideia")
+
+            if progress_callback:
+                progress_callback(self.progress_tracker.get_progress())
+
+            # Step 8: Structure final idea
+            self.progress_tracker.next_step()
+            final_idea = self._create_single_idea_from_data(
+                idea_data, idea_params, campaign)
+
+            if progress_callback:
+                progress_callback(self.progress_tracker.get_progress())
+
+            # Step 9: Finalize
+            self.progress_tracker.next_step()
+            if progress_callback:
+                progress_callback(self.progress_tracker.get_progress())
+
+            # Deduct credits (only for authenticated users)
+            if user and user.is_authenticated:
+                actual_tokens = self._estimate_tokens(
+                    prompt + str(idea_data), self.model_name)
+                self._deduct_credits(user, actual_tokens,
+                                     self.model_name, "Geração de ideia")
+
+            return final_idea, self.progress_tracker.get_progress()
+
+        except Exception as e:
+            print(f"Error in generate_single_idea_with_progress: {e}")
+            raise e
+
+    def _build_single_idea_prompt(self, campaign: Dict, idea_params: Dict) -> str:
+        """Build prompt for single idea generation."""
+        platform = idea_params.get('platform', 'instagram')
+        content_type = idea_params.get('content_type', 'post')
+        title = idea_params.get('title', '')
+        description = idea_params.get('description', '')
+        content = idea_params.get('content', '')
+
+        prompt = f"""
+Você é um especialista em marketing digital e criação de conteúdo para redes sociais. 
+Sua tarefa é gerar uma ideia criativa e estratégica para uma campanha específica.
+
+INFORMAÇÕES DA CAMPANHA:
+- Título: {campaign.get('title', 'N/A')}
+- Descrição: {campaign.get('description', 'N/A')}
+- Objetivos: {', '.join(campaign.get('objectives', []))}
+- Público-alvo: {campaign.get('persona_age', 'N/A')} anos, {campaign.get('persona_location', 'N/A')}, {campaign.get('persona_income', 'N/A')}
+- Interesses: {campaign.get('persona_interests', 'N/A')}
+- Comportamento: {campaign.get('persona_behavior', 'N/A')}
+- Pontos de dor: {campaign.get('persona_pain_points', 'N/A')}
+- Tom de voz: {campaign.get('voice_tone', 'N/A')}
+- Produto: {campaign.get('product_description', 'N/A')}
+- Proposta de valor: {campaign.get('value_proposition', 'N/A')}
+- Urgência: {campaign.get('campaign_urgency', 'N/A')}
+
+PARÂMETROS DA IDEIA:
+- Plataforma: {platform}
+- Tipo de conteúdo: {content_type}
+- Título sugerido: {title if title else 'Gerar título criativo'}
+- Descrição sugerida: {description if description else 'Gerar descrição estratégica'}
+- Conteúdo base: {content if content else 'Gerar conteúdo do zero'}
+
+INSTRUÇÕES:
+1. Analise o contexto da campanha
+2. Considere a plataforma e tipo de conteúdo
+3. Gere uma ideia criativa e relevante
+4. Mantenha consistência com a estratégia da campanha
+5. Seja específico e acionável
+
+FORMATO DE RESPOSTA OBRIGATÓRIO:
+Retorne APENAS um JSON válido com a estrutura:
+{{
+  "title": "Título da ideia",
+  "description": "Descrição da ideia",
+  "content": "Conteúdo principal da ideia",
+  "platform": "{platform}",
+  "content_type": "{content_type}",
+  "headline": "Headline atrativo",
+  "copy": "Copy persuasivo e envolvente",
+  "cta": "Call-to-action claro",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
+  "visual_description": "Descrição visual detalhada",
+  "color_composition": "Composição de cores sugerida"
+}}
+
+REGRAS:
+- Retorne APENAS o JSON, sem texto adicional
+- Use o idioma português brasileiro
+- Seja criativo e estratégico
+- Mantenha a relevância para o público-alvo
+- Considere as melhores práticas da plataforma
+"""
+        return prompt.strip()
+
+    def _parse_single_idea_response(self, response_text: str, idea_params: Dict) -> Dict:
+        """Parse single idea response from AI."""
+        try:
+            # Try to extract JSON from response
+            start_idx = response_text.find('{')
+            if start_idx == -1:
+                return None
+
+            end_idx = response_text.rfind('}') + 1
+            json_text = response_text[start_idx:end_idx]
+
+            idea_data = json.loads(json_text)
+            return idea_data
+
+        except Exception as e:
+            print(f"Error parsing single idea response: {e}")
+            return None
+
+    def _create_single_idea_from_data(self, idea_data: Dict, idea_params: Dict, campaign: Dict) -> Dict:
+        """Create structured single idea from AI response."""
+        return {
+            'title': idea_data.get('title', f'Ideia para {idea_params.get("platform", "plataforma")}'),
+            'description': idea_data.get('description', ''),
+            'content': idea_data.get('content', ''),
+            'platform': idea_data.get('platform', idea_params.get('platform', 'instagram')),
+            'content_type': idea_data.get('content_type', idea_params.get('content_type', 'post')),
+            'headline': idea_data.get('headline', ''),
+            'copy': idea_data.get('copy', ''),
+            'cta': idea_data.get('cta', ''),
+            'hashtags': idea_data.get('hashtags', []),
+            'visual_description': idea_data.get('visual_description', ''),
+            'color_composition': idea_data.get('color_composition', '')
+        }
