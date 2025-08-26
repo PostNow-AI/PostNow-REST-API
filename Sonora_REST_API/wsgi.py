@@ -11,7 +11,8 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Sonora_REST_API.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE',
+                      'Sonora_REST_API.settings')
 
 application = get_wsgi_application()
 app = application
