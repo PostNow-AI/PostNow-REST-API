@@ -71,7 +71,7 @@ INSTALLED_APPS = [
     'CreatorProfile',
     'IdeaBank',
     'GlobalOptions',
-    'APIKeys',
+    'CreditSystem',
 ]
 
 SITE_ID = 1
@@ -95,6 +95,7 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'CreditSystem.middleware.CreditCheckMiddleware',
 ]
 
 ROOT_URLCONF = 'Sonora_REST_API.urls'
@@ -308,3 +309,12 @@ CORS_ALLOW_METHODS = [
 
 # For development only - remove in production
 CORS_ALLOW_ALL_ORIGINS = DEBUG
+
+# Stripe Configuration
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+
+# Credit System Configuration
+CREDIT_SYSTEM_ENABLED = True
+DEFAULT_CREDIT_BALANCE = 0.00

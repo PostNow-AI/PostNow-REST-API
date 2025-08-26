@@ -20,7 +20,6 @@ from django.urls import include, path
 from Sonora_REST_API.Users.views import (
     GoogleLogin,
     disconnect_social_account,
-    get_subscription_status,
     google_auth,
     google_callback,
     list_social_accounts,
@@ -41,12 +40,7 @@ urlpatterns = [
     path('api/v1/auth/social-accounts/<int:account_id>/disconnect/',
          disconnect_social_account, name='disconnect_social_account'),
 
-    # User subscription status
-    path('api/v1/auth/subscription/status/',
-         get_subscription_status, name='subscription_status'),
 
-    # API Key management endpoints
-    path('api/v1/api-keys/', include('APIKeys.urls')),
 
     # Creator Profile endpoints
     path('api/v1/creator-profile/', include('CreatorProfile.urls')),
@@ -54,4 +48,7 @@ urlpatterns = [
 
     # Global Options endpoints
     path('api/v1/global-options/', include('GlobalOptions.urls')),
+
+    # Credit System endpoints
+    path('api/v1/credits/', include('CreditSystem.urls')),
 ]

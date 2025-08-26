@@ -10,7 +10,7 @@ class UserProfileInline(admin.StackedInline):
     model = UserProfile
     can_delete = False
     verbose_name_plural = 'Perfil do Usuário'
-    fields = ('subscribed', 'subscription_date')
+    fields = ()
 
 
 class UserAdmin(BaseUserAdmin):
@@ -29,8 +29,8 @@ admin.site.register(User, UserAdmin)
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
     """Admin for UserProfile model."""
-    list_display = ['user', 'subscribed', 'subscription_date', 'created_at']
-    list_filter = ['subscribed', 'created_at', 'subscription_date']
+    list_display = ['user', 'created_at']
+    list_filter = ['created_at']
     search_fields = ['user__email', 'user__first_name', 'user__last_name']
     readonly_fields = ['created_at', 'updated_at']
 

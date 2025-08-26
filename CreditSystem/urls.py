@@ -1,0 +1,30 @@
+from django.urls import path
+
+from . import views
+
+app_name = 'credit_system'
+
+urlpatterns = [
+    # Pacotes de créditos
+    path('packages/', views.CreditPackageListView.as_view(), name='package-list'),
+
+    # Créditos do usuário
+    path('balance/', views.UserCreditsView.as_view(), name='user-credits'),
+    path('summary/', views.CreditUsageSummaryView.as_view(), name='usage-summary'),
+
+    # Transações
+    path('transactions/', views.CreditTransactionListView.as_view(),
+         name='transaction-list'),
+
+    # Modelos de IA
+    path('ai-models/', views.AIModelListView.as_view(), name='ai-model-list'),
+
+    # Stripe
+    path('stripe/checkout/', views.StripeCheckoutView.as_view(),
+         name='stripe-checkout'),
+    path('stripe/webhook/', views.StripeWebhookView.as_view(), name='stripe-webhook'),
+
+    # Uso de créditos
+    path('usage/calculate/', views.CreditUsageView.as_view(), name='calculate-usage'),
+    path('usage/deduct/', views.deduct_credits_view, name='deduct-credits'),
+]
