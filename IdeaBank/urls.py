@@ -21,6 +21,7 @@ urlpatterns = [
 
     # AI model information and cost estimation
     path('ai-models/', views.get_available_models, name='available-models'),
+    path('working-models/', views.get_working_models, name='working-models'),
     path('estimate-cost/', views.estimate_campaign_cost, name='estimate-cost'),
 
     # Campaign data and options

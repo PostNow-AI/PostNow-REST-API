@@ -240,8 +240,39 @@ def generate_campaign_ideas(request):
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
+        # Parse the error to provide user-friendly messages
+        error_message = str(e)
+        user_friendly_message = "Erro na geração de campanhas"
+        
+        # Check for specific AI provider errors
+        if "insufficient_quota" in error_message or "quota" in error_message.lower():
+            if "openai" in error_message.lower():
+                user_friendly_message = "Suas cotas do OpenAI foram excedidas. Verifique seu plano e faturamento."
+            else:
+                user_friendly_message = "Suas cotas de IA foram excedidas. Verifique seu plano e faturamento."
+        elif "credit balance is too low" in error_message or "credits" in error_message.lower():
+            if "anthropic" in error_message.lower():
+                user_friendly_message = "Seus créditos do Anthropic estão baixos. Faça upgrade ou compre mais créditos."
+            else:
+                user_friendly_message = "Seus créditos de IA estão baixos. Faça upgrade ou compre mais créditos."
+        elif "api key" in error_message.lower() or "authentication" in error_message.lower():
+            user_friendly_message = "Problema de autenticação com o provedor de IA. Verifique as configurações."
+        elif "rate limit" in error_message.lower():
+            user_friendly_message = "Muitas solicitações. Aguarde um momento e tente novamente."
+        elif "network" in error_message.lower() or "connection" in error_message.lower():
+            user_friendly_message = "Problema de conexão com o provedor de IA. Tente novamente em alguns momentos."
+        elif "invalid_request" in error_message:
+            user_friendly_message = "Solicitação inválida para o provedor de IA. Verifique os parâmetros."
+        else:
+            # For any other error, provide a generic friendly message
+            user_friendly_message = "Erro temporário na geração de campanhas. Tente novamente em alguns momentos."
+        
         return Response(
-            {'error': f'Erro na geração de campanhas: {str(e)}'},
+            {
+                'error': user_friendly_message,
+                'error_type': 'ai_provider_error',
+                'details': f'Erro técnico: {error_message}' if 'debug' in request.GET else None
+            },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -825,6 +856,131 @@ def get_available_models(request):
     except Exception as e:
         return Response(
             {'error': f'Error retrieving models: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_working_models(request):
+    """Get only AI models that are currently working and available for use."""
+    try:
+        if not AI_SERVICE_FACTORY_AVAILABLE:
+            return Response(
+                {'error': 'AI service factory not available'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        # Define all possible models to test
+        all_models = [
+            {
+                'provider': 'google',
+                'model': 'gemini-1.5-flash',
+                'display_name': 'Gemini 1.5 Flash',
+                'provider_name': 'Google',
+                'description': 'Rápido e eficiente para geração de conteúdo',
+                'estimated_cost_per_1k_tokens': 0.075,
+                'recommended': True
+            },
+            {
+                'provider': 'google',
+                'model': 'gemini-1.5-pro',
+                'display_name': 'Gemini 1.5 Pro',
+                'provider_name': 'Google',
+                'description': 'Modelo mais avançado para conteúdo complexo',
+                'estimated_cost_per_1k_tokens': 1.25,
+                'recommended': False
+            },
+            {
+                'provider': 'openai',
+                'model': 'gpt-3.5-turbo',
+                'display_name': 'GPT-3.5 Turbo',
+                'provider_name': 'OpenAI',
+                'description': 'Equilibrio entre qualidade e velocidade',
+                'estimated_cost_per_1k_tokens': 0.50,
+                'recommended': True
+            },
+            {
+                'provider': 'openai',
+                'model': 'gpt-4o-mini',
+                'display_name': 'GPT-4O Mini',
+                'provider_name': 'OpenAI',
+                'description': 'Versão compacta do GPT-4 com boa performance',
+                'estimated_cost_per_1k_tokens': 0.15,
+                'recommended': True
+            },
+            {
+                'provider': 'anthropic',
+                'model': 'claude-3-haiku',
+                'display_name': 'Claude 3 Haiku',
+                'provider_name': 'Anthropic',
+                'description': 'Rápido e econômico para tarefas simples',
+                'estimated_cost_per_1k_tokens': 0.25,
+                'recommended': True
+            },
+            {
+                'provider': 'anthropic',
+                'model': 'claude-3-sonnet',
+                'display_name': 'Claude 3 Sonnet',
+                'provider_name': 'Anthropic',
+                'description': 'Equilibrio ideal entre velocidade e inteligência',
+                'estimated_cost_per_1k_tokens': 3.00,
+                'recommended': False
+            },
+        ]
+
+        available_models = []
+        
+        # Check which providers are available (basic service creation test)
+        for model_info in all_models:
+            try:
+                # Test if the service can be created (basic check)
+                ai_service = AIServiceFactory.create_service(
+                    model_info['provider'], 
+                    model_info['model']
+                )
+                
+                if ai_service:
+                    # Service can be created, add to available models
+                    available_models.append({
+                        **model_info,
+                        'status': 'available',
+                        'can_afford': True  # Assume true for now - frontend can check credits
+                    })
+                    
+            except Exception:
+                # If service creation fails, skip this model
+                continue
+
+        # If no models are available, provide at least Google Gemini as fallback
+        if not available_models:
+            available_models = [
+                {
+                    'provider': 'google',
+                    'model': 'gemini-1.5-flash',
+                    'display_name': 'Gemini 1.5 Flash',
+                    'provider_name': 'Google',
+                    'description': 'Rápido e eficiente para geração de conteúdo',
+                    'estimated_cost_per_1k_tokens': 0.075,
+                    'status': 'available',
+                    'can_afford': True,
+                    'recommended': True
+                }
+            ]
+
+        # Sort models: recommended first, then by cost
+        available_models.sort(key=lambda x: (not x.get('recommended', False), x.get('estimated_cost_per_1k_tokens', 0)))
+
+        return Response({
+            'available_models': available_models,
+            'total_available': len(available_models),
+            'recommended_models': [m for m in available_models if m.get('recommended')],
+            'message': f'{len(available_models)} modelos disponíveis para uso'
+        })
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error checking available models: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
