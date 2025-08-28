@@ -11,14 +11,14 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None
 
+from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
 
-from CreatorProfile.models import CreatorProfile
 from IdeaBank.models import CampaignIdea, VoiceTone
 
 # Import AI model service for credit management
 try:
-    from .services.ai_model_service import AIModelService
+    from IdeaBank.services.ai_model_service import AIModelService
     AI_MODEL_SERVICE_AVAILABLE = True
 except ImportError:
     AI_MODEL_SERVICE_AVAILABLE = False

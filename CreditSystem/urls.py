@@ -19,6 +19,14 @@ urlpatterns = [
     # Modelos de IA
     path('ai-models/', views.AIModelListView.as_view(), name='ai-model-list'),
 
+    # Preferências de IA
+    path('ai-preferences/', views.AIModelPreferencesView.as_view(),
+         name='ai-preferences'),
+    path('ai-recommendations/', views.ModelRecommendationsView.as_view(),
+         name='ai-recommendations'),
+    path('ai-select-optimal/', views.select_optimal_model_view,
+         name='ai-select-optimal'),
+
     # Stripe
     path('stripe/checkout/', views.StripeCheckoutView.as_view(),
          name='stripe-checkout'),

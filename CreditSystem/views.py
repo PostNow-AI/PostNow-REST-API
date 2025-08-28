@@ -9,10 +9,12 @@ from rest_framework.views import APIView
 
 from .models import AIModel, CreditPackage, CreditTransaction
 from .serializers import (
+    AIModelPreferencesSerializer,
     AIModelSerializer,
     CreditPackageSerializer,
     CreditTransactionSerializer,
     CreditUsageSerializer,
+    ModelRecommendationSerializer,
     StripeCheckoutSerializer,
     UserCreditsSerializer,
 )
@@ -282,4 +284,203 @@ def deduct_credits_view(request):
         return Response({
             'success': False,
             'message': 'Erro interno do servidor'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AIModelPreferencesView(APIView):
+    """
+    Gerenciar preferências de modelos de IA do usuário
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Obter preferências do usuário"""
+        try:
+            # Import aqui para evitar circular import
+            from IdeaBank.services.ai_model_service import AIModelService
+
+            preferences = AIModelService.get_user_preferences(request.user)
+            if not preferences:
+                return Response({
+                    'success': False,
+                    'message': 'Preferências não encontradas'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            serializer = AIModelPreferencesSerializer(preferences)
+            return Response({
+                'success': True,
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Erro interno do servidor',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def put(self, request):
+        """Atualizar preferências do usuário"""
+        try:
+            from IdeaBank.services.ai_model_service import AIModelService
+
+            # Validar dados de entrada
+            serializer = AIModelPreferencesSerializer(
+                data=request.data, partial=True)
+            if not serializer.is_valid():
+                return Response({
+                    'success': False,
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Atualizar preferências
+            success = AIModelService.update_user_preferences(
+                request.user,
+                serializer.validated_data
+            )
+
+            if success:
+                # Retornar preferências atualizadas
+                updated_prefs = AIModelService.get_user_preferences(
+                    request.user)
+                response_serializer = AIModelPreferencesSerializer(
+                    updated_prefs)
+
+                return Response({
+                    'success': True,
+                    'message': 'Preferências atualizadas com sucesso',
+                    'data': response_serializer.data
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': 'Erro ao atualizar preferências'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        except ValidationError as e:
+            return Response({
+                'success': False,
+                'message': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Erro interno do servidor',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ModelRecommendationsView(APIView):
+    """
+    Obter recomendações de modelos de IA para o usuário
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Obter recomendações de modelos"""
+        try:
+            from IdeaBank.services.ai_model_service import AIModelService
+
+            serializer = ModelRecommendationSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({
+                    'success': False,
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            operation_type = serializer.validated_data['operation_type']
+            estimated_tokens = serializer.validated_data['estimated_tokens']
+
+            # Obter recomendações
+            recommendations = AIModelService.get_model_recommendations(
+                request.user,
+                operation_type
+            )
+
+            # Selecionar modelo ótimo
+            optimal_model = AIModelService.select_optimal_model(
+                request.user,
+                estimated_tokens,
+                operation_type
+            )
+
+            return Response({
+                'success': True,
+                'data': {
+                    'recommendations': recommendations,
+                    'optimal_model': optimal_model,
+                    'operation_type': operation_type,
+                    'estimated_tokens': estimated_tokens
+                }
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Erro interno do servidor',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def select_optimal_model_view(request):
+    """
+    Selecionar modelo ótimo para uma operação específica
+    """
+    try:
+        from IdeaBank.services.ai_model_service import AIModelService
+
+        # Validar parâmetros
+        estimated_tokens = request.data.get('estimated_tokens', 1000)
+        operation_type = request.data.get('operation_type', 'text_generation')
+        preferred_provider = request.data.get('preferred_provider')
+
+        if not isinstance(estimated_tokens, int) or estimated_tokens < 1:
+            return Response({
+                'success': False,
+                'message': 'estimated_tokens deve ser um inteiro positivo'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Selecionar modelo ótimo
+        optimal_model = AIModelService.select_optimal_model(
+            user=request.user,
+            estimated_tokens=estimated_tokens,
+            operation_type=operation_type,
+            preferred_provider=preferred_provider
+        )
+
+        if optimal_model:
+            # Calcular custo estimado
+            estimated_cost = AIModelService.calculate_cost(
+                optimal_model, estimated_tokens)
+
+            # Obter informações do modelo
+            model_config = AIModelService.get_model_config(optimal_model)
+
+            return Response({
+                'success': True,
+                'data': {
+                    'selected_model': optimal_model,
+                    'model_config': model_config,
+                    'estimated_cost': estimated_cost,
+                    'estimated_tokens': estimated_tokens,
+                    'operation_type': operation_type
+                }
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                'success': False,
+                'message': 'Nenhum modelo disponível para os critérios especificados',
+                'data': {
+                    'user_balance': AIModelService.get_user_credit_balance(request.user),
+                    'estimated_tokens': estimated_tokens
+                }
+            }, status=status.HTTP_402_PAYMENT_REQUIRED)
+
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': 'Erro interno do servidor',
+            'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

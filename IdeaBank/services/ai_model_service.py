@@ -4,13 +4,14 @@ from typing import Dict, List, Optional
 from django.contrib.auth.models import User
 
 try:
-    from CreditSystem.models import AIModel
+    from CreditSystem.models import AIModel, AIModelPreferences
     from CreditSystem.services.credit_service import CreditService
     CREDIT_SYSTEM_AVAILABLE = True
 except ImportError:
     CREDIT_SYSTEM_AVAILABLE = False
     CreditService = None
     AIModel = None
+    AIModelPreferences = None
 
 
 class AIModelService:
@@ -175,36 +176,232 @@ class AIModelService:
 
     @classmethod
     def select_optimal_model(cls, user: User, estimated_tokens: int,
+                             operation_type: str = 'text_generation',
                              preferred_provider: str = None) -> Optional[str]:
         """
-        Select the optimal AI model based on user credits and preferences.
+        Select the optimal AI model based on user preferences, credits, and operation requirements.
 
         Args:
             user: User requesting the operation
             estimated_tokens: Estimated number of tokens needed
-            preferred_provider: Preferred AI provider (optional)
+            operation_type: Type of operation ('text_generation', 'creative', 'analysis', etc.)
+            preferred_provider: Preferred AI provider (optional, overrides user preferences)
 
         Returns:
             str: Name of the optimal model, or None if no suitable model found
         """
-        available_models = cls.get_available_models()
+        # Get user preferences
+        user_prefs = cls.get_user_preferences(user)
 
+        # Override provider if specified
+        if preferred_provider:
+            effective_provider = preferred_provider
+        else:
+            effective_provider = user_prefs.preferred_provider if user_prefs else 'auto'
+
+        # Get budget preference
+        budget_pref = user_prefs.budget_preference if user_prefs else 'balanced'
+        max_cost = float(
+            user_prefs.max_cost_per_operation) if user_prefs else 5.0
+
+        # Check if user has a specific model preference for this operation type
+        if user_prefs and user_prefs.preferred_models:
+            specific_model = user_prefs.preferred_models.get(operation_type)
+            if specific_model:
+                # Validate the preferred model is available and affordable
+                if cls.validate_user_credits(user, specific_model, estimated_tokens):
+                    cost = cls.calculate_cost(specific_model, estimated_tokens)
+                    if cost <= max_cost:
+                        return specific_model
+                elif user_prefs.allow_fallback:
+                    # Continue to automatic selection
+                    pass
+                else:
+                    # User doesn't want fallback, return None
+                    return None
+
+        # Get available models
+        available_models = cls.get_available_models()
         if not available_models:
             return None
 
-        # Filter by preferred provider if specified
-        if preferred_provider:
+        # Filter by provider preference if not 'auto'
+        if effective_provider != 'auto':
             available_models = [
                 model for model in available_models
-                if model['provider'].lower() == preferred_provider.lower()
+                if model['provider'].lower() == effective_provider.lower()
             ]
 
-        # Sort by cost (cheapest first)
-        available_models.sort(key=lambda x: x['cost_per_token'])
+            if not available_models:
+                # No models available for preferred provider
+                if user_prefs and user_prefs.allow_fallback:
+                    # Reset to all models for fallback
+                    available_models = cls.get_available_models()
+                else:
+                    return None
 
-        # Find the first model the user can afford
+        # Filter models by budget constraints
+        affordable_models = []
         for model in available_models:
             if cls.validate_user_credits(user, model['name'], estimated_tokens):
-                return model['name']
+                cost = cls.calculate_cost(model['name'], estimated_tokens)
+                if cost <= max_cost:
+                    affordable_models.append({
+                        **model,
+                        'estimated_cost': cost,
+                        'cost_per_token': model['cost_per_token']
+                    })
 
-        return None
+        if not affordable_models:
+            return None
+
+        # Select model based on budget preference
+        if budget_pref == 'economy':
+            # Always choose the cheapest
+            selected = min(affordable_models,
+                           key=lambda x: x['estimated_cost'])
+        elif budget_pref == 'performance':
+            # Choose the most expensive (assuming higher cost = better quality)
+            selected = max(affordable_models,
+                           key=lambda x: x['estimated_cost'])
+        else:  # balanced or custom
+            # Sort by cost-effectiveness (balance between cost and assumed quality)
+            # Assign quality scores based on model characteristics
+            for model in affordable_models:
+                model['quality_score'] = cls._get_model_quality_score(
+                    model['name'])
+                model['value_score'] = model['quality_score'] / \
+                    max(model['estimated_cost'], 0.001)
+
+            selected = max(affordable_models, key=lambda x: x['value_score'])
+
+        return selected['name']
+
+    @classmethod
+    def _get_model_quality_score(cls, model_name: str) -> float:
+        """
+        Assign quality scores to models based on their capabilities.
+        Higher score = better quality.
+        """
+        quality_scores = {
+            # Google Gemini
+            'gemini-1.5-flash': 7.0,
+            'gemini-1.5-pro': 8.5,
+
+            # OpenAI GPT
+            'gpt-3.5-turbo': 6.5,
+            'gpt-4': 9.0,
+            'gpt-4-turbo': 9.2,
+            'gpt-4o': 9.5,
+            'gpt-4o-mini': 7.5,
+
+            # Anthropic Claude
+            'claude-3-haiku': 7.0,
+            'claude-3-sonnet': 8.5,
+            'claude-3-opus': 9.5,
+        }
+
+        # Default score for unknown models
+        return quality_scores.get(model_name, 5.0)
+
+    @classmethod
+    def get_user_preferences(cls, user: User):
+        """Get or create user AI preferences."""
+        if not CREDIT_SYSTEM_AVAILABLE:
+            return None
+
+        try:
+            preferences, created = AIModelPreferences.objects.get_or_create(
+                user=user,
+                defaults={
+                    'preferred_provider': 'auto',
+                    'budget_preference': 'balanced',
+                    'max_cost_per_operation': Decimal('5.00'),
+                    'auto_select_cheapest': True,
+                    'allow_fallback': True,
+                }
+            )
+            return preferences
+        except Exception as e:
+            print(f"Error getting user preferences: {str(e)}")
+            return None
+
+    @classmethod
+    def update_user_preferences(cls, user: User, preferences_data: Dict) -> bool:
+        """Update user AI model preferences."""
+        if not CREDIT_SYSTEM_AVAILABLE:
+            return False
+
+        try:
+            preferences = cls.get_user_preferences(user)
+            if not preferences:
+                return False
+
+            # Update allowed fields
+            allowed_fields = [
+                'preferred_provider', 'budget_preference', 'max_cost_per_operation',
+                'preferred_models', 'auto_select_cheapest', 'allow_fallback'
+            ]
+
+            for field in allowed_fields:
+                if field in preferences_data:
+                    setattr(preferences, field, preferences_data[field])
+
+            preferences.save()
+            return True
+        except Exception as e:
+            print(f"Error updating user preferences: {str(e)}")
+            return False
+
+    @classmethod
+    def get_model_recommendations(cls, user: User, operation_type: str = 'text_generation') -> List[Dict]:
+        """
+        Get model recommendations for a user based on their preferences and budget.
+
+        Returns a list of recommended models with reasons.
+        """
+        recommendations = []
+        user_prefs = cls.get_user_preferences(user)
+        available_models = cls.get_available_models()
+
+        if not available_models:
+            return recommendations
+
+        user_balance = cls.get_user_credit_balance(user)
+        max_cost = float(
+            user_prefs.max_cost_per_operation) if user_prefs else 5.0
+
+        for model in available_models:
+            # Estimate cost for a typical operation (1000 tokens)
+            estimated_cost = model['cost_per_token'] * 1000
+
+            if estimated_cost <= max_cost and estimated_cost <= user_balance:
+                quality_score = cls._get_model_quality_score(model['name'])
+                value_score = quality_score / max(estimated_cost, 0.001)
+
+                reason = []
+                if estimated_cost <= max_cost * 0.3:
+                    reason.append("Muito econômico")
+                elif estimated_cost <= max_cost * 0.7:
+                    reason.append("Custo moderado")
+                else:
+                    reason.append("Premium")
+
+                if quality_score >= 8.5:
+                    reason.append("Alta qualidade")
+                elif quality_score >= 7.0:
+                    reason.append("Boa qualidade")
+
+                recommendations.append({
+                    'model_name': model['name'],
+                    'provider': model['provider'],
+                    'estimated_cost': estimated_cost,
+                    'quality_score': quality_score,
+                    'value_score': value_score,
+                    'reasons': reason,
+                    'is_recommended': value_score > 1.0
+                })
+
+        # Sort by value score
+        recommendations.sort(key=lambda x: x['value_score'], reverse=True)
+        return recommendations

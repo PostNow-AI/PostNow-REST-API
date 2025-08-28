@@ -133,6 +133,115 @@ class CreditTransaction(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.get_transaction_type_display()} - {self.amount} créditos"
 
+    @classmethod
+    def get_user_balance(cls, user):
+        """Calcula o saldo atual de créditos do usuário"""
+        from django.db.models import Sum
+
+        purchases = cls.objects.filter(
+            user=user,
+            transaction_type__in=['purchase', 'bonus', 'refund', 'adjustment']
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        usage = cls.objects.filter(
+            user=user,
+            transaction_type='usage'
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        return purchases - abs(usage)  # Usage amounts are typically negative
+
+
+class AIModelPreferences(models.Model):
+    """
+    Modelo para preferências de IA do usuário
+    """
+    PROVIDER_CHOICES = [
+        ('google', 'Google (Gemini)'),
+        ('openai', 'OpenAI (GPT)'),
+        ('anthropic', 'Anthropic (Claude)'),
+        ('auto', 'Automático (Melhor custo-benefício)'),
+    ]
+
+    BUDGET_PREFERENCES = [
+        ('economy', 'Economia (Sempre o mais barato)'),
+        ('balanced', 'Balanceado (Custo-benefício)'),
+        ('performance', 'Performance (Qualidade máxima)'),
+        ('custom', 'Personalizado'),
+    ]
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='ai_preferences',
+        verbose_name="Usuário"
+    )
+
+    preferred_provider = models.CharField(
+        max_length=20,
+        choices=PROVIDER_CHOICES,
+        default='auto',
+        verbose_name="Provedor Preferido"
+    )
+
+    budget_preference = models.CharField(
+        max_length=20,
+        choices=BUDGET_PREFERENCES,
+        default='balanced',
+        verbose_name="Preferência de Orçamento"
+    )
+
+    max_cost_per_operation = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('5.00'),
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name="Custo Máximo por Operação (em créditos)"
+    )
+
+    preferred_models = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Modelos Preferidos por Categoria",
+        help_text="{'text_generation': 'gpt-4o-mini', 'creative': 'claude-3-sonnet'}"
+    )
+
+    auto_select_cheapest = models.BooleanField(
+        default=True,
+        verbose_name="Selecionar Automaticamente o Mais Barato"
+    )
+
+    allow_fallback = models.BooleanField(
+        default=True,
+        verbose_name="Permitir Fallback para Modelos Alternativos"
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True, verbose_name="Data de Criação")
+    updated_at = models.DateTimeField(
+        auto_now=True, verbose_name="Última Atualização")
+
+    class Meta:
+        verbose_name = "Preferências de IA"
+        verbose_name_plural = "Preferências de IA"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_preferred_provider_display()}"
+
+    def get_preferred_model_for_operation(self, operation_type: str = 'text_generation') -> str:
+        """Retorna o modelo preferido para um tipo específico de operação"""
+        if self.preferred_models and operation_type in self.preferred_models:
+            return self.preferred_models[operation_type]
+
+        # Fallback baseado no provedor preferido e orçamento
+        if self.preferred_provider == 'google':
+            return 'gemini-1.5-flash' if self.budget_preference == 'economy' else 'gemini-1.5-pro'
+        elif self.preferred_provider == 'openai':
+            return 'gpt-4o-mini' if self.budget_preference == 'economy' else 'gpt-4o'
+        elif self.preferred_provider == 'anthropic':
+            return 'claude-3-haiku' if self.budget_preference == 'economy' else 'claude-3-sonnet'
+        else:  # auto
+            return 'gemini-1.5-flash'  # Default mais econômico
+
 
 class AIModel(models.Model):
     """

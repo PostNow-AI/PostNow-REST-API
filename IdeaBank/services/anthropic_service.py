@@ -44,7 +44,7 @@ class AnthropicService(BaseAIService):
         try:
             from .ai_model_service import AIModelService
             if AIModelService:
-                return AIModelService.deduct_credits(user, actual_tokens, model_name, description)
+                return AIModelService.deduct_credits(user, model_name, actual_tokens, description)
         except ImportError:
             pass
         return True  # Skip deduction if service not available

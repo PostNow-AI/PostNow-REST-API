@@ -1,6 +1,12 @@
 from rest_framework import serializers
 
-from .models import AIModel, CreditPackage, CreditTransaction, UserCredits
+from .models import (
+    AIModel,
+    AIModelPreferences,
+    CreditPackage,
+    CreditTransaction,
+    UserCredits,
+)
 
 
 class CreditPackageSerializer(serializers.ModelSerializer):
@@ -106,7 +112,7 @@ class CreditUsageSerializer(serializers.Serializer):
 
     def validate_ai_model(self, value):
         try:
-            model = AIModel.objects.get(name=value, is_active=True)
+            AIModel.objects.get(name=value, is_active=True)
             return value
         except AIModel.DoesNotExist:
             raise serializers.ValidationError(
@@ -122,8 +128,44 @@ class StripeCheckoutSerializer(serializers.Serializer):
 
     def validate_package_id(self, value):
         try:
-            package = CreditPackage.objects.get(id=value, is_active=True)
+            CreditPackage.objects.get(id=value, is_active=True)
             return value  # Return the ID value, not the object
         except CreditPackage.DoesNotExist:
             raise serializers.ValidationError(
                 "Pacote de créditos não encontrado ou inativo")
+
+
+class AIModelPreferencesSerializer(serializers.ModelSerializer):
+    """Serializer para preferências de modelos de IA do usuário"""
+
+    class Meta:
+        model = AIModelPreferences
+        fields = [
+            'id', 'preferred_provider', 'budget_preference', 'max_cost_per_operation',
+            'preferred_models', 'auto_select_cheapest', 'allow_fallback',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def to_representation(self, instance):
+        """Converte a representação para garantir tipos corretos"""
+        data = super().to_representation(instance)
+        # Garante que max_cost_per_operation seja sempre um número
+        if 'max_cost_per_operation' in data:
+            data['max_cost_per_operation'] = float(
+                instance.max_cost_per_operation)
+        return data
+
+
+class ModelRecommendationSerializer(serializers.Serializer):
+    """Serializer para recomendações de modelos"""
+    operation_type = serializers.CharField(
+        max_length=50,
+        default='text_generation',
+        help_text="Tipo de operação: text_generation, creative, analysis, etc."
+    )
+    estimated_tokens = serializers.IntegerField(
+        min_value=1,
+        default=1000,
+        help_text="Número estimado de tokens para a operação"
+    )
