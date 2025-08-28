@@ -80,6 +80,7 @@ class AnthropicService(BaseAIService):
         if not api_key:
             raise ValueError("API key is required for Anthropic requests")
 
+        # Use the new Anthropic client without proxies parameter
         client = anthropic.Anthropic(api_key=api_key)
 
         try:

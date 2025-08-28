@@ -80,11 +80,12 @@ class OpenAIService(BaseAIService):
         if not api_key:
             raise ValueError("API key is required for OpenAI requests")
 
-        openai.api_key = api_key
+        # Use the new OpenAI client (v1.0.0+)
+        client = openai.OpenAI(api_key=api_key)
 
         try:
             # Generate content using OpenAI
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model=model_name,
                 messages=[
                     {"role": "system", "content": "You are a marketing expert specializing in social media content creation."},
