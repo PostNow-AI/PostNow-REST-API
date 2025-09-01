@@ -1,51 +1,92 @@
-# Sonora REST API
+# Sonora REST API - Documentação
 
-A Django REST API with email and Google OAuth authentication using JWT tokens.
+API REST Django com autenticação por email e Google OAuth usando tokens JWT.
 
-## 📚 Documentation
+## 📚 **Documentação Organizada**
 
-All documentation has been moved to the [docs/](docs/) folder:
+### 🚀 **Início Rápido**
 
-- **[Getting Started](docs/google_console_setup.md)** - Google OAuth setup guide
-- **[Testing with Postman](docs/postman_testing_guide.md)** - How to test API endpoints
-- **[Frontend Integration](docs/google_oauth_examples.md)** - JavaScript examples for frontend
+- **[Configuração Inicial](inicio-rapido/configuracao.md)** - Primeiros passos
+- **[Variáveis de Ambiente](inicio-rapido/variaveis-ambiente.md)** - Configurações necessárias
+- **[Deploy no Vercel](inicio-rapido/deploy-vercel.md)** - Como fazer deploy
 
-## 🚀 Quick Start
+### 🔐 **Autenticação**
 
-1. **Install dependencies:**
+- **[Google OAuth](autenticacao/google-oauth.md)** - Configuração e uso
+- **[JWT Tokens](autenticacao/jwt-tokens.md)** - Sistema de autenticação
+- **[Testes com Postman](autenticacao/testes-postman.md)** - Como testar endpoints
+
+### 🤖 **Sistema de IA**
+
+- **[Modelos de IA](ia/modelos-disponiveis.md)** - Gemini, OpenAI, Anthropic
+- **[Geração de Ideias](ia/geracao-ideias.md)** - Como funciona
+
+- **[Sistema de Créditos](ia/sistema-creditos.md)** - Compra e uso de créditos
+
+### 💳 **Sistema de Créditos**
+
+- **[Integração Stripe](creditos/stripe.md)** - Pagamentos e webhooks
+
+- **[Gestão de Créditos](creditos/gestao.md)** - Adição e dedução
+- **[Transações](creditos/transacoes.md)** - Histórico e auditoria
+
+### 🗄️ **Banco de Dados**
+
+- **[Modelos](banco-dados/modelos.md)** - Estrutura das tabelas
+- **[Migrações](banco-dados/migracoes.md)** - Como aplicar mudanças
+- **[População](banco-dados/populacao.md)** - Dados iniciais
+
+### 🔧 **Desenvolvimento**
+
+- **[Estrutura do Projeto](desenvolvimento/estrutura.md)** - Organização dos arquivos
+- **[Serviços](desenvolvimento/servicos.md)** - Lógica de negócio
+- **[Testes](desenvolvimento/testes.md)** - Como testar
+
+---
+
+## 🚀 **Início Rápido**
+
+1. **Instalar dependências:**
 
    ```bash
    pip install -r requirements.txt
    ```
 
-2. **Set up database:**
+2. **Configurar banco:**
 
    ```bash
    python manage.py migrate
    ```
 
-3. **Configure Google OAuth:**
-
-   ```bash
-   python manage_google_oauth.py YOUR_CLIENT_ID YOUR_CLIENT_SECRET
-   ```
-
-4. **Run server:**
+3. **Executar servidor:**
 
    ```bash
    python manage.py runserver
+
    ```
 
-## 🔐 Authentication Endpoints
+## 📖 **Documentação Completa**
 
-- **Email/Password Login:** `POST /api/v1/auth/login/`
-- **Google OAuth Login:** `POST /api/v1/auth/google/`
-- **User Registration:** `POST /api/v1/auth/registration/`
+Visite as seções organizadas acima para guias detalhados e exemplos.
 
-## 📖 Full Documentation
+## 🔗 **Links Rápidos**
 
-Visit the [docs/](docs/) folder for complete guides and examples.
+### **Endpoints Principais**
 
----
+- **Autenticação:** `/api/v1/auth/`
 
-**Note:** Make sure to check the documentation for detailed setup instructions and troubleshooting guides.
+- **Ideias:** `/api/v1/ideabank/`
+- **Créditos:** `/api/v1/credits/`
+- **Usuários:** `/api/v1/users/`
+
+### **Scripts Úteis**
+
+- **Setup Google OAuth:** `python scripts/setup_google_oauth.py`
+- **Teste Google Auth:** `python scripts/test_google_auth.py`
+- **Setup Stripe:** `python scripts/setup_stripe.py`
+
+### **Deploy**
+
+- **Vercel:** `vercel --prod`
+- **Build Script:** `./vercel_build.sh`
+- **Deploy Script:** `./deploy_to_vercel.sh`
