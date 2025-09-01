@@ -6,41 +6,21 @@ API REST Django com autenticação por email e Google OAuth usando tokens JWT.
 
 ### 🚀 **Início Rápido**
 
-- **[Configuração Inicial](inicio-rapido/configuracao.md)** - Primeiros passos
-- **[Variáveis de Ambiente](inicio-rapido/variaveis-ambiente.md)** - Configurações necessárias
-- **[Deploy no Vercel](inicio-rapido/deploy-vercel.md)** - Como fazer deploy
+- **[Configuração Inicial](docs/inicio-rapido/configuracao.md)** - Primeiros passos
+- **[Deploy no Vercel](docs/inicio-rapido/deploy-vercel.md)** - Como fazer deploy
 
 ### 🔐 **Autenticação**
 
-- **[Google OAuth](autenticacao/google-oauth.md)** - Configuração e uso
-- **[JWT Tokens](autenticacao/jwt-tokens.md)** - Sistema de autenticação
-- **[Testes com Postman](autenticacao/testes-postman.md)** - Como testar endpoints
+- **[Google OAuth](docs/autenticacao/google-oauth.md)** - Configuração e uso
 
 ### 🤖 **Sistema de IA**
 
-- **[Modelos de IA](ia/modelos-disponiveis.md)** - Gemini, OpenAI, Anthropic
-- **[Geração de Ideias](ia/geracao-ideias.md)** - Como funciona
-
-- **[Sistema de Créditos](ia/sistema-creditos.md)** - Compra e uso de créditos
+- **[Modelos de IA](docs/ia/modelos-disponiveis.md)** - Gemini, OpenAI, Anthropic
+- **[Sistema de Créditos](docs/ia/sistema-creditos.md)** - Compra e uso de créditos
 
 ### 💳 **Sistema de Créditos**
 
-- **[Integração Stripe](creditos/stripe.md)** - Pagamentos e webhooks
-
-- **[Gestão de Créditos](creditos/gestao.md)** - Adição e dedução
-- **[Transações](creditos/transacoes.md)** - Histórico e auditoria
-
-### 🗄️ **Banco de Dados**
-
-- **[Modelos](banco-dados/modelos.md)** - Estrutura das tabelas
-- **[Migrações](banco-dados/migracoes.md)** - Como aplicar mudanças
-- **[População](banco-dados/populacao.md)** - Dados iniciais
-
-### 🔧 **Desenvolvimento**
-
-- **[Estrutura do Projeto](desenvolvimento/estrutura.md)** - Organização dos arquivos
-- **[Serviços](desenvolvimento/servicos.md)** - Lógica de negócio
-- **[Testes](desenvolvimento/testes.md)** - Como testar
+- **[Integração Stripe](docs/creditos/stripe.md)** - Pagamentos e webhooks
 
 ---
 
@@ -62,7 +42,6 @@ API REST Django com autenticação por email e Google OAuth usando tokens JWT.
 
    ```bash
    python manage.py runserver
-
    ```
 
 ## 📖 **Documentação Completa**
@@ -74,7 +53,6 @@ Visite as seções organizadas acima para guias detalhados e exemplos.
 ### **Endpoints Principais**
 
 - **Autenticação:** `/api/v1/auth/`
-
 - **Ideias:** `/api/v1/ideabank/`
 - **Créditos:** `/api/v1/credits/`
 - **Usuários:** `/api/v1/users/`
@@ -90,3 +68,48 @@ Visite as seções organizadas acima para guias detalhados e exemplos.
 - **Vercel:** `vercel --prod`
 - **Build Script:** `./vercel_build.sh`
 - **Deploy Script:** `./deploy_to_vercel.sh`
+
+## 📝 **Documentação em Desenvolvimento**
+
+As seguintes seções estão sendo desenvolvidas e serão adicionadas em breve:
+
+### **Início Rápido**
+
+- Variáveis de Ambiente - Configurações necessárias
+
+### **Autenticação**
+
+- JWT Tokens - Sistema de autenticação
+- Testes com Postman - Como testar endpoints
+
+### **Sistema de IA**
+
+- Geração de Ideias - Como funciona
+
+### **Sistema de Créditos**
+
+- Gestão de Créditos - Adição e dedução
+- Transações - Histórico e auditoria
+
+### **Banco de Dados**
+
+- Modelos - Estrutura das tabelas
+- Migrações - Como aplicar mudanças
+- População - Dados iniciais
+
+### **Desenvolvimento**
+
+- Estrutura do Projeto - Organização dos arquivos
+- Serviços - Lógica de negócio
+- Testes - Como testar
+
+## 📚 **Documentação Legada**
+
+Os seguintes arquivos são da documentação anterior e podem ser úteis como referência:
+
+- **[Google Console Setup](docs/google_console_setup.md)** - Configuração do Google OAuth
+- **[Google OAuth Examples](docs/google_oauth_examples.md)** - Exemplos de integração
+- **[Postman Testing Guide](docs/postman_testing_guide.md)** - Guia de testes
+- **[AI Service Refactoring](docs/AI_SERVICE_REFACTORING.md)** - Refatoração dos serviços de IA
+- **[Credit System Integration](docs/CREDIT_SYSTEM_INTEGRATION.md)** - Integração do sistema de créditos
+- **[Frontend Error Handling](docs/FRONTEND_ERROR_HANDLING.md)** - Tratamento de erros no frontend
