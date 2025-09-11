@@ -83,9 +83,10 @@ class CampaignIdeaSerializer(serializers.ModelSerializer):
             'platform_display', 'content_type', 'content_type_display',
             'variation_type', 'variation_type_display', 'headline', 'copy',
             'cta', 'hashtags', 'visual_description', 'color_composition',
-            'status', 'status_display', 'generated_at', 'updated_at'
+            'status', 'status_display', 'generated_at', 'updated_at',
+            'image_url'
         ]
-        read_only_fields = ['id', 'generated_at', 'updated_at']
+        read_only_fields = ['id', 'generated_at', 'updated_at', 'image_url']
 
 
 class CampaignIdeaUpdateSerializer(serializers.ModelSerializer):
@@ -164,6 +165,13 @@ class IdeaGenerationRequestSerializer(serializers.Serializer):
         allow_blank=True,
         default='',
         help_text="Specific AI model name (e.g., 'gemini-1.5-flash', 'gpt-4')"
+    )
+
+    # Image generation preference
+    include_image = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text="Whether to generate images for the campaign ideas"
     )
 
     # Optional fields

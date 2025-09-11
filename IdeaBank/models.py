@@ -157,6 +157,9 @@ class CampaignIdea(models.Model):
     generated_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # New field for generated image URL
+    image_url = models.URLField(max_length=1000, blank=True, null=True)
+
     class Meta:
         db_table = 'campaign_ideas'
         verbose_name = 'Campaign Idea'

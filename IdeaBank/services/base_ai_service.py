@@ -57,6 +57,10 @@ class ProgressTracker:
 
 
 class BaseAIService(ABC):
+    def generate_image(self, prompt: str, user: User = None) -> str:
+        """Generate an image for the given prompt. Should be implemented by subclasses."""
+        raise NotImplementedError(
+            "Image generation is not implemented for this provider.")
     """Base class for AI service implementations."""
 
     def __init__(self, model_name: str = "default"):

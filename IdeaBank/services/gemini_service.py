@@ -14,6 +14,67 @@ from .base_ai_service import BaseAIService
 
 
 class GeminiService(BaseAIService):
+    def generate_image(self, prompt: str, user: User = None) -> str:
+        """Generate an image using Gemini's image generation API and return a data URL (base64)."""
+        print("=== GEMINI IMAGE GENERATION START ===")
+
+        if not GEMINI_AVAILABLE:
+            print("❌ Gemini not available - google-generativeai not installed")
+            return ""
+
+        api_key = self.default_api_key
+        if not api_key:
+            print("❌ No API key available for Gemini image generation")
+            return ""
+
+        print(f"✅ API key available: {api_key[:10]}...")
+        genai.configure(api_key=api_key)
+
+        # Simplified approach: Gemini image generation is still experimental/limited
+        # For now, return empty string to trigger OpenAI fallback
+        print("⚠️ Gemini image generation is experimental - returning empty to trigger fallback")
+        return ""
+
+        # Original code commented out for now
+        """
+        try:
+            # Try different model names for image generation
+            model_names = [
+                'imagen-3.0-generate-001',
+                'gemini-2.5-flash-image-preview', 
+                'gemini-pro-vision'
+            ]
+
+            for model_name in model_names:
+                try:
+                    print(f"🔄 Trying to generate image with model: {model_name}")
+                    model = genai.GenerativeModel(model_name)
+                    response = model.generate_content([prompt])
+
+                    # Check if response has image data
+                    if response.candidates and len(response.candidates) > 0:
+                        candidate = response.candidates[0]
+                        if hasattr(candidate, 'content') and candidate.content:
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'inline_data') and part.inline_data:
+                                    import base64
+                                    b64_data = base64.b64encode(part.inline_data.data).decode('utf-8')
+                                    print(f"✅ Successfully generated image with model: {model_name}")
+                                    return f"data:image/png;base64,{b64_data}"
+
+                except Exception as model_error:
+                    print(f"❌ Model {model_name} failed: {model_error}")
+                    continue
+
+            print("❌ All Gemini image generation models failed")
+            return ""
+
+        except Exception as e:
+            print(f"❌ Error generating image with Gemini: {e}")
+            import traceback
+            print(f"🔍 Detailed error: {traceback.format_exc()}")
+            return ""
+        """
     """Service for interacting with Google Gemini AI."""
 
     def __init__(self, model_name: str = "gemini-1.5-flash"):

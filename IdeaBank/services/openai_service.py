@@ -14,6 +14,46 @@ from .base_ai_service import BaseAIService
 
 
 class OpenAIService(BaseAIService):
+    def generate_image(self, prompt: str, user: User = None) -> str:
+        """Generate an image using OpenAI's DALL·E API and return the image URL."""
+        print("=== OPENAI IMAGE GENERATION START ===")
+
+        if not OPENAI_AVAILABLE:
+            print("❌ OpenAI not available - openai package not installed")
+            return ""
+
+        api_key = self.default_api_key
+        if not api_key:
+            print("❌ No API key available for OpenAI image generation")
+            return ""
+
+        print(f"✅ OpenAI API key available: {api_key[:10]}...")
+
+        client = openai.OpenAI(api_key=api_key)
+        try:
+            print(
+                f"🔄 Generating image with DALL-E-3, prompt: {prompt[:100]}...")
+
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=prompt,
+                n=1,
+                size="1024x1024"
+            )
+
+            if response.data and response.data[0].url:
+                image_url = response.data[0].url
+                print(f"✅ Successfully generated image: {image_url[:50]}...")
+                return image_url
+            else:
+                print("❌ Empty response from OpenAI Image API")
+                return ""
+
+        except Exception as e:
+            print(f"❌ Error generating image with OpenAI: {e}")
+            import traceback
+            print(f"🔍 Detailed traceback: {traceback.format_exc()}")
+            return ""
     """Service for interacting with OpenAI GPT models."""
 
     def __init__(self, model_name: str = "gpt-3.5-turbo"):

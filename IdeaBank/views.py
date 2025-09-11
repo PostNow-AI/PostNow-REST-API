@@ -87,6 +87,8 @@ class CampaignIdeaDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([permissions.IsAuthenticated])
 def generate_campaign_ideas(request):
     """Generate campaign ideas using Gemini AI with the new structure and progress tracking."""
+    global AIServiceFactory
+
     serializer = IdeaGenerationRequestSerializer(data=request.data)
 
     if not serializer.is_valid():
@@ -102,7 +104,8 @@ def generate_campaign_ideas(request):
         # Extract AI service configuration (not campaign fields)
         ai_config = {
             'preferred_provider': campaign_data.pop('preferred_provider', ''),
-            'preferred_model': campaign_data.pop('preferred_model', '')
+            'preferred_model': campaign_data.pop('preferred_model', ''),
+            'include_image': campaign_data.pop('include_image', False)
         }
 
         # Generate automatic title if none provided
@@ -183,6 +186,15 @@ def generate_campaign_ideas(request):
             print(
                 f"Progress: {progress_data['percentage']}% - {progress_data['current_step_name']}")
 
+        # Debug logging
+        print("DEBUG: About to call AI service with:")
+        print(f"  - Provider: {preferred_provider}")
+        print(f"  - Model: {preferred_model}")
+        print(f"  - AI Service: {type(ai_service).__name__}")
+        print(f"  - Config keys: {list(complete_config.keys())}")
+        print(
+            f"  - Include image: {complete_config.get('include_image', False)}")
+
         # Generate 1 idea with 3 variations for the campaign with progress
         ideas_data, final_progress = ai_service.generate_campaign_ideas_with_progress(
             request.user, complete_config, progress_callback)
@@ -203,16 +215,73 @@ def generate_campaign_ideas(request):
             elif 'variacao_c' in content:
                 primary_variation = content['variacao_c']
 
+            # Generate image prompt (use headline, copy, or visual_description)
+            image_prompt = ""
+            if primary_variation:
+                image_prompt = primary_variation.get('visual_description') or primary_variation.get(
+                    'headline') or primary_variation.get('copy') or idea_data.get('title', '')
+            else:
+                image_prompt = idea_data.get('title', '')
+
+            # Generate image using the AI service (if requested and supported)
+            image_url = ""
+            if ai_config.get('include_image', False):
+                try:
+                    print(
+                        f"Current AI service provider: {ai_service.provider if hasattr(ai_service, 'provider') else 'unknown'}")
+                    print(
+                        f"Attempting to generate image with prompt: {image_prompt[:100]}...")
+                    image_url = ai_service.generate_image(
+                        image_prompt, user=request.user)
+                    print(
+                        f"Image generation result: {'Success' if image_url else 'Failed - empty URL returned'}")
+
+                    # If primary provider fails, try OpenAI as fallback for image generation
+                    if not image_url and hasattr(ai_service, 'provider') and ai_service.provider != 'openai':
+                        print(
+                            "Primary provider failed, trying OpenAI for image generation...")
+                        try:
+                            openai_service = AIServiceFactory.create_service(
+                                'openai', 'gpt-3.5-turbo')
+                            if openai_service:
+                                image_url = openai_service.generate_image(
+                                    image_prompt, user=request.user)
+                                print(
+                                    f"OpenAI fallback result: {'Success' if image_url else 'Failed'}")
+                        except Exception as fallback_error:
+                            print(
+                                f"OpenAI fallback also failed: {fallback_error}")
+
+                except Exception as e:
+                    print(f"Image generation failed with exception: {e}")
+                    import traceback
+                    print(f"Detailed traceback: {traceback.format_exc()}")
+
+                    # Try OpenAI as fallback
+                    print("Trying OpenAI as fallback after exception...")
+                    try:
+                        openai_service = AIServiceFactory.create_service(
+                            'openai', 'gpt-3.5-turbo')
+                        if openai_service:
+                            image_url = openai_service.generate_image(
+                                image_prompt, user=request.user)
+                            print(
+                                f"OpenAI fallback after exception result: {'Success' if image_url else 'Failed'}")
+                    except Exception as fallback_error:
+                        print(
+                            f"OpenAI fallback after exception also failed: {fallback_error}")
+            else:
+                print("Image generation skipped (include_image=False)")
+
             # Create single idea object with all variations stored in content
             idea = CampaignIdea.objects.create(
                 campaign=campaign,
                 title=idea_data['title'],
                 description=idea_data['description'],
-                # Store the full structured content with all variations
                 content=str(content),
                 platform=idea_data['platform'],
                 content_type=idea_data['content_type'],
-                variation_type='a',  # Default to 'a' as primary variation
+                variation_type='a',
                 headline=primary_variation.get(
                     'headline', '') if primary_variation else '',
                 copy=primary_variation.get(
@@ -224,7 +293,8 @@ def generate_campaign_ideas(request):
                 visual_description=primary_variation.get(
                     'visual_description', '') if primary_variation else '',
                 color_composition=primary_variation.get(
-                    'color_composition', '') if primary_variation else ''
+                    'color_composition', '') if primary_variation else '',
+                image_url=image_url
             )
             ideas.append(idea)
 
@@ -240,10 +310,15 @@ def generate_campaign_ideas(request):
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
+        # Log the actual error for debugging
+        import traceback
+        print(f"ERROR in generate_campaign_ideas: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+
         # Parse the error to provide user-friendly messages
         error_message = str(e)
         user_friendly_message = "Erro na geração de campanhas"
-        
+
         # Check for specific AI provider errors
         if "insufficient_quota" in error_message or "quota" in error_message.lower():
             if "openai" in error_message.lower():
@@ -266,7 +341,7 @@ def generate_campaign_ideas(request):
         else:
             # For any other error, provide a generic friendly message
             user_friendly_message = "Erro temporário na geração de campanhas. Tente novamente em alguns momentos."
-        
+
         return Response(
             {
                 'error': user_friendly_message,
@@ -930,16 +1005,16 @@ def get_working_models(request):
         ]
 
         available_models = []
-        
+
         # Check which providers are available (basic service creation test)
         for model_info in all_models:
             try:
                 # Test if the service can be created (basic check)
                 ai_service = AIServiceFactory.create_service(
-                    model_info['provider'], 
+                    model_info['provider'],
                     model_info['model']
                 )
-                
+
                 if ai_service:
                     # Service can be created, add to available models
                     available_models.append({
@@ -947,7 +1022,7 @@ def get_working_models(request):
                         'status': 'available',
                         'can_afford': True  # Assume true for now - frontend can check credits
                     })
-                    
+
             except Exception:
                 # If service creation fails, skip this model
                 continue
@@ -969,7 +1044,8 @@ def get_working_models(request):
             ]
 
         # Sort models: recommended first, then by cost
-        available_models.sort(key=lambda x: (not x.get('recommended', False), x.get('estimated_cost_per_1k_tokens', 0)))
+        available_models.sort(key=lambda x: (
+            not x.get('recommended', False), x.get('estimated_cost_per_1k_tokens', 0)))
 
         return Response({
             'available_models': available_models,
