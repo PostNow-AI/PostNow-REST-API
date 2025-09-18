@@ -38,8 +38,9 @@ class PostAIService:
         provider = ai_provider or self.default_provider
         model = ai_model or self.default_model
 
-        # Store user for profile access
+        # Store user and post_data for profile access
         self.user = user
+        self._current_post_data = post_data
 
         # Create AI service
         ai_service = AIServiceFactory.create_service(provider, model)
@@ -156,25 +157,18 @@ class PostAIService:
             raise Exception(f"Failed to regenerate content: {str(e)}")
 
     def _build_content_prompt(self, post_data: Dict) -> str:
-        """Build the prompt for content generation."""
+        """Build the prompt for content generation using the same advanced copywriting prompt as base_ai_service."""
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
         post_type = post_data.get('type', '')
 
         # Target audience information
-        target_info = []
-        if post_data.get('target_gender'):
-            target_info.append(f"Gênero: {post_data['target_gender']}")
-        if post_data.get('target_age'):
-            target_info.append(f"Idade: {post_data['target_age']}")
-        if post_data.get('target_location'):
-            target_info.append(f"Localização: {post_data['target_location']}")
-        if post_data.get('target_salary'):
-            target_info.append(f"Renda: {post_data['target_salary']}")
-        if post_data.get('target_interests'):
-            target_info.append(f"Interesses: {post_data['target_interests']}")
-
-        target_section = f"\n\nPúblico-alvo:\n{chr(10).join(target_info)}" if target_info else ""
+        target_gender = post_data.get('target_gender', 'Não especificado')
+        target_age = post_data.get('target_age', 'Não especificado')
+        target_location = post_data.get('target_location', 'Não especificado')
+        target_salary = post_data.get('target_salary', 'Não especificado')
+        target_interests = post_data.get(
+            'target_interests', 'Não especificado')
 
         # Creator profile information (if available)
         creator_profile_section = ""
@@ -197,35 +191,87 @@ class PostAIService:
                     creator_info.append(
                         f"Tom de Voz Preferido: {profile.voice_tone}")
 
+                # Color palette
+                colors = [profile.color_1, profile.color_2,
+                          profile.color_3, profile.color_4, profile.color_5]
+                valid_colors = [
+                    color for color in colors if color and color.strip()]
+                if valid_colors:
+                    creator_info.append(
+                        f"Paleta de Cores da Marca: {', '.join(valid_colors)}")
+
                 if creator_info:
-                    creator_profile_section = f"\n\nPerfil do Criador:\n{chr(10).join(creator_info)}"
+                    creator_profile_section = f"\n\nPERFIL DO CRIADOR:\n{chr(10).join(f'- {info}' for info in creator_info)}"
 
-        prompt = f"""Crie um conteúdo para uma publicação de redes sociais com as seguintes especificações:
+        prompt = f"""
+Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
+Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, sempre respeitando as políticas do Meta e Google Ads, evitando qualquer tipo de sensacionalismo, promessa exagerada ou afirmações que possam violar as diretrizes dessas plataformas.
 
-Nome do post: {name}
-Objetivo: {objective}
-Tipo de conteúdo: {post_type}{target_section}{creator_profile_section}
+### DADOS DE ENTRADA:
+- Nome do Post (tema principal): {name}
+- Objetivo da campanha: {objective}
+- Tipo de conteúdo: {post_type} → pode ser Live, Reel, Post, Carousel ou Story
+- Plataforma: instagram
+- Público-Alvo:
+   • Gênero: {target_gender}
+   • Faixa Etária: {target_age}
+   • Localização: {target_location}
+   • Renda Mensal: {target_salary}
+   • Interesses: {target_interests}
+- Linguagem/Tom de voz: profissional{creator_profile_section}
+
+### REGRAS PARA CONSTRUÇÃO DA COPY:
+
+1. Estruture o texto seguindo internamente o método AIDA, mas entregue a copy final de forma natural, sem mostrar as etapas.
+
+2. A copy deve respeitar o tom de voz definido no formulário da empresa.
+
+3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.
+   - Não usar comparações negativas diretas.
+   - Não prometer resultados absolutos.
+   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.
+   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.
+
+4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.
+
+5. **Adaptação ao Tipo de Conteúdo**
+   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.
+   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.
+   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).
+   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.
+   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.
+
+6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido no formulário.
+
+7. USE SEMPRE o perfil do criador para personalizar o conteúdo e incorporar informações profissionais, tom de voz preferido e cores da marca.
+
+### SAÍDA ESPERADA:
+- Uma copy finalizada, pronta para uso no formato selecionado.
+- Texto fluido, estruturado com base no AIDA, mas sem exibir as etapas.
+- Linguagem alinhada ao público e ao tom cadastrado no formulário da empresa.
+- Respeito às boas práticas do Meta e Google Ads.
+- PERSONALIZAÇÃO baseada no perfil do criador.
 
 O conteúdo deve ser formatado EXATAMENTE assim:
 
-Título: [Título atrativo e chamativo]
+Título: [Título atrativo baseado no método AIDA e personalizado para o público-alvo]
 
-Texto: [Texto principal do post, envolvente e adequado ao público-alvo]
+Texto: [Texto principal seguindo AIDA, personalizado para {target_gender}, {target_age} anos, interessado em {target_interests}, localizado em {target_location}]
 
-Chamada para ação no post/carrossel: [CTA clara e direcionada ao objetivo]
+Chamada para ação no post/carrossel: [CTA estratégico focado no objetivo de {objective}]
 
-Instruções:
-- O conteúdo deve ser adequado para {post_type}
-- Foque no objetivo de {objective}
-- Use linguagem apropriada para o público-alvo especificado
-- Seja criativo e autêntico
-- Inclua emojis quando apropriado
-- Mantenha o formato exato solicitado
-- Use o tom de voz do perfil do criador se disponível
-- Personalize o conteúdo baseado no contexto profissional do criador
+REGRAS OBRIGATÓRIAS:
+- Adapte o formato da copy ao tipo de conteúdo: {post_type}
+- Respeite as políticas Meta/Google Ads
+- Use método AIDA de forma natural
+- Use o idioma português brasileiro
+- PERSONALIZE baseado no perfil do criador
+- Incorpore cores da marca do perfil quando disponíveis
+- Foque no público-alvo específico: {target_gender}, {target_age} anos, {target_interests}
+- Objetivo principal: {objective}
 """
-
-        return prompt
+        print(prompt)
+        return prompt.strip()
 
     def _build_image_prompt(self, post_data: Dict, content: str) -> str:
         """Build the prompt for image generation."""
@@ -322,58 +368,19 @@ Chamada para ação no post/carrossel: [Nova CTA]
         return prompt
 
     def _generate_content_with_ai(self, ai_service, prompt: str) -> str:
-        """Generate content using the AI service."""
-        # This is a simplified version. In a real implementation,
-        # we would use the actual AI service methods
-        # For now, we'll assume the AI service has a generate_text method
-
-        # Try to use existing campaign generation logic adapted for posts
+        """Generate content using the AI service with direct API request."""
         try:
-            # Create a mock config for the existing AI service
-            mock_config = {
-                'title': 'Post Generation',
-                'objectives': ['engagement'],
-                'platforms': ['instagram'],
-                'content_types': {'instagram': ['post']},
-                'voice_tone': 'professional',
-                'product_description': prompt,
-                'persona_interests': 'general audience'
-            }
+            # Use the AI service's direct _make_ai_request method with our sophisticated prompt
+            response_text = ai_service._make_ai_request(
+                prompt, ai_service.model_name)
 
-            # Use the existing generate_campaign_ideas_with_progress method
-            # but extract just the content we need
-            ideas_data, _ = ai_service.generate_campaign_ideas_with_progress(
-                user=None,
-                config=mock_config,
-                progress_callback=None
-            )
-
-            if ideas_data and len(ideas_data) > 0:
-                first_idea = ideas_data[0]
-                content = first_idea.get('content', {})
-
-                # Try to extract structured content
-                if isinstance(content, dict) and 'variacao_a' in content:
-                    var_a = content['variacao_a']
-                    title = var_a.get('headline', '')
-                    text = var_a.get('copy', '')
-                    cta = var_a.get('cta', '')
-
-                    formatted_content = f"""Título: {title}
-
-Texto: {text}
-
-Chamada para ação no post/carrossel: {cta}"""
-
-                    return formatted_content
-                elif isinstance(content, str):
-                    return content
-                else:
-                    return str(content)
+            if response_text and response_text.strip():
+                return response_text.strip()
             else:
-                raise Exception("No content generated by AI service")
+                raise Exception("Empty response from AI service")
 
-        except Exception:
+        except Exception as e:
+            print(f"Error in AI generation: {e}")
             # Fallback: return a simple response
             return """Título: Conteúdo Gerado por IA
 

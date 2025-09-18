@@ -113,14 +113,21 @@ class BaseAIService(ABC):
         platforms_text = ", ".join(
             platforms) if platforms else "Não especificado"
 
-        # Build content types section
+        # Build content type section - handle both simple post_type and complex content_types
+        post_type = config.get('post_type')
         content_types = config.get('content_types', {})
-        content_types_text = ""
-        if content_types:
+
+        if post_type:
+            # Simple post_type field (preferred)
+            content_types_text = post_type
+        elif content_types:
+            # Complex content_types structure (legacy support)
             content_types_text = "\n".join([
                 f"- {platform}: {', '.join(types)}"
                 for platform, types in content_types.items()
             ])
+        else:
+            content_types_text = "Post"
 
         # Build voice tone section - prefer from profile, then config
         profile_voice_tone = profile.voice_tone if profile and profile.voice_tone else None
@@ -136,103 +143,74 @@ class BaseAIService(ABC):
         campaign_urgency = config.get('campaign_urgency', 'Não especificado')
 
         prompt = f"""
-Você é um especialista em marketing digital e criação de conteúdo para redes sociais. 
-Sua tarefa é gerar EXATAMENTE 1 ideia criativa e estratégica para uma campanha de marketing.
+Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
+Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, sempre respeitando as políticas do Meta e Google Ads, evitando qualquer tipo de sensacionalismo, promessa exagerada ou afirmações que possam violar as diretrizes dessas plataformas.
 
-CONTEXTO DA CAMPANHA:
-- Título: {config.get('title', 'Não especificado')}
-- Descrição: {config.get('description', 'Não especificado')}
-- Objetivos: {objectives_text}
-- Plataformas: {platforms_text}
-- Tipos de Conteúdo: {content_types_text}
-- Tom de Voz: {voice_tone_text}
+### DADOS DE ENTRADA:
+- Nome do Post (tema principal): {config.get('title', 'Não especificado')}  
+- Objetivo da campanha: {objectives_text}
+- Tipo de conteúdo: {content_types_text} → pode ser Live, Reel, Post, Carousel ou Story  
+- Plataforma: {platforms_text}
 - Produto/Serviço: {product_description}
 - Proposta de Valor: {value_proposition}
 - Urgência da Campanha: {campaign_urgency}
+- Público-Alvo:  
+   • Gênero: {config.get('persona_gender', 'Não especificado')}
+   • Faixa Etária: {config.get('persona_age', 'Não especificado')}
+   • Localização: {config.get('persona_location', 'Não especificado')}
+   • Renda Mensal: {config.get('persona_income', 'Não especificado')}
+   • Interesses: {config.get('persona_interests', 'Não especificado')}
+- Linguagem/Tom de voz: {voice_tone_text}
 
 {creator_profile_section}
 
 {persona_section}
 
-INSTRUÇÕES CRÍTICAS:
-1. Gere EXATAMENTE 1 ideia criativa e estratégica
-2. Cada ideia DEVE ser específica para as plataformas e tipos de conteúdo solicitados
-3. NÃO gere ideias para plataformas não solicitadas
-4. NÃO gere tipos de conteúdo não solicitados
-5. Use o perfil do criador para personalizar o conteúdo
-6. Incorpore o tom de voz e informações profissionais do criador
-7. Cada ideia deve incluir:
-   - Título atrativo e específico
-   - Descrição clara e estratégica
-   - Conteúdo principal detalhado
-   - Plataforma específica (apenas as solicitadas)
-   - Tipo de conteúdo específico (apenas os solicitados)
-   - EXATAMENTE 3 variações (A, B, C) com:
-     * Headline impactante
-     * Copy persuasivo e detalhado
-     * CTA claro e acionável
-     * Hashtags relevantes e estratégicos
-     * Descrição visual detalhada
-     * Composição de cores específica (use as cores do perfil se disponíveis)
-   - Estratégia de implementação
-   - Métricas de sucesso
-   - Próximos passos
+### REGRAS PARA CONSTRUÇÃO DA COPY:
 
-FORMATO DE RESPOSTA OBRIGATÓRIO:
-Retorne APENAS um JSON válido com a seguinte estrutura:
-{{
-  "ideas": [
-    {{
-      "title": "Título da Ideia",
-      "description": "Descrição detalhada da ideia",
-      "content": {{
-        "plataforma": "plataforma_solicitada",
-        "tipo_conteudo": "tipo_solicitado",
-        "titulo_principal": "Título principal da ideia",
-        "variacao_a": {{
-          "headline": "Headline da variação A",
-          "copy": "Copy detalhado da variação A",
-          "cta": "Call to action da variação A",
-          "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
-          "visual_description": "Descrição visual detalhada da variação A",
-          "color_composition": "Composição de cores da variação A"
-        }},
-        "variacao_b": {{
-          "headline": "Headline da variação B",
-          "copy": "Copy detalhado da variação B",
-          "cta": "Call to action da variação B",
-          "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
-          "visual_description": "Descrição visual detalhada da variação B",
-          "color_composition": "Composição de cores da variação B"
-        }},
-        "variacao_c": {{
-          "headline": "Headline da variação C",
-          "copy": "Copy detalhado da variação C",
-          "cta": "Call to action da variação C",
-          "hashtags": ["hashtag1", "hashtag2", "hashtag3"],
-          "visual_description": "Descrição visual detalhada da variação C",
-          "color_composition": "Composição de cores da variação C"
-        }},
-        "estrategia_implementacao": "Estratégia detalhada de implementação",
-        "metricas_sucesso": ["Métrica 1", "Métrica 2", "Métrica 3"],
-        "proximos_passos": ["Passo 1", "Passo 2", "Passo 3"]
-      }},
-      "platform": "plataforma_solicitada",
-      "content_type": "tipo_solicitado"
-    }}
-  ]
-}}
+1. Estruture o texto seguindo internamente o método AIDA, mas entregue a copy final de forma natural, sem mostrar as etapas.  
+
+2. A copy deve respeitar o tom de voz definido no formulário da empresa: {voice_tone_text}
+
+3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
+   - Não usar comparações negativas diretas.  
+   - Não prometer resultados absolutos.  
+   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.  
+   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.  
+
+4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.  
+
+5. **Adaptação ao Tipo de Conteúdo**  
+   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.  
+   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.  
+   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).  
+   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
+   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
+
+6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido no formulário.
+
+7. USE SEMPRE o perfil do criador para personalizar o conteúdo e incorporar informações profissionais, tom de voz preferido e cores da marca.
+
+### SAÍDA ESPERADA:
+- Uma copy finalizada, pronta para uso no formato selecionado.  
+- Texto fluido, estruturado com base no AIDA, mas sem exibir as etapas.  
+- Linguagem alinhada ao público e ao tom cadastrado no formulário da empresa.  
+- Respeito às boas práticas do Meta e Google Ads.  
+- Sugestão de até **2 variações de CTA curtas** para testes A/B em cada variação.
+- PERSONALIZAÇÃO baseada no perfil do criador.
 
 REGRAS OBRIGATÓRIAS:
-- Gere ideias APENAS para as plataformas solicitadas: {platforms_text}
+- Gere copies APENAS para as plataformas solicitadas: {platforms_text}
 - Use APENAS os tipos de conteúdo solicitados: {content_types_text}
 - Cada ideia deve ter EXATAMENTE 3 variações (A, B, C)
-- Inclua SEMPRE estratégia, métricas e próximos passos
+- Inclua SEMPRE 2 CTAs por variação para teste A/B
+- Adapte o formato da copy ao tipo de conteúdo
+- Respeite as políticas Meta/Google Ads
+- Use método AIDA de forma natural
 - Retorne APENAS o JSON, sem texto adicional
 - Use o idioma português brasileiro
-- Seja criativo, estratégico e específico
-- Foque nos objetivos solicitados: {objectives_text}
 - PERSONALIZE baseado no perfil do criador
+- Incorpore cores da marca do perfil quando disponíveis
 """
         return prompt.strip()
 
@@ -389,14 +367,20 @@ REGRAS OBRIGATÓRIAS:
     def _create_fallback_ideas(self, config: Dict) -> List[Dict]:
         """Create fallback ideas if AI response parsing fails."""
         platforms = config.get('platforms', ['instagram'])
+        post_type = config.get('post_type')
         content_types = config.get('content_types', {})
         objectives = config.get('objectives', ['engagement'])
 
         fallback_ideas = []
         for i, platform in enumerate(platforms[:1]):  # Max 1 idea
-            # Get content types for this platform
-            platform_content_types = content_types.get(platform, ['post'])
-            content_type = platform_content_types[0] if platform_content_types else 'post'
+            # Get content type - prefer simple post_type over complex content_types
+            if post_type:
+                content_type = post_type.lower()
+            elif content_types:
+                platform_content_types = content_types.get(platform, ['post'])
+                content_type = platform_content_types[0] if platform_content_types else 'post'
+            else:
+                content_type = 'post'
 
             idea = {
                 'title': f"Ideia {i+1} para {platform.title()} - {content_type.title()}",
