@@ -6,67 +6,145 @@ from rest_framework.response import Response
 from .models import UserBehavior
 from .serializers import (
     CreatorProfileSerializer,
-    OnboardingSerializer,
     OnboardingStatusSerializer,
+    Step1PersonalSerializer,
+    Step2BusinessSerializer,
+    Step3BrandingSerializer,
     UserBehaviorSerializer,
 )
-from .services import (
-    AvatarService,
-    CreatorProfileService,
-    SuggestionService,
-    UserProfileService,
-)
+from .services import CreatorProfileService
 
 
 class OnboardingStatusView(generics.RetrieveAPIView):
-    """Get user's onboarding status."""
+    """Get user's current onboarding status and step."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         try:
             profile = CreatorProfileService.get_or_create_profile(request.user)
-
-            # Force save to ensure onboarding status is correctly calculated
-            profile.save()
-
-            status_data = CreatorProfileService.calculate_onboarding_status(
-                profile)
-            serializer = OnboardingStatusSerializer(status_data)
-            return Response(serializer.data)
-        except Exception:
-            # Profile doesn't exist or error occurred, onboarding required
             status_data = {
-                'onboarding_completed': False,
-                'onboarding_skipped': False,
-                'has_data': False,
-                'filled_fields_count': 0,
-                'total_fields_count': 14,
+                'current_step': profile.current_step,
+                'step_1_completed': profile.step_1_completed,
+                'step_2_completed': profile.step_2_completed,
+                'step_3_completed': profile.step_3_completed,
+                'onboarding_completed': profile.onboarding_completed,
+                'profile_exists': True
             }
-            serializer = OnboardingStatusSerializer(status_data)
-            return Response(serializer.data)
+        except Exception:
+            # Profile doesn't exist, user is at step 1
+            status_data = {
+                'current_step': 1,
+                'step_1_completed': False,
+                'step_2_completed': False,
+                'step_3_completed': False,
+                'onboarding_completed': False,
+                'profile_exists': False
+            }
+
+        serializer = OnboardingStatusSerializer(status_data)
+        return Response(serializer.data)
 
 
-class OnboardingView(generics.CreateAPIView):
-    """Handle onboarding form submission."""
+class Step1PersonalView(generics.RetrieveUpdateAPIView):
+    """Handle Step 1: Personal information (professional_name, profession, instagram_handle, whatsapp_number)"""
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = OnboardingSerializer
+    serializer_class = Step1PersonalSerializer
 
-    def create(self, request):
-        serializer = self.get_serializer(data=request.data)
+    def get_object(self):
+        return CreatorProfileService.get_or_create_profile(self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
 
-        profile = CreatorProfileService.update_profile_data(
+        # Update the profile with step 1 data
+        updated_profile = CreatorProfileService.update_profile_data(
             request.user, serializer.validated_data
         )
-        response_serializer = CreatorProfileSerializer(profile)
 
-        return Response(
-            {
-                'message': 'Dados salvos com sucesso!',
-                'profile': response_serializer.data
-            },
-            status=status.HTTP_201_CREATED
+        response_serializer = CreatorProfileSerializer(updated_profile)
+        return Response({
+            'message': 'Dados pessoais salvos com sucesso!',
+            'step_completed': updated_profile.step_1_completed,
+            'current_step': updated_profile.current_step,
+            'profile': response_serializer.data
+        })
+
+
+class Step2BusinessView(generics.RetrieveUpdateAPIView):
+    """Handle Step 2: Business information (business_name, specialization, business_instagram_handle, business_website, business_city, business_description)"""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = Step2BusinessSerializer
+
+    def get_object(self):
+        return CreatorProfileService.get_or_create_profile(self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+
+        # Check if step 1 is completed
+        if not instance.step_1_completed:
+            return Response({
+                'error': 'Complete o passo 1 antes de prosseguir para o passo 2.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+
+        # Update the profile with step 2 data
+        updated_profile = CreatorProfileService.update_profile_data(
+            request.user, serializer.validated_data
         )
+
+        response_serializer = CreatorProfileSerializer(updated_profile)
+        return Response({
+            'message': 'Dados do negócio salvos com sucesso!',
+            'step_completed': updated_profile.step_2_completed,
+            'current_step': updated_profile.current_step,
+            'profile': response_serializer.data
+        })
+
+
+class Step3BrandingView(generics.RetrieveUpdateAPIView):
+    """Handle Step 3: Branding information (logo, voice_tone, colors)"""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = Step3BrandingSerializer
+
+    def get_object(self):
+        return CreatorProfileService.get_or_create_profile(self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+
+        # Check if step 2 is completed
+        if not instance.step_2_completed:
+            return Response({
+                'error': 'Complete o passo 2 antes de prosseguir para o passo 3.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+
+        # Update the profile with step 3 data
+        updated_profile = CreatorProfileService.update_profile_data(
+            request.user, serializer.validated_data
+        )
+
+        response_serializer = CreatorProfileSerializer(updated_profile)
+        return Response({
+            'message': 'Dados de marca salvos com sucesso!' if not updated_profile.onboarding_completed else 'Onboarding completado com sucesso!',
+            'step_completed': updated_profile.step_3_completed,
+            'current_step': updated_profile.current_step,
+            'onboarding_completed': updated_profile.onboarding_completed,
+            'profile': response_serializer.data
+        })
 
 
 class CreatorProfileView(generics.RetrieveUpdateAPIView):
@@ -84,12 +162,13 @@ class CreatorProfileView(generics.RetrieveUpdateAPIView):
             instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
 
-        CreatorProfileService.update_profile_data(
+        updated_profile = CreatorProfileService.update_profile_data(
             request.user, serializer.validated_data)
 
+        response_serializer = CreatorProfileSerializer(updated_profile)
         return Response({
             'message': 'Perfil atualizado com sucesso!',
-            'profile': serializer.data
+            'profile': response_serializer.data
         })
 
 
@@ -120,30 +199,6 @@ class UserBehaviorView(generics.RetrieveUpdateAPIView):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def skip_onboarding(request):
-    """Allow user to skip onboarding."""
-    try:
-        CreatorProfileService.skip_onboarding(request.user)
-        return Response({
-            'message': 'Onboarding pulado com sucesso!',
-            'skipped': True
-        })
-    except Exception as e:
-        return Response({
-            'error': f'Erro ao pular onboarding: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def onboarding_suggestions(request):
-    """Get suggestions for onboarding fields."""
-    suggestions = SuggestionService.get_all_suggestions()
-    return Response(suggestions)
-
-
-@api_view(['DELETE'])
-@permission_classes([permissions.IsAuthenticated])
 def reset_profile(request):
     """Reset user profile to start onboarding again."""
     success = CreatorProfileService.reset_profile(request.user)
@@ -160,61 +215,54 @@ def reset_profile(request):
         }, status=status.HTTP_404_NOT_FOUND)
 
 
-@api_view(['PATCH'])
+@api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
-def update_user_profile(request):
-    """Update user's basic profile information."""
-    try:
-        first_name = request.data.get('first_name')
-        last_name = request.data.get('last_name')
-
-        if not first_name and not last_name:
-            return Response({
-                'error': 'At least first_name or last_name must be provided'
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        user = UserProfileService.update_user_profile(
-            request.user, first_name, last_name
-        )
-
-        return Response({
-            'message': 'Perfil atualizado com sucesso!',
-            'user': {
-                'id': user.id,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-                'email': user.email,
-            }
-        })
-
-    except Exception as e:
-        return Response({
-            'error': f'Erro ao atualizar perfil: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+def generate_random_colors(request):
+    """Generate a set of random colors for the user's palette."""
+    from .models import generate_random_colors
+    colors = generate_random_colors()
+    return Response({
+        'colors': {
+            'color_1': colors[0],
+            'color_2': colors[1],
+            'color_3': colors[2],
+            'color_4': colors[3],
+            'color_5': colors[4]
+        }
+    })
 
 
-@api_view(['POST'])
+@api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
-def upload_avatar(request):
-    """Upload user avatar as base64 string."""
-    try:
-        avatar_data = request.data.get('avatar')
-        is_valid, error_message = AvatarService.validate_avatar_data(
-            avatar_data)
+def onboarding_suggestions(request):
+    """Get suggestions for onboarding fields."""
+    from .services import SuggestionService
+    suggestions = SuggestionService.get_all_suggestions()
+    return Response(suggestions)
 
-        if not is_valid:
-            return Response({
-                'error': error_message
-            }, status=status.HTTP_400_BAD_REQUEST)
 
-        profile = AvatarService.save_avatar(request.user, avatar_data)
+# TEMPORARY TEST ENDPOINT - Remove in production
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def test_structure(request):
+    """Test endpoint to verify our model structure is working correctly."""
+    from .models import CreatorProfile
 
-        return Response({
-            'message': 'Avatar atualizado com sucesso!',
-            'avatar': avatar_data
-        })
+    # Get total count of creator profiles
+    total_profiles = CreatorProfile.objects.count()
 
-    except Exception as e:
-        return Response({
-            'error': f'Erro ao fazer upload do avatar: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    # Get a sample of field names from the model
+    field_names = [field.name for field in CreatorProfile._meta.get_fields()]
+
+    return Response({
+        "message": "Creator Profile API is working correctly!",
+        "total_profiles": total_profiles,
+        "model_fields": field_names[:10],  # First 10 fields
+        "endpoints_available": [
+            "/api/v1/creator-profile/",
+            "/api/v1/creator-profile/onboarding/step1/",
+            "/api/v1/creator-profile/onboarding/step2/",
+            "/api/v1/creator-profile/onboarding/step3/",
+            "/api/v1/creator-profile/suggestions/"
+        ]
+    })

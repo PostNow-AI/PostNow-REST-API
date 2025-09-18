@@ -160,14 +160,14 @@ class StripeService:
                 'user_id': user.id,
                 'credits_added': amount,
                 'new_balance': new_balance,
-                'session_id': session.id
+                'session_id': session.get('id')
             }
 
         except Exception as e:
             return {
                 'status': 'error',
                 'error': str(e),
-                'session_id': session.id
+                'session_id': session.get('id')
             }
 
     def _handle_payment_succeeded(self, payment_intent):
