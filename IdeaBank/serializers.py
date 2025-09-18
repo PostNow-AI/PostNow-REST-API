@@ -4,10 +4,236 @@ from .models import (
     Campaign,
     CampaignIdea,
     CampaignObjective,
+    Gender,
     IdeaGenerationConfig,
+    Post,
+    PostIdea,
+    PostObjective,
+    PostType,
     SocialPlatform,
     VoiceTone,
 )
+
+
+# New Post-based serializers
+class PostSerializer(serializers.ModelSerializer):
+    """Serializer for Post model."""
+    objective_display = serializers.CharField(
+        source='get_objective_display', read_only=True)
+    type_display = serializers.CharField(
+        source='get_type_display', read_only=True)
+    target_gender_display = serializers.CharField(
+        source='get_target_gender_display', read_only=True)
+    has_target_audience = serializers.ReadOnlyField()
+    ideas_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Post
+        fields = [
+            'id', 'name', 'objective', 'objective_display', 'type', 'type_display',
+            'target_gender', 'target_gender_display', 'target_age', 'target_location',
+            'target_salary', 'target_interests', 'has_target_audience', 'ideas_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_ideas_count(self, obj):
+        """Return the number of ideas for this post."""
+        return obj.ideas.count()
+
+
+class PostCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating posts."""
+
+    class Meta:
+        model = Post
+        fields = [
+            'name', 'objective', 'type', 'target_gender', 'target_age',
+            'target_location', 'target_salary', 'target_interests'
+        ]
+
+
+class PostIdeaSerializer(serializers.ModelSerializer):
+    """Serializer for PostIdea model."""
+    status_display = serializers.CharField(
+        source='get_status_display', read_only=True)
+    content_preview = serializers.ReadOnlyField()
+    post_name = serializers.CharField(source='post.name', read_only=True)
+    post_type = serializers.CharField(
+        source='post.get_type_display', read_only=True)
+
+    class Meta:
+        model = PostIdea
+        fields = [
+            'id', 'content', 'content_preview', 'image_url', 'status', 'status_display',
+            'ai_provider', 'ai_model', 'post_name', 'post_type', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class PostIdeaCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating post ideas."""
+
+    class Meta:
+        model = PostIdea
+        fields = ['content', 'image_url', 'ai_provider', 'ai_model']
+
+
+class PostWithIdeasSerializer(serializers.ModelSerializer):
+    """Serializer for Post with all its ideas."""
+    objective_display = serializers.CharField(
+        source='get_objective_display', read_only=True)
+    type_display = serializers.CharField(
+        source='get_type_display', read_only=True)
+    target_gender_display = serializers.CharField(
+        source='get_target_gender_display', read_only=True)
+    has_target_audience = serializers.ReadOnlyField()
+    ideas = PostIdeaSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Post
+        fields = [
+            'id', 'name', 'objective', 'objective_display', 'type', 'type_display',
+            'target_gender', 'target_gender_display', 'target_age', 'target_location',
+            'target_salary', 'target_interests', 'has_target_audience', 'ideas',
+            'created_at', 'updated_at'
+        ]
+
+
+class PostGenerationRequestSerializer(serializers.Serializer):
+    """Serializer for AI post generation requests."""
+
+    # Required fields
+    name = serializers.CharField(max_length=200, help_text="Nome do post")
+    objective = serializers.ChoiceField(
+        choices=PostObjective.choices, help_text="Objetivo do post")
+    type = serializers.ChoiceField(
+        choices=PostType.choices, help_text="Tipo de conteúdo")
+
+    # Optional target audience fields
+    target_gender = serializers.ChoiceField(
+        choices=Gender.choices,
+        required=False,
+        allow_blank=True,
+        help_text="Gênero do público-alvo"
+    )
+    target_age = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        help_text="Idade do público-alvo"
+    )
+    target_location = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        help_text="Localização do público-alvo"
+    )
+    target_salary = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        help_text="Salário do público-alvo"
+    )
+    target_interests = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Interesses do público-alvo"
+    )
+
+    # AI model preferences
+    preferred_provider = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        default='google',
+        help_text="Provedor de IA preferido (google, openai, anthropic)"
+    )
+    preferred_model = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        default='gemini-1.5-flash',
+        help_text="Modelo específico de IA"
+    )
+
+    # Image generation preference
+    include_image = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text="Se deve gerar imagem automaticamente para o post"
+    )
+
+    def validate(self, data):
+        """Validate the request data."""
+        # Ensure required fields are present
+        required_fields = ['name', 'objective', 'type']
+        for field in required_fields:
+            if not data.get(field):
+                raise serializers.ValidationError(f"{field} é obrigatório.")
+
+        return data
+
+
+class PostIdeaEditRequestSerializer(serializers.Serializer):
+    """Serializer for editing post ideas with optional AI regeneration."""
+
+    prompt = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Prompt opcional para regeneração do conteúdo"
+    )
+
+    # AI model preferences
+    preferred_provider = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        default='google',
+        help_text="Provedor de IA preferido"
+    )
+    preferred_model = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        default='gemini-1.5-flash',
+        help_text="Modelo específico de IA"
+    )
+
+
+class ImageGenerationRequestSerializer(serializers.Serializer):
+    """Serializer for image generation requests."""
+
+    prompt = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="Prompt opcional para geração da imagem"
+    )
+
+    # AI model preferences for image generation
+    preferred_provider = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        default='openai',  # Default to OpenAI for image generation
+        help_text="Provedor de IA preferido para imagens"
+    )
+
+
+class PostOptionsSerializer(serializers.Serializer):
+    """Serializer for available post options."""
+    objectives = serializers.ListField(
+        child=serializers.DictField()
+    )
+    types = serializers.ListField(
+        child=serializers.DictField()
+    )
+    genders = serializers.ListField(
+        child=serializers.DictField()
+    )
+
+
+# Legacy Campaign-based serializers (keeping for backward compatibility)
 
 
 class CampaignSerializer(serializers.ModelSerializer):

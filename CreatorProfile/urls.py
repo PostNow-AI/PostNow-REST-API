@@ -5,15 +5,19 @@ from . import views
 app_name = 'creator_profile'
 
 urlpatterns = [
-    # Onboarding status - used to determine if onboarding is needed
+    # Onboarding status - check current step and completion status
     path('onboarding/status/', views.OnboardingStatusView.as_view(),
          name='onboarding_status'),
 
-    # Onboarding endpoints
-    path('onboarding/', views.OnboardingView.as_view(), name='onboarding'),
-    path('onboarding/skip/', views.skip_onboarding, name='skip_onboarding'),
+    # Step-based onboarding endpoints
+    path('onboarding/step1/', views.Step1PersonalView.as_view(),
+         name='step1_personal'),
+    path('onboarding/step2/', views.Step2BusinessView.as_view(),
+         name='step2_business'),
+    path('onboarding/step3/', views.Step3BrandingView.as_view(),
+         name='step3_branding'),
 
-    # Profile management
+    # Complete profile management
     path('profile/', views.CreatorProfileView.as_view(), name='profile'),
     path('profile/reset/', views.reset_profile, name='reset_profile'),
 
@@ -23,8 +27,9 @@ urlpatterns = [
     # Helper endpoints for frontend
     path('onboarding/suggestions/', views.onboarding_suggestions,
          name='onboarding_suggestions'),
+    path('onboarding/colors/', views.generate_random_colors,
+         name='generate_random_colors'),
 
-    # User profile management
-    path('user/profile/', views.update_user_profile, name='update_user_profile'),
-    path('user/avatar/', views.upload_avatar, name='upload_avatar'),
+    # TEMPORARY: Test endpoint to verify structure - Remove in production
+    path('test/', views.test_structure, name='test_structure'),
 ]

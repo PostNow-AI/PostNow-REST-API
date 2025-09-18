@@ -193,7 +193,7 @@ class AIModelPreferences(models.Model):
     max_cost_per_operation = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        default=Decimal('5.00'),
+        default=Decimal('500.00'),
         validators=[MinValueValidator(Decimal('0.01'))],
         verbose_name="Custo Máximo por Operação (em créditos)"
     )
@@ -255,6 +255,17 @@ class AIModel(models.Model):
         decimal_places=6,
         validators=[MinValueValidator(Decimal('0.000001'))],
         verbose_name="Custo por Token"
+    )
+    # Image generation costs - per image generated
+    cost_per_image = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        default=Decimal('0.00'),
+        verbose_name="Custo por Imagem"
+    )
+    supports_image_generation = models.BooleanField(
+        default=False,
+        verbose_name="Suporte para Geração de Imagem"
     )
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     created_at = models.DateTimeField(

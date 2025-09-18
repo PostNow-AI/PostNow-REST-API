@@ -1,96 +1,91 @@
+"""
+New Post-based views for IdeaBank app.
+"""
 
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import Campaign, CampaignIdea, CampaignObjective, SocialPlatform, VoiceTone
+from .models import Gender, Post, PostIdea, PostObjective, PostType
 from .serializers import (
-    CampaignDetailSerializer,
-    CampaignIdeaSerializer,
-    CampaignIdeaUpdateSerializer,
-    CampaignSerializer,
-    IdeaGenerationRequestSerializer,
+    ImageGenerationRequestSerializer,
+    PostCreateSerializer,
+    PostGenerationRequestSerializer,
+    PostIdeaEditRequestSerializer,
+    PostIdeaSerializer,
+    PostOptionsSerializer,
+    PostSerializer,
+    PostWithIdeasSerializer,
 )
-
-# Import AI model service for model information
-try:
-    from .services.ai_model_service import AIModelService
-    AI_MODEL_SERVICE_AVAILABLE = True
-except ImportError:
-    AI_MODEL_SERVICE_AVAILABLE = False
-    AIModelService = None
-
-# Import AI services
-try:
-    from .services.ai_service_factory import AIServiceFactory
-    AI_SERVICE_FACTORY_AVAILABLE = True
-except ImportError:
-    AI_SERVICE_FACTORY_AVAILABLE = False
-    AIServiceFactory = None
+from .services.post_ai_service import PostAIService
 
 
-class CampaignListView(generics.ListCreateAPIView):
-    """List and create campaigns."""
+# Post management views
+class PostListView(generics.ListCreateAPIView):
+    """List and create posts."""
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = CampaignSerializer
+    serializer_class = PostSerializer
 
     def get_queryset(self):
-        return Campaign.objects.filter(user=self.request.user)
+        return Post.objects.filter(user=self.request.user)
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return PostCreateSerializer
+        return PostSerializer
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
 
-class CampaignDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Retrieve, update and delete campaigns."""
+class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update and delete posts."""
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = CampaignDetailSerializer
+    serializer_class = PostSerializer
 
     def get_queryset(self):
-        return Campaign.objects.filter(user=self.request.user)
+        return Post.objects.filter(user=self.request.user)
 
 
-class CampaignIdeaListView(generics.ListCreateAPIView):
-    """List and create campaign ideas."""
+class PostWithIdeasView(generics.RetrieveAPIView):
+    """Retrieve a post with all its ideas."""
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = CampaignIdeaSerializer
+    serializer_class = PostWithIdeasSerializer
 
     def get_queryset(self):
-        campaign_id = self.kwargs.get('campaign_id')
-        if campaign_id:
-            return CampaignIdea.objects.filter(
-                campaign_id=campaign_id,
-                campaign__user=self.request.user
-            )
-        return CampaignIdea.objects.filter(
-            campaign__user=self.request.user
-        )
-
-    def perform_create(self, serializer):
-        campaign_id = self.kwargs.get('campaign_id')
-        campaign = Campaign.objects.get(id=campaign_id, user=self.request.user)
-        serializer.save(campaign=campaign)
+        return Post.objects.filter(user=self.request.user).prefetch_related('ideas')
 
 
-class CampaignIdeaDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Retrieve, update and delete campaign ideas."""
+# Post Idea management views
+class PostIdeaListView(generics.ListAPIView):
+    """List post ideas for a specific post."""
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = CampaignIdeaUpdateSerializer
+    serializer_class = PostIdeaSerializer
 
     def get_queryset(self):
-        return CampaignIdea.objects.filter(
-            campaign__user=self.request.user
+        post_id = self.kwargs.get('post_id')
+        return PostIdea.objects.filter(
+            post_id=post_id,
+            post__user=self.request.user
         )
 
 
+class PostIdeaDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update and delete post ideas."""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = PostIdeaSerializer
+
+    def get_queryset(self):
+        return PostIdea.objects.filter(post__user=self.request.user)
+
+
+# AI-powered post generation views
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def generate_campaign_ideas(request):
-    """Generate campaign ideas using Gemini AI with the new structure and progress tracking."""
-    global AIServiceFactory
+def generate_post_idea(request):
+    """Generate a post idea using AI based on post specifications."""
 
-    serializer = IdeaGenerationRequestSerializer(data=request.data)
-
+    serializer = PostGenerationRequestSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(
             {'error': 'Dados inválidos', 'details': serializer.errors},
@@ -98,1025 +93,339 @@ def generate_campaign_ideas(request):
         )
 
     try:
-        # Create campaign first
-        campaign_data = serializer.validated_data.copy()
+        # Create the post first
+        post_data = serializer.validated_data
 
-        # Extract AI service configuration (not campaign fields)
-        ai_config = {
-            'preferred_provider': campaign_data.pop('preferred_provider', ''),
-            'preferred_model': campaign_data.pop('preferred_model', ''),
-            'include_image': campaign_data.pop('include_image', False)
-        }
+        # Extract AI preferences
+        ai_provider = post_data.pop('preferred_provider', 'google')
+        ai_model = post_data.pop('preferred_model', 'gemini-1.5-flash')
+        include_image = post_data.pop('include_image', False)
 
-        # Generate automatic title if none provided
-        if not campaign_data.get('title') or campaign_data['title'].strip() == '':
-            # Create a descriptive title based on objectives and platforms
-            objectives = campaign_data.get('objectives', [])
-            platforms = campaign_data.get('platforms', [])
+        # Create the post
+        post = Post.objects.create(user=request.user, **post_data)
 
-            if objectives and platforms:
-                objective_names = [dict(CampaignObjective.choices)[
-                    obj] for obj in objectives if obj in dict(CampaignObjective.choices)]
-                platform_names = [dict(SocialPlatform.choices)[
-                    plat] for plat in platforms if plat in dict(SocialPlatform.choices)]
-
-                if objective_names and platform_names:
-                    campaign_data['title'] = f"Campanha de {', '.join(objective_names[:2])} para {', '.join(platform_names[:2])}"
-                else:
-                    campaign_data['title'] = "Campanha Gerada por IA"
-            else:
-                campaign_data['title'] = "Campanha Gerada por IA"
-
-        campaign = Campaign.objects.create(
+        # Generate content using AI
+        post_ai_service = PostAIService()
+        result = post_ai_service.generate_post_content(
             user=request.user,
-            **campaign_data
+            post_data=post_data,
+            ai_provider=ai_provider,
+            ai_model=ai_model
         )
 
-        # Generate ideas using AI with progress tracking
-        # Determine which AI service to use based on user preferences
-        preferred_provider = ai_config.get(
-            'preferred_provider', '').strip().lower()
-        preferred_model = ai_config.get('preferred_model', '').strip()
-
-        # Set defaults if empty
-        if not preferred_provider:
-            preferred_provider = 'google'
-        if not preferred_model:
-            if preferred_provider == 'google':
-                preferred_model = 'gemini-1.5-flash'
-            elif preferred_provider == 'openai':
-                preferred_model = 'gpt-3.5-turbo'
-            elif preferred_provider == 'anthropic':
-                preferred_model = 'claude-3-sonnet'
-            else:
-                preferred_model = 'gemini-1.5-flash'
-
-        # For now, we'll use Gemini as the default, but this can be extended
-        # to support other providers like OpenAI and Anthropic
-        if preferred_provider in ['openai', 'anthropic']:
-            # TODO: Implement OpenAI and Anthropic services
-            # For now, fallback to Gemini
-            pass
-
-        if not AI_SERVICE_FACTORY_AVAILABLE:
-            return Response(
-                {'error': 'Serviço de IA não disponível'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        # Create AI service with selected model
-        ai_service = AIServiceFactory.create_service(
-            preferred_provider or 'google',
-            preferred_model
+        # Create the post idea with generated content
+        post_idea = PostIdea.objects.create(
+            post=post,
+            content=result['content'],
+            ai_provider=result['ai_provider'],
+            ai_model=result['ai_model']
         )
 
-        if not ai_service:
-            return Response(
-                {'error': 'Provedor de IA não disponível'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
+        # Generate image if requested
+        if include_image:
+            try:
+                image_url = post_ai_service.generate_image_for_post(
+                    user=request.user,
+                    post_data=post_data,
+                    content=result['content']
+                )
+                post_idea.image_url = image_url
+                post_idea.save()
+            except Exception as image_error:
+                print(f"Warning: Failed to generate image: {image_error}")
+                # Continue without image - don't fail the entire request
 
-        # Create complete config for AI service (combines campaign data + AI config)
-        complete_config = {**campaign_data, **ai_config}
-
-        # Progress tracking function
-        def progress_callback(progress_data):
-            # In a real implementation, you might want to send this via WebSocket
-            # or store it in a cache for the frontend to poll
-            print(
-                f"Progress: {progress_data['percentage']}% - {progress_data['current_step_name']}")
-
-        # Debug logging
-        print("DEBUG: About to call AI service with:")
-        print(f"  - Provider: {preferred_provider}")
-        print(f"  - Model: {preferred_model}")
-        print(f"  - AI Service: {type(ai_service).__name__}")
-        print(f"  - Config keys: {list(complete_config.keys())}")
-        print(
-            f"  - Include image: {complete_config.get('include_image', False)}")
-
-        # Generate 1 idea with 3 variations for the campaign with progress
-        ideas_data, final_progress = ai_service.generate_campaign_ideas_with_progress(
-            request.user, complete_config, progress_callback)
-
-        # Create a single CampaignIdea object with all variations stored together
-        ideas = []
-
-        for idea_data in ideas_data:
-            # Extract the structured content
-            content = idea_data.get('content', {})
-
-            # Get the first variation as the primary content for the main fields
-            primary_variation = None
-            if 'variacao_a' in content:
-                primary_variation = content['variacao_a']
-            elif 'variacao_b' in content:
-                primary_variation = content['variacao_b']
-            elif 'variacao_c' in content:
-                primary_variation = content['variacao_c']
-
-            # Generate image prompt (use headline, copy, or visual_description)
-            image_prompt = ""
-            if primary_variation:
-                image_prompt = primary_variation.get('visual_description') or primary_variation.get(
-                    'headline') or primary_variation.get('copy') or idea_data.get('title', '')
-            else:
-                image_prompt = idea_data.get('title', '')
-
-            # Generate image using the AI service (if requested and supported)
-            image_url = ""
-            if ai_config.get('include_image', False):
-                try:
-                    print(
-                        f"Current AI service provider: {ai_service.provider if hasattr(ai_service, 'provider') else 'unknown'}")
-                    print(
-                        f"Attempting to generate image with prompt: {image_prompt[:100]}...")
-                    image_url = ai_service.generate_image(
-                        image_prompt, user=request.user)
-                    print(
-                        f"Image generation result: {'Success' if image_url else 'Failed - empty URL returned'}")
-
-                    # If primary provider fails, try OpenAI as fallback for image generation
-                    if not image_url and hasattr(ai_service, 'provider') and ai_service.provider != 'openai':
-                        print(
-                            "Primary provider failed, trying OpenAI for image generation...")
-                        try:
-                            openai_service = AIServiceFactory.create_service(
-                                'openai', 'gpt-3.5-turbo')
-                            if openai_service:
-                                image_url = openai_service.generate_image(
-                                    image_prompt, user=request.user)
-                                print(
-                                    f"OpenAI fallback result: {'Success' if image_url else 'Failed'}")
-                        except Exception as fallback_error:
-                            print(
-                                f"OpenAI fallback also failed: {fallback_error}")
-
-                except Exception as e:
-                    print(f"Image generation failed with exception: {e}")
-                    import traceback
-                    print(f"Detailed traceback: {traceback.format_exc()}")
-
-                    # Try OpenAI as fallback
-                    print("Trying OpenAI as fallback after exception...")
-                    try:
-                        openai_service = AIServiceFactory.create_service(
-                            'openai', 'gpt-3.5-turbo')
-                        if openai_service:
-                            image_url = openai_service.generate_image(
-                                image_prompt, user=request.user)
-                            print(
-                                f"OpenAI fallback after exception result: {'Success' if image_url else 'Failed'}")
-                    except Exception as fallback_error:
-                        print(
-                            f"OpenAI fallback after exception also failed: {fallback_error}")
-            else:
-                print("Image generation skipped (include_image=False)")
-
-            # Create single idea object with all variations stored in content
-            idea = CampaignIdea.objects.create(
-                campaign=campaign,
-                title=idea_data['title'],
-                description=idea_data['description'],
-                content=str(content),
-                platform=idea_data['platform'],
-                content_type=idea_data['content_type'],
-                variation_type='a',
-                headline=primary_variation.get(
-                    'headline', '') if primary_variation else '',
-                copy=primary_variation.get(
-                    'copy', '') if primary_variation else '',
-                cta=primary_variation.get(
-                    'cta', '') if primary_variation else '',
-                hashtags=primary_variation.get(
-                    'hashtags', []) if primary_variation else [],
-                visual_description=primary_variation.get(
-                    'visual_description', '') if primary_variation else '',
-                color_composition=primary_variation.get(
-                    'color_composition', '') if primary_variation else '',
-                image_url=image_url
-            )
-            ideas.append(idea)
-
-        # Serialize response
-        campaign_serializer = CampaignSerializer(campaign)
-        ideas_serializer = CampaignIdeaSerializer(ideas, many=True)
+        # Serialize the response
+        post_serializer = PostSerializer(post)
+        idea_serializer = PostIdeaSerializer(post_idea)
 
         return Response({
-            'message': 'Campanha e ideia com 3 variações geradas com sucesso!',
-            'campaign': campaign_serializer.data,
-            'ideas': ideas_serializer.data,
-            'progress': final_progress
+            'message': 'Post e ideia gerados com sucesso!',
+            'post': post_serializer.data,
+            'idea': idea_serializer.data
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
-        # Log the actual error for debugging
-        import traceback
-        print(f"ERROR in generate_campaign_ideas: {str(e)}")
-        print(f"Full traceback: {traceback.format_exc()}")
-
-        # Parse the error to provide user-friendly messages
-        error_message = str(e)
-        user_friendly_message = "Erro na geração de campanhas"
-
-        # Check for specific AI provider errors
-        if "insufficient_quota" in error_message or "quota" in error_message.lower():
-            if "openai" in error_message.lower():
-                user_friendly_message = "Suas cotas do OpenAI foram excedidas. Verifique seu plano e faturamento."
-            else:
-                user_friendly_message = "Suas cotas de IA foram excedidas. Verifique seu plano e faturamento."
-        elif "credit balance is too low" in error_message or "credits" in error_message.lower():
-            if "anthropic" in error_message.lower():
-                user_friendly_message = "Seus créditos do Anthropic estão baixos. Faça upgrade ou compre mais créditos."
-            else:
-                user_friendly_message = "Seus créditos de IA estão baixos. Faça upgrade ou compre mais créditos."
-        elif "api key" in error_message.lower() or "authentication" in error_message.lower():
-            user_friendly_message = "Problema de autenticação com o provedor de IA. Verifique as configurações."
-        elif "rate limit" in error_message.lower():
-            user_friendly_message = "Muitas solicitações. Aguarde um momento e tente novamente."
-        elif "network" in error_message.lower() or "connection" in error_message.lower():
-            user_friendly_message = "Problema de conexão com o provedor de IA. Tente novamente em alguns momentos."
-        elif "invalid_request" in error_message:
-            user_friendly_message = "Solicitação inválida para o provedor de IA. Verifique os parâmetros."
-        else:
-            # For any other error, provide a generic friendly message
-            user_friendly_message = "Erro temporário na geração de campanhas. Tente novamente em alguns momentos."
-
         return Response(
-            {
-                'error': user_friendly_message,
-                'error_type': 'ai_provider_error',
-                'details': f'Erro técnico: {error_message}' if 'debug' in request.GET else None
-            },
+            {'error': f'Erro na geração do post: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
 @api_view(['POST'])
-@permission_classes([])  # No authentication required
-def generate_public_ideas(request):
-    """Generate campaign ideas for public users without authentication with progress tracking."""
-    serializer = IdeaGenerationRequestSerializer(data=request.data)
+@permission_classes([permissions.IsAuthenticated])
+def generate_image_for_idea(request, idea_id):
+    """Generate an image for an existing post idea using DALL-E."""
 
-    if not serializer.is_valid():
-        return Response(
-            {'error': 'Dados inválidos', 'details': serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
+    # Get the post idea
     try:
-        # Check if user is authenticated
-        user = request.user if request.user.is_authenticated else None
-
-        # Extract AI service configuration (not campaign fields)
-        config_data = serializer.validated_data.copy()
-        ai_config = {
-            'preferred_provider': config_data.pop('preferred_provider', ''),
-            'preferred_model': config_data.pop('preferred_model', '')
-        }
-
-        # Set defaults if empty
-        preferred_provider = ai_config.get(
-            'preferred_provider', '').strip().lower()
-        preferred_model = ai_config.get('preferred_model', '').strip()
-
-        if not preferred_provider:
-            preferred_provider = 'google'
-        if not preferred_model:
-            if preferred_provider == 'google':
-                preferred_model = 'gemini-1.5-flash'
-            elif preferred_provider == 'openai':
-                preferred_model = 'gpt-3.5-turbo'
-            elif preferred_provider == 'anthropic':
-                preferred_model = 'claude-3-sonnet'
-            else:
-                preferred_model = 'gemini-1.5-flash'
-
-        # Create AI service with selected model
-        if not AI_SERVICE_FACTORY_AVAILABLE:
-            return Response(
-                {'error': 'Serviço de IA não disponível'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        ai_service = AIServiceFactory.create_service(
-            preferred_provider,
-            preferred_model
+        post_idea = PostIdea.objects.get(
+            id=idea_id,
+            post__user=request.user
         )
-
-        if not ai_service:
-            return Response(
-                {'error': 'Provedor de IA não disponível'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        # Create complete config for AI service
-        complete_config = {**config_data, **ai_config}
-
-        # Progress tracking function
-        def progress_callback(progress_data):
-            print(
-                f"Public Progress: {progress_data['percentage']}% - {progress_data['current_step_name']}")
-
-        ideas_data, final_progress = ai_service.generate_campaign_ideas_with_progress(
-            user, complete_config, progress_callback)
-
-        # Return ideas without saving to database
-        return Response({
-            'message': 'Ideias geradas com sucesso!',
-            'ideas': ideas_data,
-            'progress': final_progress
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        return Response(
-            {'error': f'Erro na geração de ideias: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def get_campaign_stats(request):
-    """Get statistics about user's campaigns and ideas."""
-    total_campaigns = Campaign.objects.filter(user=request.user).count()
-    active_campaigns = Campaign.objects.filter(
-        user=request.user, status='active').count()
-    draft_campaigns = Campaign.objects.filter(
-        user=request.user, status='draft').count()
-    completed_campaigns = Campaign.objects.filter(
-        user=request.user, status='completed').count()
-
-    total_ideas = CampaignIdea.objects.filter(
-        campaign__user=request.user).count()
-    approved_ideas = CampaignIdea.objects.filter(
-        campaign__user=request.user, status='approved').count()
-    draft_ideas = CampaignIdea.objects.filter(
-        campaign__user=request.user, status='draft').count()
-
-    return Response({
-        'campaigns': {
-            'total': total_campaigns,
-            'active': active_campaigns,
-            'draft': draft_campaigns,
-            'completed': completed_campaigns,
-        },
-        'ideas': {
-            'total': total_ideas,
-            'approved': approved_ideas,
-            'draft': draft_ideas,
-        }
-    })
-
-
-@api_view(['GET'])
-@permission_classes([])  # No authentication required
-def get_public_options(request):
-    """Get available options for idea generation (public endpoint)."""
-    from .models import CampaignObjective, SocialPlatform
-
-    # Define content types available for each platform
-    platform_content_types = {
-        'instagram': ['post', 'story', 'reel', 'carousel', 'live'],
-        'tiktok': ['video', 'live'],
-        'youtube': ['video', 'live'],
-        'linkedin': ['post', 'carousel', 'video', 'live'],
-    }
-
-    return Response({
-        'objectives': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CampaignObjective.choices
-        ],
-        'content_types': platform_content_types,
-        'platforms': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in SocialPlatform.choices
-        ],
-        'voice_tones': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in VoiceTone.choices
-        ]
-    })
-
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def get_available_options(request):
-    """Get available options for idea generation."""
-    from .models import CampaignObjective, SocialPlatform
-
-    # Define content types available for each platform
-    platform_content_types = {
-        'instagram': ['post', 'story', 'reel', 'carousel', 'live'],
-        'tiktok': ['video', 'live'],
-        'youtube': ['video', 'live'],
-        'linkedin': ['post', 'carousel', 'video', 'live'],
-    }
-
-    return Response({
-        'objectives': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in CampaignObjective.choices
-        ],
-        'content_types': platform_content_types,
-        'platforms': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in SocialPlatform.choices
-        ],
-        'voice_tones': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in VoiceTone.choices
-        ]
-    })
-
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def improve_idea(request, idea_id):
-    """Improve an existing campaign idea using AI with progress tracking."""
-    try:
-        # Get the idea
-        idea = CampaignIdea.objects.get(
-            id=idea_id, campaign__user=request.user)
-
-        # Get improvement prompt and AI model preferences
-        improvement_prompt = request.data.get('improvement_prompt', '')
-        preferred_provider = request.data.get(
-            'preferred_provider', '').strip().lower()
-        preferred_model = request.data.get('preferred_model', '').strip()
-
-        # Set defaults if empty
-        if not preferred_provider:
-            preferred_provider = 'google'
-        if not preferred_model:
-            if preferred_provider == 'google':
-                preferred_model = 'gemini-1.5-flash'
-            elif preferred_provider == 'openai':
-                preferred_model = 'gpt-3.5-turbo'
-            elif preferred_provider == 'anthropic':
-                preferred_model = 'claude-3-sonnet'
-            else:
-                preferred_model = 'gemini-1.5-flash'
-
-        if not improvement_prompt:
-            return Response(
-                {'error': 'Prompt de melhoria é obrigatório'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Get user's API key based on preferred provider
-        api_key = None
-        try:
-            from APIKeys.models import UserAPIKey
-            provider = preferred_provider if preferred_provider else 'gemini'
-            user_key = UserAPIKey.objects.filter(
-                user=request.user, provider=provider).first()
-            if user_key:
-                api_key = user_key.api_key
-        except ImportError:
-            # APIKeys app not available, continue without user key
-            pass
-
-        # Improve idea using AI with progress tracking
-        if not AI_SERVICE_FACTORY_AVAILABLE:
-            return Response(
-                {'error': 'Serviço de IA não disponível'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        # Create AI service with selected model
-        ai_service = AIServiceFactory.create_service(
-            preferred_provider or 'google',
-            preferred_model
-        )
-
-        if not ai_service:
-            return Response(
-                {'error': 'Provedor de IA não disponível'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        # Progress tracking function
-        def progress_callback(progress_data):
-            print(
-                f"Idea Improvement Progress: {progress_data['percentage']}% - {progress_data['current_step_name']}")
-
-        improved_data, final_progress = ai_service.improve_idea_with_progress(
-            request.user, idea, improvement_prompt, api_key, progress_callback)
-
-        if improved_data:
-            # Update the idea with improved content
-            idea.title = improved_data.get('title', idea.title)
-            idea.description = improved_data.get(
-                'description', idea.description)
-            idea.content = improved_data.get('content', idea.content)
-
-            # Update individual fields for frontend display
-            if improved_data.get('headline'):
-                idea.headline = improved_data['headline']
-            if improved_data.get('copy'):
-                idea.copy = improved_data['copy']
-            if improved_data.get('cta'):
-                idea.cta = improved_data['cta']
-            if improved_data.get('hashtags'):
-                idea.hashtags = improved_data['hashtags']
-            if improved_data.get('visual_description'):
-                idea.visual_description = improved_data['visual_description']
-            if improved_data.get('color_composition'):
-                idea.color_composition = improved_data['color_composition']
-
-            idea.save()
-
-            # Serialize response
-            idea_serializer = CampaignIdeaSerializer(idea)
-
-            return Response({
-                'message': 'Ideia melhorada com sucesso!',
-                'idea': idea_serializer.data,
-                'progress': final_progress
-            }, status=status.HTTP_200_OK)
-        else:
-            return Response(
-                {'error': 'Erro ao melhorar ideia: Falha na melhoria'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    except CampaignIdea.DoesNotExist:
+    except PostIdea.DoesNotExist:
         return Response(
             {'error': 'Ideia não encontrada'},
             status=status.HTTP_404_NOT_FOUND
         )
-    except Exception as e:
+
+    serializer = ImageGenerationRequestSerializer(data=request.data)
+    if not serializer.is_valid():
         return Response(
-            {'error': f'Erro ao melhorar ideia: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            {'error': 'Dados inválidos', 'details': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def campaigns_with_ideas(request):
-    """Get all campaigns with their ideas grouped as children."""
     try:
-        campaigns = Campaign.objects.filter(
-            user=request.user).prefetch_related('ideas')
+        # Get the custom prompt or use default
+        custom_prompt = serializer.validated_data.get('prompt')
 
-        result = []
-        for campaign in campaigns:
-            campaign_data = CampaignSerializer(campaign).data
-            campaign_data['ideas'] = CampaignIdeaSerializer(
-                campaign.ideas.all(), many=True).data
-            result.append(campaign_data)
+        # Prepare post data for image generation
+        post_data = {
+            'name': post_idea.post.name,
+            'objective': post_idea.post.objective,
+            'type': post_idea.post.type,
+        }
+
+        # Generate image
+        post_ai_service = PostAIService()
+        image_url = post_ai_service.generate_image_for_post(
+            user=request.user,
+            post_data=post_data,
+            content=post_idea.content,
+            custom_prompt=custom_prompt
+        )
+
+        # Update the post idea with the image URL
+        post_idea.image_url = image_url
+        post_idea.save()
 
         return Response({
-            'campaigns': result
+            'message': 'Imagem gerada com sucesso!',
+            'image_url': image_url,
+            'idea': PostIdeaSerializer(post_idea).data
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response(
-            {'error': f'Erro ao buscar campanhas: {str(e)}'},
+            {'error': f'Erro na geração da imagem: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def add_idea_to_campaign(request, campaign_id):
-    """Add a new idea to an existing campaign."""
+def edit_post_idea(request, idea_id):
+    """Edit/regenerate a post idea with optional AI assistance."""
+
+    # Get the post idea
     try:
-        # Check if campaign exists and belongs to user
-        try:
-            campaign = Campaign.objects.get(id=campaign_id, user=request.user)
-        except Campaign.DoesNotExist:
-            return Response(
-                {'error': 'Campanha não encontrada'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Validate required fields
-        required_fields = ['title', 'platform', 'content_type']
-        for field in required_fields:
-            if not request.data.get(field):
-                return Response(
-                    {'error': f'Campo obrigatório: {field}'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        # Create the new idea
-        idea_data = {
-            'campaign': campaign,
-            'title': request.data.get('title'),
-            'description': request.data.get('description', ''),
-            'content': request.data.get('content', ''),
-            'platform': request.data.get('platform'),
-            'content_type': request.data.get('content_type'),
-            'variation_type': request.data.get('variation_type', ''),
-            'headline': request.data.get('headline', ''),
-            'copy': request.data.get('copy', ''),
-            'cta': request.data.get('cta', ''),
-            'hashtags': request.data.get('hashtags', []),
-            'visual_description': request.data.get('visual_description', ''),
-            'color_composition': request.data.get('color_composition', ''),
-        }
-
-        idea = CampaignIdea.objects.create(**idea_data)
-
-        return Response(
-            CampaignIdeaSerializer(idea).data,
-            status=status.HTTP_201_CREATED
+        post_idea = PostIdea.objects.get(
+            id=idea_id,
+            post__user=request.user
         )
-
-    except Exception as e:
+    except PostIdea.DoesNotExist:
         return Response(
-            {'error': f'Erro ao criar ideia: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def generate_single_idea(request):
-    """Generate a single idea for an existing campaign with progress tracking."""
-    try:
-        # Get campaign
-        campaign_id = request.data.get('campaign_id')
-
-        campaign = Campaign.objects.get(id=campaign_id, user=request.user)
-
-        # Get idea parameters
-        platform = request.data.get('platform', 'instagram')
-        content_type = request.data.get('content_type', 'post')
-        variation_type = request.data.get('variation_type', 'a')
-
-        # Optional pre-filled content
-        title = request.data.get('title', '')
-        description = request.data.get('description', '')
-        content = request.data.get('content', '')
-
-        # Validate required fields
-        if not platform or not content_type:
-            return Response(
-                {'error': 'Plataforma e tipo de conteúdo são obrigatórios'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Prepare campaign data
-        campaign_data = {
-            'title': campaign.title,
-            'description': campaign.description,
-            'objectives': campaign.objectives,
-            'persona_age': campaign.persona_age,
-            'persona_location': campaign.persona_location,
-            'persona_income': campaign.persona_income,
-            'persona_interests': campaign.persona_interests,
-            'persona_behavior': campaign.persona_behavior,
-            'persona_pain_points': campaign.persona_pain_points,
-            'platforms': campaign.platforms,
-            'content_types': campaign.content_types,
-            'voice_tone': campaign.voice_tone,
-            'product_description': campaign.product_description,
-            'value_proposition': campaign.value_proposition,
-            'campaign_urgency': campaign.campaign_urgency,
-        }
-
-        # Prepare idea parameters
-        idea_params = {
-            'platform': platform,
-            'content_type': content_type,
-            'variation_type': variation_type,
-            'title': title,
-            'description': description,
-            'content': content,
-        }
-
-        # Get AI service preferences from request
-        preferred_provider = request.data.get(
-            'preferred_provider', 'google').strip().lower()
-        preferred_model = request.data.get('preferred_model', '').strip()
-
-        # Set defaults if empty
-        if not preferred_provider:
-            preferred_provider = 'google'
-        if not preferred_model:
-            if preferred_provider == 'google':
-                preferred_model = 'gemini-1.5-flash'
-            elif preferred_provider == 'openai':
-                preferred_model = 'gpt-3.5-turbo'
-            elif preferred_provider == 'anthropic':
-                preferred_model = 'claude-3-sonnet'
-            else:
-                preferred_model = 'gemini-1.5-flash'
-
-        # Create AI service with selected model
-        if not AI_SERVICE_FACTORY_AVAILABLE:
-            return Response(
-                {'error': 'Serviço de IA não disponível'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        ai_service = AIServiceFactory.create_service(
-            preferred_provider,
-            preferred_model
-        )
-
-        if not ai_service:
-            return Response(
-                {'error': 'Provedor de IA não disponível'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        # Progress tracking function
-
-        def progress_callback(progress_data):
-            print(
-                f"Single Idea Progress: {progress_data['percentage']}% - {progress_data['current_step_name']}")
-
-        generated_idea, final_progress = ai_service.generate_single_idea_with_progress(
-            request.user, campaign_data, idea_params, progress_callback)
-
-        if generated_idea:
-            # Debug logging
-            print("=== DEBUG: Generated idea content ===")
-            print(f"Content type: {type(generated_idea.get('content'))}")
-            print(f"Content value: {generated_idea.get('content')}")
-            print(
-                f"Content length: {len(str(generated_idea.get('content', '')))}")
-
-            # Create the idea in the database
-            idea = CampaignIdea.objects.create(
-                campaign=campaign,
-                title=generated_idea.get('title', f'Ideia para {platform}'),
-                description=generated_idea.get('description', ''),
-                content=generated_idea.get('content', ''),
-                platform=platform,
-                content_type=content_type,
-                variation_type=variation_type,
-                headline=generated_idea.get('headline', ''),
-                copy=generated_idea.get('copy', ''),
-                cta=generated_idea.get('cta', ''),
-                hashtags=generated_idea.get('hashtags', []),
-                visual_description=generated_idea.get(
-                    'visual_description', ''),
-                color_composition=generated_idea.get('color_composition', '')
-            )
-
-            # Serialize response
-            idea_serializer = CampaignIdeaSerializer(idea)
-
-            return Response({
-                'message': 'Ideia gerada com sucesso!',
-                'idea': idea_serializer.data,
-                'progress': final_progress
-            }, status=status.HTTP_201_CREATED)
-        else:
-            return Response(
-                {'error': 'Erro ao gerar ideia: Falha na geração'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-    except Campaign.DoesNotExist:
-        return Response(
-            {'error': 'Campanha não encontrada'},
+            {'error': 'Ideia não encontrada'},
             status=status.HTTP_404_NOT_FOUND
         )
-    except Exception as e:
+
+    serializer = PostIdeaEditRequestSerializer(data=request.data)
+    if not serializer.is_valid():
         return Response(
-            {'error': f'Erro ao gerar ideia: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            {'error': 'Dados inválidos', 'details': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
-
-# Legacy views for backward compatibility
-# Removed problematic legacy views that were causing type conflicts
-
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def get_available_models(request):
-    """Get available AI models with their credit costs and capabilities."""
     try:
-        if not AI_MODEL_SERVICE_AVAILABLE:
-            return Response(
-                {'error': 'AI model service not available'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
+        user_prompt = serializer.validated_data.get('prompt')
+        ai_provider = serializer.validated_data.get(
+            'preferred_provider', 'google')
+        ai_model = serializer.validated_data.get(
+            'preferred_model', 'gemini-1.5-flash')
 
-        # Get available models
-        models = AIModelService.get_available_models()
+        # Prepare post data
+        post_data = {
+            'name': post_idea.post.name,
+            'objective': post_idea.post.objective,
+            'type': post_idea.post.type,
+            'target_gender': post_idea.post.target_gender,
+            'target_age': post_idea.post.target_age,
+            'target_location': post_idea.post.target_location,
+            'target_salary': post_idea.post.target_salary,
+            'target_interests': post_idea.post.target_interests,
+        }
 
-        # Get user's current credit balance
-        user_balance = AIModelService.get_user_credit_balance(request.user)
-
-        # Calculate estimated costs for a typical campaign generation
-        typical_tokens = 2000  # Typical tokens for campaign generation
-        models_with_costs = []
-
-        for model in models:
-            estimated_cost = AIModelService.calculate_cost(
-                model['name'], typical_tokens)
-            models_with_costs.append({
-                **model,
-                'estimated_cost_for_typical_use': estimated_cost,
-                'can_afford': user_balance >= estimated_cost
-            })
-
-        return Response({
-            'models': models_with_costs,
-            'user_credit_balance': user_balance,
-            'typical_usage_tokens': typical_tokens,
-            'credit_currency': 'credits'
-        })
-
-    except Exception as e:
-        return Response(
-            {'error': f'Error retrieving models: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        # Regenerate content
+        post_ai_service = PostAIService()
+        result = post_ai_service.regenerate_post_content(
+            user=request.user,
+            post_data=post_data,
+            current_content=post_idea.content,
+            user_prompt=user_prompt,
+            ai_provider=ai_provider,
+            ai_model=ai_model
         )
 
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def get_working_models(request):
-    """Get only AI models that are currently working and available for use."""
-    try:
-        if not AI_SERVICE_FACTORY_AVAILABLE:
-            return Response(
-                {'error': 'AI service factory not available'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-
-        # Define all possible models to test
-        all_models = [
-            {
-                'provider': 'google',
-                'model': 'gemini-1.5-flash',
-                'display_name': 'Gemini 1.5 Flash',
-                'provider_name': 'Google',
-                'description': 'Rápido e eficiente para geração de conteúdo',
-                'estimated_cost_per_1k_tokens': 0.075,
-                'recommended': True
-            },
-            {
-                'provider': 'google',
-                'model': 'gemini-1.5-pro',
-                'display_name': 'Gemini 1.5 Pro',
-                'provider_name': 'Google',
-                'description': 'Modelo mais avançado para conteúdo complexo',
-                'estimated_cost_per_1k_tokens': 1.25,
-                'recommended': False
-            },
-            {
-                'provider': 'openai',
-                'model': 'gpt-3.5-turbo',
-                'display_name': 'GPT-3.5 Turbo',
-                'provider_name': 'OpenAI',
-                'description': 'Equilibrio entre qualidade e velocidade',
-                'estimated_cost_per_1k_tokens': 0.50,
-                'recommended': True
-            },
-            {
-                'provider': 'openai',
-                'model': 'gpt-4o-mini',
-                'display_name': 'GPT-4O Mini',
-                'provider_name': 'OpenAI',
-                'description': 'Versão compacta do GPT-4 com boa performance',
-                'estimated_cost_per_1k_tokens': 0.15,
-                'recommended': True
-            },
-            {
-                'provider': 'anthropic',
-                'model': 'claude-3-haiku',
-                'display_name': 'Claude 3 Haiku',
-                'provider_name': 'Anthropic',
-                'description': 'Rápido e econômico para tarefas simples',
-                'estimated_cost_per_1k_tokens': 0.25,
-                'recommended': True
-            },
-            {
-                'provider': 'anthropic',
-                'model': 'claude-3-sonnet',
-                'display_name': 'Claude 3 Sonnet',
-                'provider_name': 'Anthropic',
-                'description': 'Equilibrio ideal entre velocidade e inteligência',
-                'estimated_cost_per_1k_tokens': 3.00,
-                'recommended': False
-            },
-        ]
-
-        available_models = []
-
-        # Check which providers are available (basic service creation test)
-        for model_info in all_models:
-            try:
-                # Test if the service can be created (basic check)
-                ai_service = AIServiceFactory.create_service(
-                    model_info['provider'],
-                    model_info['model']
-                )
-
-                if ai_service:
-                    # Service can be created, add to available models
-                    available_models.append({
-                        **model_info,
-                        'status': 'available',
-                        'can_afford': True  # Assume true for now - frontend can check credits
-                    })
-
-            except Exception:
-                # If service creation fails, skip this model
-                continue
-
-        # If no models are available, provide at least Google Gemini as fallback
-        if not available_models:
-            available_models = [
-                {
-                    'provider': 'google',
-                    'model': 'gemini-1.5-flash',
-                    'display_name': 'Gemini 1.5 Flash',
-                    'provider_name': 'Google',
-                    'description': 'Rápido e eficiente para geração de conteúdo',
-                    'estimated_cost_per_1k_tokens': 0.075,
-                    'status': 'available',
-                    'can_afford': True,
-                    'recommended': True
-                }
-            ]
-
-        # Sort models: recommended first, then by cost
-        available_models.sort(key=lambda x: (
-            not x.get('recommended', False), x.get('estimated_cost_per_1k_tokens', 0)))
+        # Update the post idea
+        post_idea.content = result['content']
+        post_idea.ai_provider = result['ai_provider']
+        post_idea.ai_model = result['ai_model']
+        post_idea.save()
 
         return Response({
-            'available_models': available_models,
-            'total_available': len(available_models),
-            'recommended_models': [m for m in available_models if m.get('recommended')],
-            'message': f'{len(available_models)} modelos disponíveis para uso'
-        })
+            'message': 'Ideia editada com sucesso!',
+            'idea': PostIdeaSerializer(post_idea).data
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response(
-            {'error': f'Error checking available models: {str(e)}'},
+            {'error': f'Erro na edição da ideia: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def estimate_campaign_cost(request):
-    """Estimate the credit cost for generating a campaign."""
+def regenerate_image_for_idea(request, idea_id):
+    """Regenerate the image for a post idea with optional custom prompt."""
+
+    # Get the post idea
     try:
-        # Get campaign configuration from request
-        config = request.data.get('config', {})
+        post_idea = PostIdea.objects.get(
+            id=idea_id,
+            post__user=request.user
+        )
+    except PostIdea.DoesNotExist:
+        return Response(
+            {'error': 'Ideia não encontrada'},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
-        # Simple token estimation based on config complexity
-        base_tokens = 500
-        platform_multiplier = len(config.get('platforms', [])) * 200
-        objective_multiplier = len(config.get('objectives', [])) * 150
-        persona_multiplier = 100 if any(config.get(f'persona_{field}') for field in [
-                                        'age', 'location', 'income', 'interests', 'behavior', 'pain_points']) else 0
+    serializer = ImageGenerationRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(
+            {'error': 'Dados inválidos', 'details': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-        estimated_tokens = base_tokens + platform_multiplier + \
-            objective_multiplier + persona_multiplier
+    try:
+        custom_prompt = serializer.validated_data.get('prompt')
 
-        # Simple cost calculation (1 credit per 1000 tokens)
-        estimated_cost = estimated_tokens / 1000
+        # Prepare post data
+        post_data = {
+            'name': post_idea.post.name,
+            'objective': post_idea.post.objective,
+            'type': post_idea.post.type,
+        }
 
-        # Mock available models
-        available_models = [
-            {
-                'name': 'gemini-1.5-flash',
-                'provider': 'Google',
-                'cost_per_token': 0.000001,
-                'estimated_cost': estimated_cost * 0.8,  # 20% cheaper
-                'can_afford': True
-            },
-            {
-                'name': 'gpt-3.5-turbo',
-                'provider': 'OpenAI',
-                'cost_per_token': 0.000002,
-                'estimated_cost': estimated_cost,
-                'can_afford': True
-            },
-            {
-                'name': 'claude-3-haiku',
-                'provider': 'Anthropic',
-                'cost_per_token': 0.00000025,
-                'estimated_cost': estimated_cost * 0.5,  # 50% cheaper
-                'can_afford': True
-            }
-        ]
+        # Regenerate image
+        post_ai_service = PostAIService()
+        image_url = post_ai_service.generate_image_for_post(
+            user=request.user,
+            post_data=post_data,
+            content=post_idea.content,
+            custom_prompt=custom_prompt
+        )
+
+        # Update the post idea with new image
+        post_idea.image_url = image_url
+        post_idea.save()
 
         return Response({
-            'estimated_tokens': estimated_tokens,
-            'estimated_cost': estimated_cost,
-            'available_models': available_models,
-            'recommended_model': available_models[2],  # Claude (cheapest)
-            'message': 'Estimativa baseada em configuração da campanha'
-        })
+            'message': 'Imagem regenerada com sucesso!',
+            'image_url': image_url,
+            'idea': PostIdeaSerializer(post_idea).data
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response(
-            {'error': f'Error estimating cost: {str(e)}'},
+            {'error': f'Erro na regeneração da imagem: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+# Helper endpoints
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_post_options(request):
+    """Get available options for post creation."""
+
+    options = {
+        'objectives': [
+            {'value': choice[0], 'label': choice[1]}
+            for choice in PostObjective.choices
+        ],
+        'types': [
+            {'value': choice[0], 'label': choice[1]}
+            for choice in PostType.choices
+        ],
+        'genders': [
+            {'value': choice[0], 'label': choice[1]}
+            for choice in Gender.choices
+        ]
+    }
+
+    serializer = PostOptionsSerializer(options)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_user_posts_with_ideas(request):
+    """Get all user posts with their ideas."""
+
+    try:
+        posts = Post.objects.filter(
+            user=request.user).prefetch_related('ideas')
+        serializer = PostWithIdeasSerializer(posts, many=True)
+
+        return Response({
+            'posts': serializer.data,
+            'total_posts': posts.count(),
+            'total_ideas': sum(post.ideas.count() for post in posts)
+        })
+    except Exception as e:
+        return Response(
+            {'error': f'Erro ao buscar posts: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_post_stats(request):
+    """Get statistics about user's posts and ideas."""
+
+    try:
+        total_posts = Post.objects.filter(user=request.user).count()
+        total_ideas = PostIdea.objects.filter(post__user=request.user).count()
+        approved_ideas = PostIdea.objects.filter(
+            post__user=request.user,
+            status='approved'
+        ).count()
+        draft_ideas = PostIdea.objects.filter(
+            post__user=request.user,
+            status='draft'
+        ).count()
+
+        # Count by post type
+        post_types = {}
+        for post_type, display_name in PostType.choices:
+            count = Post.objects.filter(
+                user=request.user, type=post_type).count()
+            if count > 0:
+                post_types[display_name] = count
+
+        return Response({
+            'total_posts': total_posts,
+            'total_ideas': total_ideas,
+            'approved_ideas': approved_ideas,
+            'draft_ideas': draft_ideas,
+            'post_types_distribution': post_types
+        })
+    except Exception as e:
+        return Response(
+            {'error': f'Erro ao buscar estatísticas: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

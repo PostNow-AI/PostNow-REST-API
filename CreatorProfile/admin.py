@@ -13,16 +13,19 @@ class CreatorProfileAdmin(admin.ModelAdmin):
         'user_display',
         'professional_name',
         'profession',
-        'specialization',
+        'business_name',
+        'current_step',
         'onboarding_completed',
-        'onboarding_skipped',
         'created_at',
     ]
 
     list_filter = [
         'onboarding_completed',
-        'onboarding_skipped',
+        'step_1_completed',
+        'step_2_completed',
+        'step_3_completed',
         'profession',
+        'business_city',
         'created_at',
     ]
 
@@ -32,14 +35,19 @@ class CreatorProfileAdmin(admin.ModelAdmin):
         'user__email',
         'professional_name',
         'profession',
+        'business_name',
         'specialization',
     ]
 
     readonly_fields = [
         'user',
+        'current_step',
+        'step_1_completed',
+        'step_2_completed',
+        'step_3_completed',
         'onboarding_completed',
-        'onboarding_skipped',
         'onboarding_completed_at',
+        'color_palette',
         'created_at',
         'updated_at',
     ]
@@ -50,44 +58,44 @@ class CreatorProfileAdmin(admin.ModelAdmin):
         }),
         ('Status do Onboarding', {
             'fields': (
+                'current_step',
+                'step_1_completed',
+                'step_2_completed',
+                'step_3_completed',
                 'onboarding_completed',
-                'onboarding_skipped',
                 'onboarding_completed_at',
             ),
             'classes': ('collapse',),
         }),
-        ('Informações Profissionais', {
+        ('Etapa 1 - Informações Pessoais', {
             'fields': (
                 'professional_name',
                 'profession',
-                'specialization',
+                'instagram_handle',
+                'whatsapp_number',
             )
         }),
-        ('Redes Sociais', {
+        ('Etapa 2 - Informações do Negócio', {
             'fields': (
-                'linkedin_url',
-                'instagram_username',
-                'youtube_channel',
-                'tiktok_username',
-            ),
-            'classes': ('collapse',),
+                'business_name',
+                'specialization',
+                'business_instagram_handle',
+                'business_website',
+                'business_city',
+                'business_description',
+            )
         }),
-        ('Brandbook - Cores', {
+        ('Etapa 3 - Identidade da Marca', {
             'fields': (
-                'primary_color',
-                'secondary_color',
-                'accent_color_1',
-                'accent_color_2',
-                'accent_color_3',
-            ),
-            'classes': ('collapse',),
-        }),
-        ('Brandbook - Tipografia', {
-            'fields': (
-                'primary_font',
-                'secondary_font',
-            ),
-            'classes': ('collapse',),
+                'logo',
+                'voice_tone',
+                'color_1',
+                'color_2',
+                'color_3',
+                'color_4',
+                'color_5',
+                'color_palette',
+            )
         }),
     )
 

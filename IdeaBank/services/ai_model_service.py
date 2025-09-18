@@ -18,38 +18,39 @@ class AIModelService:
     """Service for managing AI model configurations and credit costs."""
 
     # Default model configurations if database is not available
+    # Costs multiplied by 100x from original for higher credit consumption
     DEFAULT_MODELS = {
         'gemini-1.5-flash': {
             'provider': 'Google',
-            'cost_per_token': Decimal('0.000001'),
+            'cost_per_token': Decimal('0.04'),
             'max_tokens': 8192,
             'supports_streaming': False,
             'is_active': True
         },
         'gemini-1.5-pro': {
             'provider': 'Google',
-            'cost_per_token': Decimal('0.000002'),
+            'cost_per_token': Decimal('0.2'),
             'max_tokens': 32768,
             'supports_streaming': False,
             'is_active': True
         },
         'claude-3-sonnet': {
             'provider': 'Anthropic',
-            'cost_per_token': Decimal('0.000003'),
+            'cost_per_token': Decimal('0.2'),
             'max_tokens': 200000,
             'supports_streaming': True,
             'is_active': True
         },
         'gpt-4': {
             'provider': 'OpenAI',
-            'cost_per_token': Decimal('0.00003'),
+            'cost_per_token': Decimal('4.5'),
             'max_tokens': 8192,
             'supports_streaming': True,
             'is_active': True
         },
         'gpt-3.5-turbo': {
             'provider': 'OpenAI',
-            'cost_per_token': Decimal('0.000002'),
+            'cost_per_token': Decimal('0.15'),
             'max_tokens': 4096,
             'supports_streaming': True,
             'is_active': True
@@ -109,12 +110,40 @@ class AIModelService:
         """Calculate estimated cost for using a specific AI model."""
         model_config = cls.get_model_config(model_name)
         if not model_config:
-            raise ValueError(f"Model '{model_name}' not found or not active")
+            return 0.0
 
         cost_per_token = model_config['cost_per_token']
         total_cost = cost_per_token * estimated_tokens
 
         return float(total_cost)
+
+    @classmethod
+    def calculate_image_cost(cls, model_name: str, num_images: int = 1) -> float:
+        """Calculate estimated cost for image generation using a specific AI model."""
+        if CREDIT_SYSTEM_AVAILABLE:
+            try:
+                from CreditSystem.models import AIModel
+                ai_model = AIModel.objects.get(name=model_name, is_active=True)
+                if ai_model.supports_image_generation:
+                    return float(ai_model.cost_per_image * num_images)
+                else:
+                    raise ValueError(
+                        f"Model {model_name} does not support image generation")
+            except Exception as e:
+                print(f"Error calculating image cost: {str(e)}")
+                # Fallback to default image costs
+                pass
+
+        # Fallback to default image costs
+        default_image_costs = {
+            'dall-e-3': 0.040,
+            'gemini-imagen': 0.020,
+            'gemini-1.5-pro': 0.020,
+            'gemini-1.5-flash': 0.015,
+        }
+
+        # Default $0.03 per image
+        return default_image_costs.get(model_name, 0.030) * num_images
 
     @classmethod
     def validate_user_credits(cls, user: User, model_name: str, estimated_tokens: int) -> bool:
@@ -145,6 +174,37 @@ class AIModelService:
             )
         except Exception as e:
             print(f"Error deducting credits: {str(e)}")
+            return False
+
+    @classmethod
+    def validate_image_credits(cls, user: User, model_name: str, num_images: int = 1) -> bool:
+        """Validate if user has sufficient credits for image generation."""
+        if not CREDIT_SYSTEM_AVAILABLE:
+            return True  # Skip validation if credit system not available
+
+        try:
+            estimated_cost = cls.calculate_image_cost(model_name, num_images)
+            return CreditService.has_sufficient_credits(user, estimated_cost)
+        except Exception as e:
+            print(f"Error validating image credits: {str(e)}")
+            return False
+
+    @classmethod
+    def deduct_image_credits(cls, user: User, model_name: str, num_images: int = 1, description: str = "") -> bool:
+        """Deduct credits after successful image generation."""
+        if not CREDIT_SYSTEM_AVAILABLE:
+            return True  # Skip deduction if credit system not available
+
+        try:
+            actual_cost = cls.calculate_image_cost(model_name, num_images)
+            return CreditService.deduct_credits(
+                user=user,
+                amount=actual_cost,
+                ai_model=model_name,
+                description=f"Geração de imagem - {description}" if description else "Geração de imagem"
+            )
+        except Exception as e:
+            print(f"Error deducting image credits: {str(e)}")
             return False
 
     @classmethod

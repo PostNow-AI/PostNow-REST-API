@@ -1,3 +1,7 @@
+"""
+URL patterns for new Post-based IdeaBank system.
+"""
+
 from django.urls import path
 
 from . import views
@@ -5,33 +9,31 @@ from . import views
 app_name = 'ideabank'
 
 urlpatterns = [
-    # Campaign management
-    path('campaigns/', views.CampaignListView.as_view(), name='campaign-list'),
-    path('campaigns/<int:pk>/', views.CampaignDetailView.as_view(),
-         name='campaign-detail'),
-    path('campaigns/<int:campaign_id>/ideas/',
-         views.CampaignIdeaListView.as_view(), name='campaign-ideas'),
+    # Post management endpoints
+    path('posts/', views.PostListView.as_view(), name='post-list'),
+    path('posts/<int:pk>/', views.PostDetailView.as_view(), name='post-detail'),
+    path('posts/<int:pk>/with-ideas/',
+         views.PostWithIdeasView.as_view(), name='post-with-ideas'),
 
-    # AI-powered idea generation
-    path('generate-ideas/', views.generate_campaign_ideas, name='generate-ideas'),
-    path('public/generate-ideas/', views.generate_public_ideas,
-         name='generate-public-ideas'),
-    path('generate-single-idea/', views.generate_single_idea,
-         name='generate-single-idea'),
+    # Post Ideas management
+    path('posts/<int:post_id>/ideas/',
+         views.PostIdeaListView.as_view(), name='post-idea-list'),
+    path('ideas/<int:pk>/', views.PostIdeaDetailView.as_view(),
+         name='post-idea-detail'),
 
-    # AI model information and cost estimation
-    path('ai-models/', views.get_available_models, name='available-models'),
-    path('working-models/', views.get_working_models, name='working-models'),
-    path('estimate-cost/', views.estimate_campaign_cost, name='estimate-cost'),
+    # AI-powered generation endpoints
+    path('generate/post-idea/', views.generate_post_idea,
+         name='generate-post-idea'),
+    path('ideas/<int:idea_id>/generate-image/',
+         views.generate_image_for_idea, name='generate-image-for-idea'),
+    path('ideas/<int:idea_id>/edit/',
+         views.edit_post_idea, name='edit-post-idea'),
+    path('ideas/<int:idea_id>/regenerate-image/',
+         views.regenerate_image_for_idea, name='regenerate-image-for-idea'),
 
-    # Campaign data and options
-    path('campaigns-with-ideas/', views.campaigns_with_ideas,
-         name='campaigns-with-ideas'),
-    path('stats/', views.get_campaign_stats, name='campaign-stats'),
-    path('options/', views.get_available_options, name='available-options'),
-
-    # Individual idea management
-    path('ideas/<int:idea_id>/improve/',
-         views.improve_idea, name='improve-idea'),
-    path('ideas/<int:pk>/', views.CampaignIdeaDetailView.as_view(), name='idea-detail'),
+    # Helper endpoints
+    path('options/', views.get_post_options, name='post-options'),
+    path('posts/all-with-ideas/', views.get_user_posts_with_ideas,
+         name='all-posts-with-ideas'),
+    path('stats/', views.get_post_stats, name='post-stats'),
 ]

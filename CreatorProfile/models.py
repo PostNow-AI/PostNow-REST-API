@@ -1,142 +1,180 @@
+import random
+
 from django.contrib.auth.models import User
 from django.db import models
 
 
+def generate_random_colors():
+    """Generate 5 random hex colors."""
+    colors = [
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+        '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+        '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D2B4DE'
+    ]
+    return random.sample(colors, 5)
+
+
 class CreatorProfile(models.Model):
     """
-    Simplified Creator Profile model for new onboarding system.
-    Handles user data for campaign personalization.
+    Creator Profile model for 3-step onboarding process.
+    Step 1: Personal info, Step 2: Business info, Step 3: Branding
     """
 
-    # === BASIC USER INFO ===
+    # === RELATIONSHIP ===
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name='creator_profile')
 
-    # Avatar field for profile image
-    avatar = models.TextField(
-        blank=True,
-        null=True,
-        verbose_name="Avatar",
-        help_text="Base64 encoded image data (max 1MB)"
-    )
-
-    # Professional information
+    # === STEP 1: PERSONAL INFORMATION ===
     professional_name = models.CharField(
         max_length=200,
-        blank=True,
-        null=True,
+        default='',
         verbose_name="Nome Profissional",
         help_text="Nome que será usado em campanhas e conteúdo"
     )
 
     profession = models.CharField(
         max_length=200,
-        blank=True,
-        null=True,
+        default='',
         verbose_name="Profissão",
         help_text="Ex: Advogado, Coach, Consultor"
     )
 
-    specialization = models.CharField(
-        max_length=200,
+    instagram_handle = models.CharField(
+        max_length=100,
         blank=True,
         null=True,
+        verbose_name="Instagram Handle",
+        help_text="Seu @ do Instagram (sem o @)"
+    )
+
+    whatsapp_number = models.CharField(
+        max_length=20,
+        default='',
+        verbose_name="WhatsApp",
+        help_text="Número do WhatsApp com DDD"
+    )
+
+    # === STEP 2: BUSINESS INFORMATION ===
+    business_name = models.CharField(
+        max_length=200,
+        default='',
+        verbose_name="Nome do Negócio",
+        help_text="Nome da sua empresa/marca"
+    )
+
+    specialization = models.CharField(
+        max_length=200,
+        default='',
         verbose_name="Especialização",
         help_text="Ex: Tributário, Executivo, Empresarial"
     )
 
-    # === SOCIAL MEDIA ===
-    linkedin_url = models.URLField(
-        blank=True,
-        null=True,
-        verbose_name="LinkedIn URL"
-    )
-
-    instagram_username = models.CharField(
+    business_instagram_handle = models.CharField(
         max_length=100,
         blank=True,
         null=True,
-        verbose_name="Instagram Username"
+        verbose_name="Instagram do Negócio",
+        help_text="@ do Instagram do seu negócio (sem o @)"
     )
 
-    youtube_channel = models.CharField(
+    business_website = models.URLField(
+        blank=True,
+        null=True,
+        verbose_name="Website do Negócio",
+        help_text="Site da sua empresa"
+    )
+
+    business_city = models.CharField(
         max_length=100,
-        blank=True,
-        null=True,
-        verbose_name="YouTube Channel"
+        default="Remoto",
+        verbose_name="Cidade do Negócio",
+        help_text="Cidade onde atua"
     )
 
-    tiktok_username = models.CharField(
+    business_description = models.TextField(
+        default='',
+        verbose_name="Descrição do Negócio",
+        help_text="Conte sobre seu negócio e o que você faz"
+    )
+
+    # === STEP 3: BRANDING ===
+    logo = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Logo",
+        help_text="Logo da sua marca em formato base64 (opcional)"
+    )
+
+    voice_tone = models.CharField(
         max_length=100,
-        blank=True,
-        null=True,
-        verbose_name="TikTok Username"
+        default='',
+        verbose_name="Tom de Voz",
+        help_text="Ex: Profissional, Descontraído, Amigável"
     )
 
-    # === BRANDBOOK ===
-    primary_color = models.CharField(
-        max_length=7,  # Hex color code
-        blank=True,
-        null=True,
-        verbose_name="Cor Primária",
-        help_text="Cor principal da marca (formato hex: #FFFFFF)"
-    )
-
-    secondary_color = models.CharField(
+    # Five color palette - defaults to random colors
+    color_1 = models.CharField(
         max_length=7,
         blank=True,
         null=True,
-        verbose_name="Cor Secundária"
+        verbose_name="Cor 1",
+        help_text="Primeira cor da paleta (hex: #FFFFFF)"
     )
 
-    accent_color_1 = models.CharField(
+    color_2 = models.CharField(
         max_length=7,
         blank=True,
         null=True,
-        verbose_name="Cor de Destaque 1"
+        verbose_name="Cor 2",
+        help_text="Segunda cor da paleta"
     )
 
-    accent_color_2 = models.CharField(
+    color_3 = models.CharField(
         max_length=7,
         blank=True,
         null=True,
-        verbose_name="Cor de Destaque 2"
+        verbose_name="Cor 3",
+        help_text="Terceira cor da paleta"
     )
 
-    accent_color_3 = models.CharField(
+    color_4 = models.CharField(
         max_length=7,
         blank=True,
         null=True,
-        verbose_name="Cor de Destaque 3"
+        verbose_name="Cor 4",
+        help_text="Quarta cor da paleta"
     )
 
-    primary_font = models.CharField(
-        max_length=100,
+    color_5 = models.CharField(
+        max_length=7,
         blank=True,
         null=True,
-        verbose_name="Fonte Primária",
-        help_text="Ex: Inter, Roboto, Open Sans"
+        verbose_name="Cor 5",
+        help_text="Quinta cor da paleta"
     )
 
-    secondary_font = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True,
-        verbose_name="Fonte Secundária",
-        help_text="Ex: Poppins, Montserrat"
+    # === ONBOARDING STATUS ===
+    step_1_completed = models.BooleanField(
+        default=False,
+        verbose_name="Etapa 1 Completada"
     )
 
-    # === METADATA ===
+    step_2_completed = models.BooleanField(
+        default=False,
+        verbose_name="Etapa 2 Completada"
+    )
+
+    step_3_completed = models.BooleanField(
+        default=False,
+        verbose_name="Etapa 3 Completada"
+    )
+
     onboarding_completed = models.BooleanField(
         default=False,
         verbose_name="Onboarding Completado"
     )
 
-    onboarding_skipped = models.BooleanField(
-        default=False,
-        verbose_name="Onboarding Pulado"
-    )
-
+    # === METADATA ===
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     onboarding_completed_at = models.DateTimeField(
@@ -150,40 +188,76 @@ class CreatorProfile(models.Model):
         verbose_name_plural = "Perfis dos Criadores"
 
     def __str__(self):
-        return f"{self.user.get_full_name()} - {self.profession or 'Sem profissão'}"
+        return f"{self.professional_name} - {self.profession}"
 
     def save(self, *args, **kwargs):
-        """Override save to automatically set onboarding status."""
-        # Check if any onboarding data is filled with valid content
-        has_data = any([
-            self.professional_name and str(self.professional_name).strip(),
-            self.profession and str(self.profession).strip(),
-            self.specialization and str(self.specialization).strip(),
-            self.linkedin_url and str(self.linkedin_url).strip(),
-            self.instagram_username and str(self.instagram_username).strip(),
-            self.youtube_channel and str(self.youtube_channel).strip(),
-            self.tiktok_username and str(self.tiktok_username).strip(),
-            self.primary_color and str(self.primary_color).strip(),
-            self.secondary_color and str(self.secondary_color).strip(),
-            self.accent_color_1 and str(self.accent_color_1).strip(),
-            self.accent_color_2 and str(self.accent_color_2).strip(),
-            self.accent_color_3 and str(self.accent_color_3).strip(),
-            self.primary_font and str(self.primary_font).strip(),
-            self.secondary_font and str(self.secondary_font).strip(),
-        ])
+        """Override save to manage onboarding status and assign random colors."""
+        # Assign random colors if none are set
+        if not any([self.color_1, self.color_2, self.color_3, self.color_4, self.color_5]):
+            random_colors = generate_random_colors()
+            self.color_1 = random_colors[0]
+            self.color_2 = random_colors[1]
+            self.color_3 = random_colors[2]
+            self.color_4 = random_colors[3]
+            self.color_5 = random_colors[4]
 
-        # Only mark as completed if there's actual data and it wasn't already completed
-        if has_data and not self.onboarding_completed:
-            self.onboarding_completed = True
-            if not self.onboarding_completed_at:
-                from django.utils import timezone
-                self.onboarding_completed_at = timezone.now()
-        elif not has_data and self.onboarding_completed:
-            # If no data, ensure onboarding is not marked as completed
-            self.onboarding_completed = False
+        # Check step completion status
+        self.step_1_completed = bool(
+            self.professional_name and self.professional_name.strip() and
+            self.profession and self.profession.strip() and
+            self.whatsapp_number and self.whatsapp_number.strip()
+        )
+
+        self.step_2_completed = bool(
+            self.business_name and self.business_name.strip() and
+            self.specialization and self.specialization.strip() and
+            self.business_city and self.business_city.strip() and
+            self.business_description and self.business_description.strip()
+        )
+
+        self.step_3_completed = bool(
+            self.voice_tone and self.voice_tone.strip()
+        )
+
+        # Update overall onboarding status
+        was_completed = self.onboarding_completed
+        self.onboarding_completed = (
+            self.step_1_completed and
+            self.step_2_completed and
+            self.step_3_completed
+        )
+
+        # Set completion timestamp if just completed
+        if self.onboarding_completed and not was_completed:
+            from django.utils import timezone
+            self.onboarding_completed_at = timezone.now()
+        elif not self.onboarding_completed:
             self.onboarding_completed_at = None
 
         super().save(*args, **kwargs)
+
+    @property
+    def current_step(self):
+        """Return the current step number (1, 2, 3, or 4 if completed)."""
+        if not self.step_1_completed:
+            return 1
+        elif not self.step_2_completed:
+            return 2
+        elif not self.step_3_completed:
+            return 3
+        else:
+            return 4  # Completed
+
+    @property
+    def color_palette(self):
+        """Return the complete color palette as a list."""
+        return [
+            self.color_1,
+            self.color_2,
+            self.color_3,
+            self.color_4,
+            self.color_5
+        ]
 
 
 class UserBehavior(models.Model):

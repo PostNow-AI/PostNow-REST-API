@@ -96,12 +96,12 @@ class BaseAIService(ABC):
         """Build prompt for campaign idea generation."""
         profile = CreatorProfile.objects.filter(user=user).first()
 
+        # Build creator profile section
+        creator_profile_section = self._build_creator_profile_section(
+            profile) if profile else ""
+
         # Build persona section
         persona_section = self._build_persona_section(config)
-
-        # Build social media section
-        social_media_section = self._build_social_media_section(
-            profile) if profile else ""
 
         # Build objectives section
         objectives = config.get('objectives', [])
@@ -122,9 +122,12 @@ class BaseAIService(ABC):
                 for platform, types in content_types.items()
             ])
 
-        # Build voice tone section
-        voice_tone = config.get('voice_tone', 'professional')
-        voice_tone_text = dict(VoiceTone.choices).get(voice_tone, voice_tone)
+        # Build voice tone section - prefer from profile, then config
+        profile_voice_tone = profile.voice_tone if profile and profile.voice_tone else None
+        config_voice_tone = config.get('voice_tone', 'professional')
+        voice_tone = profile_voice_tone or config_voice_tone
+        voice_tone_text = dict(VoiceTone.choices).get(
+            voice_tone, voice_tone) if hasattr(VoiceTone, 'choices') else voice_tone
 
         # Build product/service section
         product_description = config.get(
@@ -147,16 +150,18 @@ CONTEXTO DA CAMPANHA:
 - Proposta de Valor: {value_proposition}
 - Urgência da Campanha: {campaign_urgency}
 
-{persona_section}
+{creator_profile_section}
 
-{social_media_section}
+{persona_section}
 
 INSTRUÇÕES CRÍTICAS:
 1. Gere EXATAMENTE 1 ideia criativa e estratégica
 2. Cada ideia DEVE ser específica para as plataformas e tipos de conteúdo solicitados
 3. NÃO gere ideias para plataformas não solicitadas
 4. NÃO gere tipos de conteúdo não solicitados
-5. Cada ideia deve incluir:
+5. Use o perfil do criador para personalizar o conteúdo
+6. Incorpore o tom de voz e informações profissionais do criador
+7. Cada ideia deve incluir:
    - Título atrativo e específico
    - Descrição clara e estratégica
    - Conteúdo principal detalhado
@@ -168,7 +173,7 @@ INSTRUÇÕES CRÍTICAS:
      * CTA claro e acionável
      * Hashtags relevantes e estratégicos
      * Descrição visual detalhada
-     * Composição de cores específica
+     * Composição de cores específica (use as cores do perfil se disponíveis)
    - Estratégia de implementação
    - Métricas de sucesso
    - Próximos passos
@@ -227,8 +232,58 @@ REGRAS OBRIGATÓRIAS:
 - Use o idioma português brasileiro
 - Seja criativo, estratégico e específico
 - Foque nos objetivos solicitados: {objectives_text}
+- PERSONALIZE baseado no perfil do criador
 """
         return prompt.strip()
+
+    def _build_creator_profile_section(self, profile: CreatorProfile) -> str:
+        """Build creator profile section for the prompt with current model fields."""
+        if not profile:
+            return ""
+
+        sections = []
+
+        # Professional Information (Step 1)
+        if profile.professional_name:
+            sections.append(f"Nome Profissional: {profile.professional_name}")
+        if profile.profession:
+            sections.append(f"Profissão: {profile.profession}")
+        if profile.instagram_handle:
+            sections.append(f"Instagram Pessoal: @{profile.instagram_handle}")
+        if profile.whatsapp_number:
+            sections.append(f"WhatsApp: {profile.whatsapp_number}")
+
+        # Business Information (Step 2)
+        if profile.business_name:
+            sections.append(f"Nome do Negócio: {profile.business_name}")
+        if profile.specialization:
+            sections.append(f"Especialização: {profile.specialization}")
+        if profile.business_instagram_handle:
+            sections.append(
+                f"Instagram do Negócio: @{profile.business_instagram_handle}")
+        if profile.business_website:
+            sections.append(f"Website: {profile.business_website}")
+        if profile.business_city and profile.business_city != "Remoto":
+            sections.append(f"Localização: {profile.business_city}")
+        if profile.business_description:
+            sections.append(
+                f"Descrição do Negócio: {profile.business_description}")
+
+        # Branding Information (Step 3)
+        if profile.voice_tone:
+            sections.append(f"Tom de Voz Preferido: {profile.voice_tone}")
+
+        # Color palette
+        colors = [profile.color_1, profile.color_2,
+                  profile.color_3, profile.color_4, profile.color_5]
+        valid_colors = [color for color in colors if color and color.strip()]
+        if valid_colors:
+            sections.append(
+                f"Paleta de Cores da Marca: {', '.join(valid_colors)}")
+
+        if sections:
+            return "PERFIL DO CRIADOR:\n" + "\n".join(f"- {section}" for section in sections)
+        return ""
 
     def _build_persona_section(self, config: Dict) -> str:
         """Build persona section for the prompt."""
@@ -250,25 +305,6 @@ REGRAS OBRIGATÓRIAS:
 
         if sections:
             return "PERSONA ALVO:\n" + "\n".join(f"- {section}" for section in sections)
-        return ""
-
-    def _build_social_media_section(self, profile: CreatorProfile) -> str:
-        """Build social media section for the prompt."""
-        if not profile:
-            return ""
-
-        sections = []
-        if profile.instagram_username:
-            sections.append(f"Instagram: @{profile.instagram_username}")
-        if profile.tiktok_username:
-            sections.append(f"TikTok: @{profile.tiktok_username}")
-        if profile.youtube_channel:
-            sections.append(f"YouTube: {profile.youtube_channel}")
-        if profile.linkedin_url:
-            sections.append(f"LinkedIn: {profile.linkedin_url}")
-
-        if sections:
-            return "REDES SOCIAIS EXISTENTES:\n" + "\n".join(f"- {section}" for section in sections)
         return ""
 
     def _normalize_content_type(self, raw_content_type: str, platform: str) -> str:
@@ -653,8 +689,12 @@ REGRAS OBRIGATÓRIAS:
                     content_str) if content_str.startswith('{') else {}
             elif isinstance(current_idea.content, dict):
                 current_content = current_idea.content
-        except:
+        except Exception:
             current_content = {}
+
+        # Build creator profile section
+        creator_profile_section = self._build_creator_profile_section(
+            profile) if profile else ""
 
         prompt = f"""
 Você é um especialista em marketing digital e criação de conteúdo para redes sociais.
@@ -672,8 +712,7 @@ ESTRUTURA ATUAL DO CONTEÚDO:
 FEEDBACK PARA MELHORIA:
 {improvement_prompt}
 
-CONTEXTO DO CRIADOR:
-{self._build_social_media_section(profile) if profile else "Perfil não disponível"}
+{creator_profile_section}
 
 INSTRUÇÕES CRÍTICAS:
 1. Analise a ideia atual e o feedback fornecido
@@ -682,6 +721,8 @@ INSTRUÇÕES CRÍTICAS:
 4. MANTENHA EXATAMENTE a mesma estrutura de conteúdo com todas as variações
 5. Seja criativo e estratégico
 6. Preserve todos os campos: plataforma, tipo_conteudo, titulo_principal, variacao_a, variacao_b, variacao_c, estrategia_implementacao, metricas_sucesso, proximos_passos
+7. Use o perfil do criador para personalizar ainda mais o conteúdo
+8. Incorpore o tom de voz e cores da marca se disponíveis
 
 FORMATO DE RESPOSTA OBRIGATÓRIO:
 Retorne APENAS um JSON válido com a estrutura COMPLETA melhorada:
@@ -730,6 +771,8 @@ REGRAS OBRIGATÓRIAS:
 - Use o idioma português brasileiro
 - Aplique as melhorias solicitadas no feedback
 - Mantenha a qualidade e relevância
+- PERSONALIZE baseado no perfil do criador
+- Use as cores da marca se disponíveis no perfil
 """
         return prompt.strip()
 

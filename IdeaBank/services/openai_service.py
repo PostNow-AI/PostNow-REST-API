@@ -27,6 +27,14 @@ class OpenAIService(BaseAIService):
             print("❌ No API key available for OpenAI image generation")
             return ""
 
+        # Validate credits before generation
+        if user and user.is_authenticated:
+            from .ai_model_service import AIModelService
+            model_name = 'dall-e-3'
+            if not AIModelService.validate_image_credits(user, model_name, 1):
+                print("❌ Insufficient credits for image generation")
+                raise ValueError("Créditos insuficientes para gerar imagem")
+
         print(f"✅ OpenAI API key available: {api_key[:10]}...")
 
         client = openai.OpenAI(api_key=api_key)
@@ -43,6 +51,13 @@ class OpenAIService(BaseAIService):
 
             if response.data and response.data[0].url:
                 image_url = response.data[0].url
+
+                # Deduct credits for successful image generation
+                if user and user.is_authenticated:
+                    from .ai_model_service import AIModelService
+                    AIModelService.deduct_image_credits(
+                        user, 'dall-e-3', 1, f"DALL-E-3 image generation - {prompt[:50]}...")
+
                 print(f"✅ Successfully generated image: {image_url[:50]}...")
                 return image_url
             else:
