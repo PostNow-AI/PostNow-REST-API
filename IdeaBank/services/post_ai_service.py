@@ -220,45 +220,51 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
    • Interesses: {target_interests}
 - Linguagem/Tom de voz: profissional{creator_profile_section}
 
+
 ### REGRAS PARA CONSTRUÇÃO DA COPY:
 
-1. Estruture o texto seguindo internamente o método AIDA, mas entregue a copy final de forma natural, sem mostrar as etapas.
+1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.  
+   O resultado deve ser apenas o texto final, fluido e pronto para publicação.  
 
-2. A copy deve respeitar o tom de voz definido no formulário da empresa.
+2. A copy deve respeitar o tom de voz definido no formulário da empresa (ex.: técnico, acolhedor, inspirador, educativo, leve ou persuasivo).  
 
-3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.
-   - Não usar comparações negativas diretas.
-   - Não prometer resultados absolutos.
-   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.
-   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.
+3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
+   - Não usar comparações negativas diretas.  
+   - Não prometer resultados absolutos.  
+   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.  
+   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.  
 
-4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.
+4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.  
 
-5. **Adaptação ao Tipo de Conteúdo**
-   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.
-   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.
-   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).
-   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.
-   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.
+5. **Adaptação ao Tipo de Conteúdo**  
+   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.  
+   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.  
+   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).  
+   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
+   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
 
-6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido no formulário.
+6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido no formulário.  
 
-7. USE SEMPRE o perfil do criador para personalizar o conteúdo e incorporar informações profissionais, tom de voz preferido e cores da marca.
+7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.  
+
+8. Faça a **separação de parágrafos de forma natural**, garantindo boa legibilidade em redes sociais e anúncios, evitando blocos de texto longos.  
+
+9. Entregue **apenas uma CTA final**, integrada ao texto, natural e clara, sem listas ou alternativas extras.  
+
+10. NÃO inclua textos explicativos, como por exemplo "Título:", "Texto:", "CTA:", ou qualquer outro rótulo.
+
+---
 
 ### SAÍDA ESPERADA:
-- Uma copy finalizada, pronta para uso no formato selecionado.
-- Texto fluido, estruturado com base no AIDA, mas sem exibir as etapas.
-- Linguagem alinhada ao público e ao tom cadastrado no formulário da empresa.
-- Respeito às boas práticas do Meta e Google Ads.
-- PERSONALIZAÇÃO baseada no perfil do criador.
+- Texto final pronto para ser copiado e colado.  
+- Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.  
+- Linguagem alinhada ao público e ao tom cadastrado no formulário da empresa.  
+- Respeito às boas práticas do Meta e Google Ads.  
+- Emojis distribuídos de forma natural, sem excesso.  
+- Parágrafos curtos, fáceis de ler e escaneáveis.  
+- Uma única CTA ao final do texto.  
 
-O conteúdo deve ser formatado EXATAMENTE assim:
 
-Título: [Título atrativo baseado no método AIDA e personalizado para o público-alvo]
-
-Texto: [Texto principal seguindo AIDA, personalizado para {target_gender}, {target_age} anos, interessado em {target_interests}, localizado em {target_location}]
-
-Chamada para ação no post/carrossel: [CTA estratégico focado no objetivo de {objective}]
 
 REGRAS OBRIGATÓRIAS:
 - Adapte o formato da copy ao tipo de conteúdo: {post_type}
@@ -269,6 +275,8 @@ REGRAS OBRIGATÓRIAS:
 - Incorpore cores da marca do perfil quando disponíveis
 - Foque no público-alvo específico: {target_gender}, {target_age} anos, {target_interests}
 - Objetivo principal: {objective}
+- NÃO inclua textos explicativos, como por exemplo "Título:", "Texto:", "CTA:", ou qualquer outro rótulo.
+
 """
         print(prompt)
         return prompt.strip()
