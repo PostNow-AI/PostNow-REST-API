@@ -264,19 +264,6 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
 - Parágrafos curtos, fáceis de ler e escaneáveis.  
 - Uma única CTA ao final do texto.  
 
-
-
-REGRAS OBRIGATÓRIAS:
-- Adapte o formato da copy ao tipo de conteúdo: {post_type}
-- Respeite as políticas Meta/Google Ads
-- Use método AIDA de forma natural
-- Use o idioma português brasileiro
-- PERSONALIZE baseado no perfil do criador
-- Incorpore cores da marca do perfil quando disponíveis
-- Foque no público-alvo específico: {target_gender}, {target_age} anos, {target_interests}
-- Objetivo principal: {objective}
-- NÃO inclua textos explicativos, como por exemplo "Título:", "Texto:", "CTA:", ou qualquer outro rótulo.
-
 """
         print(prompt)
         return prompt.strip()
