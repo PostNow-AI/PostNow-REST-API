@@ -303,7 +303,10 @@ Avoid including text in the image itself."""
         objective = post_data.get('objective', '')
         post_type = post_data.get('type', '')
 
-        prompt = f"""Você precisa melhorar o seguinte conteúdo de rede social baseado no feedback do usuário:
+        prompt = f"""
+Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
+Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, sempre respeitando as políticas do Meta e Google Ads, evitando qualquer tipo de sensacionalismo, promessa exagerada ou afirmações que possam violar as diretrizes dessas plataformas.        
+Você precisa melhorar o seguinte conteúdo de rede social baseado no feedback do usuário:
 
 CONTEÚDO ATUAL:
 {current_content}
@@ -316,13 +319,50 @@ ESPECIFICAÇÕES ORIGINAIS:
 - Objetivo: {objective}
 - Tipo: {post_type}
 
-Por favor, recrie o conteúdo incorporando o feedback do usuário, mantendo o formato:
+## REGRAS PARA CONSTRUÇÃO DA COPY:
 
-Título: [Título melhorado]
+1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.  
+   O resultado deve ser apenas o texto final, fluido e pronto para publicação.  
 
-Texto: [Texto melhorado]
+2. A copy deve respeitar o tom de voz definido no formulário da empresa (ex.: técnico, acolhedor, inspirador, educativo, leve ou persuasivo).  
 
-Chamada para ação no post/carrossel: [CTA melhorada]
+3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
+   - Não usar comparações negativas diretas.  
+   - Não prometer resultados absolutos.  
+   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.  
+   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.  
+
+4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.  
+
+5. **Adaptação ao Tipo de Conteúdo**  
+   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.  
+   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.  
+   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).  
+   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
+   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
+
+6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido no formulário.  
+
+7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.  
+
+8. Faça a **separação de parágrafos de forma natural**, garantindo boa legibilidade em redes sociais e anúncios, evitando blocos de texto longos.  
+
+9. Entregue **apenas uma CTA final**, integrada ao texto, natural e clara, sem listas ou alternativas extras.  
+
+10. NÃO inclua textos explicativos, como por exemplo "Título:", "Texto:", "CTA:", ou qualquer outro rótulo.
+
+---
+
+### SAÍDA ESPERADA:
+- Texto final pronto para ser copiado e colado.  
+- Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.  
+- Linguagem alinhada ao público e ao tom cadastrado no formulário da empresa.  
+- Respeito às boas práticas do Meta e Google Ads.  
+- Emojis distribuídos de forma natural, sem excesso.  
+- Parágrafos curtos, fáceis de ler e escaneáveis.  
+- Uma única CTA ao final do texto.  
+
+Por favor, recrie o conteúdo incorporando o feedback do usuário.
 
 Certifique-se de que as melhorias atendam especificamente ao feedback fornecido.
 """
@@ -335,7 +375,10 @@ Certifique-se de que as melhorias atendam especificamente ao feedback fornecido.
         objective = post_data.get('objective', '')
         post_type = post_data.get('type', '')
 
-        prompt = f"""Crie uma variação do seguinte conteúdo de rede social, mantendo o mesmo objetivo mas com abordagem diferente:
+        prompt = f"""
+Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
+Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, sempre respeitando as políticas do Meta e Google Ads, evitando qualquer tipo de sensacionalismo, promessa exagerada ou afirmações que possam violar as diretrizes dessas plataformas.
+Crie uma variação do seguinte conteúdo de rede social, mantendo o mesmo objetivo mas com abordagem diferente:
 
 CONTEÚDO ORIGINAL:
 {current_content}
@@ -351,13 +394,54 @@ Crie uma nova versão que:
 - Tenha um tom ligeiramente diferente
 - Mantenha a qualidade e efetividade
 
-Formato da resposta:
 
-Título: [Novo título]
+### REGRAS PARA CONSTRUÇÃO DA COPY:
 
-Texto: [Novo texto]
+1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.  
+   O resultado deve ser apenas o texto final, fluido e pronto para publicação.  
 
-Chamada para ação no post/carrossel: [Nova CTA]
+2. A copy deve respeitar o tom de voz definido no formulário da empresa (ex.: técnico, acolhedor, inspirador, educativo, leve ou persuasivo).  
+
+3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
+   - Não usar comparações negativas diretas.  
+   - Não prometer resultados absolutos.  
+   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.  
+   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.  
+
+4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.  
+
+5. **Adaptação ao Tipo de Conteúdo**  
+   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.  
+   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.  
+   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).  
+   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
+   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
+
+6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido no formulário.  
+
+7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.  
+
+8. Faça a **separação de parágrafos de forma natural**, garantindo boa legibilidade em redes sociais e anúncios, evitando blocos de texto longos.  
+
+9. Entregue **apenas uma CTA final**, integrada ao texto, natural e clara, sem listas ou alternativas extras.  
+
+10. NÃO inclua textos explicativos, como por exemplo "Título:", "Texto:", "CTA:", ou qualquer outro rótulo.
+
+---
+
+### SAÍDA ESPERADA:
+- Texto final pronto para ser copiado e colado.  
+- Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.  
+- Linguagem alinhada ao público e ao tom cadastrado no formulário da empresa.  
+- Respeito às boas práticas do Meta e Google Ads.  
+- Emojis distribuídos de forma natural, sem excesso.  
+- Parágrafos curtos, fáceis de ler e escaneáveis.  
+- Uma única CTA ao final do texto.  
+
+Por favor, recrie o conteúdo incorporando o feedback do usuário.
+
+Certifique-se de que as melhorias atendam especificamente ao feedback fornecido.
+
 """
 
         return prompt

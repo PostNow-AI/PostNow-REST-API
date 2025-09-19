@@ -52,23 +52,34 @@ class OpenAIService(BaseAIService):
             if response.data and response.data[0].url:
                 image_url = response.data[0].url
 
-                # Deduct credits for successful image generation
-                if user and user.is_authenticated:
-                    from .ai_model_service import AIModelService
-                    AIModelService.deduct_image_credits(
-                        user, 'dall-e-3', 1, f"DALL-E-3 image generation - {prompt[:50]}...")
+                # Download image and convert to base64
+                try:
+                    import base64
 
-                print(f"✅ Successfully generated image: {image_url[:50]}...")
-                return image_url
+                    import requests
+                    img_response = requests.get(image_url)
+                    if img_response.status_code == 200:
+                        img_bytes = img_response.content
+                        img_base64 = base64.b64encode(
+                            img_bytes).decode('utf-8')
+                        # Deduct credits for successful image generation
+                        if user and user.is_authenticated:
+                            from .ai_model_service import AIModelService
+                            AIModelService.deduct_image_credits(
+                                user, 'dall-e-3', 1, f"DALL-E-3 image generation - {prompt[:50]}...")
+                        return 'data:image/png;base64,' + img_base64
+                    else:
+                        return ""
+                except Exception:
+                    import traceback
+                    return str(traceback.format_exc())
             else:
                 print("❌ Empty response from OpenAI Image API")
                 return ""
 
-        except Exception as e:
-            print(f"❌ Error generating image with OpenAI: {e}")
+        except Exception:
             import traceback
-            print(f"🔍 Detailed traceback: {traceback.format_exc()}")
-            return ""
+            return str(traceback.format_exc())
     """Service for interacting with OpenAI GPT models."""
 
     def __init__(self, model_name: str = "gpt-3.5-turbo"):
