@@ -85,11 +85,12 @@ class PostAIService:
         Returns:
             URL or base64 data of the generated image
         """
-        # Use OpenAI for image generation by default
-        ai_service = AIServiceFactory.create_service('openai', 'dall-e-3')
+        # Use Google for image generation by default
+        ai_service = AIServiceFactory.create_service(
+            'google', 'gemini-1.5-flash')
         if not ai_service:
             raise Exception(
-                "OpenAI service not available for image generation")
+                "Google service not available for image generation")
 
         # Build image prompt
         if custom_prompt:
