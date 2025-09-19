@@ -14,7 +14,7 @@ from .base_ai_service import BaseAIService
 
 
 class GeminiService(BaseAIService):
-    def generate_image(self, prompt: str, user: User = None) -> str:
+    def generate_image(self, prompt: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using Gemini's image generation API and return a data URL (base64)."""
         print("=== GEMINI IMAGE GENERATION START ===")
 
@@ -26,6 +26,10 @@ class GeminiService(BaseAIService):
         if not api_key:
             print("❌ No API key available for Gemini image generation")
             return ""
+
+        # Enhance prompt with post data and idea content
+        enhanced_prompt = self._enhance_image_prompt(
+            prompt, post_data, idea_content)
 
         # Validate credits before generation
         if user and user.is_authenticated:
@@ -57,8 +61,6 @@ class GeminiService(BaseAIService):
                     model = genai.GenerativeModel(model_name)
 
                     # Try image generation with clear instructions
-                    enhanced_prompt = f"Generate a high-quality image based on this description: {prompt}. Create a visually appealing, professional image suitable for marketing purposes."
-
                     response = model.generate_content([enhanced_prompt])
 
                     # Check if response has image data
@@ -153,6 +155,35 @@ Format as: "A professional marketing image showing [detailed description]"
             import traceback
             print(f"🔍 Detailed error: {traceback.format_exc()}")
             return ""
+
+    def _enhance_image_prompt(self, base_prompt: str, post_data: dict = None, idea_content: str = None) -> str:
+        """Enhance the image generation prompt with post data and idea content."""
+        enhanced_parts = [
+            f"Generate a high-quality image based on this description: {base_prompt}"]
+
+        if post_data:
+            if post_data.get('objective'):
+                enhanced_parts.append(
+                    f"Post objective: {post_data['objective']}")
+            if post_data.get('type'):
+                enhanced_parts.append(f"Content type: {post_data['type']}")
+            if post_data.get('target_gender') or post_data.get('target_age'):
+                target_info = []
+                if post_data.get('target_gender'):
+                    target_info.append(f"gender: {post_data['target_gender']}")
+                if post_data.get('target_age'):
+                    target_info.append(f"age: {post_data['target_age']}")
+                enhanced_parts.append(
+                    f"Target audience ({', '.join(target_info)})")
+
+        if idea_content:
+            # Extract key themes from idea content for visual inspiration
+            enhanced_parts.append(f"Content context: {idea_content[:200]}...")
+
+        enhanced_parts.append(
+            "Create a visually appealing, professional marketing image suitable for social media.")
+
+        return ". ".join(enhanced_parts)
 
     def _compress_image_data(self, image_data: bytes) -> str:
         """Compress image data to reduce size for database storage."""

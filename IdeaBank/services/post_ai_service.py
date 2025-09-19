@@ -98,7 +98,8 @@ class PostAIService:
             prompt = self._build_image_prompt(post_data, content)
 
         try:
-            image_url = ai_service.generate_image(prompt, user)
+            image_url = ai_service.generate_image(
+                prompt, user, post_data, content)
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
             return image_url

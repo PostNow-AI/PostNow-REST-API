@@ -14,7 +14,7 @@ from .base_ai_service import BaseAIService
 
 
 class OpenAIService(BaseAIService):
-    def generate_image(self, prompt: str, user: User = None) -> str:
+    def generate_image(self, prompt: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using OpenAI's DALL·E API and return the image URL."""
         print("=== OPENAI IMAGE GENERATION START ===")
 
@@ -26,6 +26,10 @@ class OpenAIService(BaseAIService):
         if not api_key:
             print("❌ No API key available for OpenAI image generation")
             return ""
+
+        # Enhance prompt with post data and idea content
+        enhanced_prompt = self._enhance_image_prompt(
+            prompt, post_data, idea_content)
 
         # Validate credits before generation
         if user and user.is_authenticated:
@@ -40,11 +44,11 @@ class OpenAIService(BaseAIService):
         client = openai.OpenAI(api_key=api_key)
         try:
             print(
-                f"🔄 Generating image with DALL-E-3, prompt: {prompt[:100]}...")
+                f"🔄 Generating image with DALL-E-3, prompt: {enhanced_prompt[:100]}...")
 
             response = client.images.generate(
                 model="dall-e-3",
-                prompt=prompt,
+                prompt=enhanced_prompt,
                 n=1,
                 size="1024x1024"
             )
@@ -66,7 +70,7 @@ class OpenAIService(BaseAIService):
                         if user and user.is_authenticated:
                             from .ai_model_service import AIModelService
                             AIModelService.deduct_image_credits(
-                                user, 'dall-e-3', 1, f"DALL-E-3 image generation - {prompt[:50]}...")
+                                user, 'dall-e-3', 1, f"DALL-E-3 image generation - {enhanced_prompt[:50]}...")
                         return 'data:image/png;base64,' + img_base64
                     else:
                         return ""
@@ -80,6 +84,36 @@ class OpenAIService(BaseAIService):
         except Exception:
             import traceback
             return str(traceback.format_exc())
+
+    def _enhance_image_prompt(self, base_prompt: str, post_data: dict = None, idea_content: str = None) -> str:
+        """Enhance the image generation prompt with post data and idea content."""
+        enhanced_parts = [base_prompt]
+
+        if post_data:
+            if post_data.get('objective'):
+                enhanced_parts.append(
+                    f"Marketing objective: {post_data['objective']}")
+            if post_data.get('type'):
+                enhanced_parts.append(f"Content format: {post_data['type']}")
+            if post_data.get('target_gender') or post_data.get('target_age'):
+                target_info = []
+                if post_data.get('target_gender'):
+                    target_info.append(f"gender: {post_data['target_gender']}")
+                if post_data.get('target_age'):
+                    target_info.append(f"age: {post_data['target_age']}")
+                enhanced_parts.append(
+                    f"Target audience ({', '.join(target_info)})")
+
+        if idea_content:
+            # Extract key themes from idea content for visual inspiration
+            enhanced_parts.append(
+                f"Visual inspiration from content: {idea_content[:200]}...")
+
+        enhanced_parts.append(
+            "Professional marketing image for social media, high quality, visually appealing")
+
+        return ". ".join(enhanced_parts)
+
     """Service for interacting with OpenAI GPT models."""
 
     def __init__(self, model_name: str = "gpt-3.5-turbo"):
