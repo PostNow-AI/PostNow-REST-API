@@ -18,39 +18,39 @@ class AIModelService:
     """Service for managing AI model configurations and credit costs."""
 
     # Default model configurations if database is not available
-    # Costs multiplied by 100x from original for higher credit consumption
+    # Token costs reduced by 80% as per user request (now 20% of original cost)
     DEFAULT_MODELS = {
         'gemini-1.5-flash': {
             'provider': 'Google',
-            'cost_per_token': Decimal('0.04'),
+            'cost_per_token': Decimal('0.008'),  # Reduced from 0.04 to 0.008
             'max_tokens': 8192,
             'supports_streaming': False,
             'is_active': True
         },
         'gemini-1.5-pro': {
             'provider': 'Google',
-            'cost_per_token': Decimal('0.2'),
+            'cost_per_token': Decimal('0.04'),  # Reduced from 0.2 to 0.04
             'max_tokens': 32768,
             'supports_streaming': False,
             'is_active': True
         },
         'claude-3-sonnet': {
             'provider': 'Anthropic',
-            'cost_per_token': Decimal('0.2'),
+            'cost_per_token': Decimal('0.04'),  # Reduced from 0.2 to 0.04
             'max_tokens': 200000,
             'supports_streaming': True,
             'is_active': True
         },
         'gpt-4': {
             'provider': 'OpenAI',
-            'cost_per_token': Decimal('4.5'),
+            'cost_per_token': Decimal('0.9'),   # Reduced from 4.5 to 0.9
             'max_tokens': 8192,
             'supports_streaming': True,
             'is_active': True
         },
         'gpt-3.5-turbo': {
             'provider': 'OpenAI',
-            'cost_per_token': Decimal('0.15'),
+            'cost_per_token': Decimal('0.03'),  # Reduced from 0.15 to 0.03
             'max_tokens': 4096,
             'supports_streaming': True,
             'is_active': True
@@ -129,21 +129,23 @@ class AIModelService:
                 else:
                     raise ValueError(
                         f"Model {model_name} does not support image generation")
-            except Exception as e:
-                print(f"Error calculating image cost: {str(e)}")
+            except Exception:
                 # Fallback to default image costs
                 pass
 
-        # Fallback to default image costs
+        # Fallback to default image costs (increased by 80% as per user request)
         default_image_costs = {
-            'dall-e-3': 0.040,
-            'gemini-imagen': 0.020,
-            'gemini-1.5-pro': 0.020,
-            'gemini-1.5-flash': 0.015,
+            # Increased from ~4.0 to 7.2 (80% increase)
+            'dall-e-3': 7.2,
+            # Increased from ~2.0 to 3.6 (80% increase)
+            'gemini-imagen': 3.6,
+            'gemini-1.5-pro': 3.6,    # Image support, increased cost
+            'gemini-1.5-flash': 2.7,  # Image support, increased cost
         }
 
-        # Default $0.03 per image
-        return default_image_costs.get(model_name, 0.030) * num_images
+        # Default increased cost per image
+        # Default increased from 3.0 to 5.4
+        return default_image_costs.get(model_name, 5.4) * num_images
 
     @classmethod
     def validate_user_credits(cls, user: User, model_name: str, estimated_tokens: int) -> bool:
@@ -154,8 +156,7 @@ class AIModelService:
         try:
             estimated_cost = cls.calculate_cost(model_name, estimated_tokens)
             return CreditService.has_sufficient_credits(user, estimated_cost)
-        except Exception as e:
-            print(f"Error validating credits: {str(e)}")
+        except Exception:
             return False
 
     @classmethod
@@ -172,8 +173,7 @@ class AIModelService:
                 ai_model=model_name,
                 description=description
             )
-        except Exception as e:
-            print(f"Error deducting credits: {str(e)}")
+        except Exception:
             return False
 
     @classmethod
@@ -185,8 +185,7 @@ class AIModelService:
         try:
             estimated_cost = cls.calculate_image_cost(model_name, num_images)
             return CreditService.has_sufficient_credits(user, estimated_cost)
-        except Exception as e:
-            print(f"Error validating image credits: {str(e)}")
+        except Exception:
             return False
 
     @classmethod
@@ -203,8 +202,7 @@ class AIModelService:
                 ai_model=model_name,
                 description=f"Geração de imagem - {description}" if description else "Geração de imagem"
             )
-        except Exception as e:
-            print(f"Error deducting image credits: {str(e)}")
+        except Exception:
             return False
 
     @classmethod
@@ -382,8 +380,7 @@ class AIModelService:
                 }
             )
             return preferences
-        except Exception as e:
-            print(f"Error getting user preferences: {str(e)}")
+        except Exception:
             return None
 
     @classmethod
@@ -409,8 +406,7 @@ class AIModelService:
 
             preferences.save()
             return True
-        except Exception as e:
-            print(f"Error updating user preferences: {str(e)}")
+        except Exception:
             return False
 
     @classmethod

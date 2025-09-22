@@ -99,7 +99,6 @@ class StripeCheckoutView(APIView):
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            print(e)
             return Response({
                 'success': False,
                 'message': 'Erro interno do servidor',

@@ -7,14 +7,80 @@ from typing import Dict
 from django.contrib.auth.models import User
 
 from .ai_service_factory import AIServiceFactory
+from .base_ai_service import BaseAIService
+
+try:
+    from .ai_model_service import AIModelService
+    AI_MODEL_SERVICE_AVAILABLE = True
+except ImportError:
+    AI_MODEL_SERVICE_AVAILABLE = False
 
 
-class PostAIService:
+class PostAIService(BaseAIService):
     """Service for generating post ideas using AI models."""
 
     def __init__(self):
+        super().__init__("gemini-1.5-flash")  # Initialize parent with default model
         self.default_provider = 'google'
         self.default_model = 'gemini-1.5-flash'
+
+    def _validate_credits(self, user: User, estimated_tokens: int, model_name: str) -> bool:
+        """Validate if user has sufficient credits for the AI operation."""
+        if not AI_MODEL_SERVICE_AVAILABLE or not user.is_authenticated:
+            return True
+
+        try:
+            from .ai_model_service import AIModelService
+            return AIModelService.validate_user_credits(user, model_name, estimated_tokens)
+        except ImportError:
+            return True
+
+    def _deduct_credits(self, user: User, actual_tokens: int, model_name: str, description: str) -> bool:
+        """Deduct credits after AI operation."""
+        if not AI_MODEL_SERVICE_AVAILABLE or not user.is_authenticated:
+            return True
+
+        try:
+            from .ai_model_service import AIModelService
+            return AIModelService.deduct_credits(user, model_name, actual_tokens, description)
+        except ImportError:
+            return True
+
+    def _estimate_tokens(self, prompt: str, model_name: str) -> int:
+        """Estimate token count for a prompt."""
+        if AI_MODEL_SERVICE_AVAILABLE:
+            try:
+                from .ai_model_service import AIModelService
+                return AIModelService.estimate_tokens(prompt, model_name)
+            except ImportError:
+                pass
+
+        # Fallback estimation: roughly 4 characters per token
+        return len(prompt) // 4
+
+    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None) -> str:
+        """Make AI request using the AI service factory."""
+        # Create AI service
+        ai_service = AIServiceFactory.create_service(
+            self.default_provider, model_name)
+        if not ai_service:
+            raise Exception(
+                f"AI service not available for provider: {self.default_provider}")
+
+        # Make the request
+        return ai_service._make_ai_request(prompt, model_name, api_key)
+
+    def _select_optimal_model(self, user: User, estimated_tokens: int, preferred_provider: str = None) -> str:
+        """Select the optimal AI model for the operation."""
+        if AI_MODEL_SERVICE_AVAILABLE:
+            try:
+                from .ai_model_service import AIModelService
+                return AIModelService.select_optimal_model(user, estimated_tokens, preferred_provider)
+            except ImportError:
+                pass
+
+        # Fallback to default model
+        return self.default_model
 
     def generate_post_content(
         self,
@@ -42,20 +108,31 @@ class PostAIService:
         self.user = user
         self._current_post_data = post_data
 
+        # Build the prompt for content generation
+        prompt = self._build_content_prompt(post_data)
+
+        # Validate credits before generating (skip for unauthenticated users)
+        if user and user.is_authenticated:
+            estimated_tokens = self._estimate_tokens(prompt, model)
+            if not self._validate_credits(user, estimated_tokens, model):
+                raise Exception("Créditos insuficientes para gerar conteúdo")
+
         # Create AI service
         ai_service = AIServiceFactory.create_service(provider, model)
         if not ai_service:
             raise Exception(
                 f"AI service not available for provider: {provider}")
 
-        # Build the prompt for content generation
-        prompt = self._build_content_prompt(post_data)
-
         # Generate content using the AI service
         try:
-            # For now, we'll use a simple text generation method
-            # This would be implemented in the base AI service
+            # Use the AI service's direct method
             content = self._generate_content_with_ai(ai_service, prompt)
+
+            # Deduct credits after successful generation (skip for unauthenticated users)
+            if user and user.is_authenticated:
+                actual_tokens = self._estimate_tokens(prompt + content, model)
+                self._deduct_credits(
+                    user, actual_tokens, model, f"Geração de conteúdo - {post_data.get('name', 'Post')}")
 
             return {
                 'content': content,
@@ -85,6 +162,16 @@ class PostAIService:
         Returns:
             URL or base64 data of the generated image
         """
+        # Validate credits before generation (skip for unauthenticated users)
+        model_name = 'gemini-imagen'
+        if user and user.is_authenticated and AI_MODEL_SERVICE_AVAILABLE:
+            try:
+                from .ai_model_service import AIModelService
+                if not AIModelService.validate_image_credits(user, model_name, 1):
+                    raise Exception("Créditos insuficientes para gerar imagem")
+            except ImportError:
+                pass
+
         # Use Google for image generation by default
         ai_service = AIServiceFactory.create_service(
             'google', 'gemini-1.5-flash')
@@ -103,6 +190,10 @@ class PostAIService:
                 prompt, user, post_data, content)
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
+
+            # Note: Credit deduction for image generation is handled inside ai_service.generate_image()
+            # via AIModelService.deduct_image_credits in GeminiService and OpenAIService
+
             return image_url
         except Exception as e:
             raise Exception(f"Failed to generate image: {str(e)}")
@@ -133,12 +224,6 @@ class PostAIService:
         provider = ai_provider or self.default_provider
         model = ai_model or self.default_model
 
-        # Create AI service
-        ai_service = AIServiceFactory.create_service(provider, model)
-        if not ai_service:
-            raise Exception(
-                f"AI service not available for provider: {provider}")
-
         # Build the regeneration prompt
         if user_prompt:
             prompt = self._build_regeneration_prompt(
@@ -146,8 +231,27 @@ class PostAIService:
         else:
             prompt = self._build_variation_prompt(post_data, current_content)
 
+        # Validate credits before regenerating (skip for unauthenticated users)
+        if user and user.is_authenticated:
+            estimated_tokens = self._estimate_tokens(prompt, model)
+            if not self._validate_credits(user, estimated_tokens, model):
+                raise Exception(
+                    "Créditos insuficientes para regenerar conteúdo")
+
+        # Create AI service
+        ai_service = AIServiceFactory.create_service(provider, model)
+        if not ai_service:
+            raise Exception(
+                f"AI service not available for provider: {provider}")
+
         try:
             content = self._generate_content_with_ai(ai_service, prompt)
+
+            # Deduct credits after successful regeneration (skip for unauthenticated users)
+            if user and user.is_authenticated:
+                actual_tokens = self._estimate_tokens(prompt + content, model)
+                self._deduct_credits(
+                    user, actual_tokens, model, f"Regeneração de conteúdo - {post_data.get('name', 'Post')}")
 
             return {
                 'content': content,
@@ -267,13 +371,13 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
 - Uma única CTA ao final do texto.  
 
 """
-        print(prompt)
         return prompt.strip()
 
     def _build_image_prompt(self, post_data: Dict, content: str) -> str:
         """Build the prompt for image generation."""
         post_type = post_data.get('type', '')
         objective = post_data.get('objective', '')
+        name = post_data.get('name', '')
 
         # Extract title from content if available
         title = ""
@@ -281,21 +385,69 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
             title_line = content.split("Título:")[1].split("\n")[0].strip()
             title = title_line
 
-        prompt = f"""Create a professional and engaging image for a social media {post_type} post.
+        # Use title from content if available, otherwise use name from post_data
+        tema = title if title else name
 
-Content context: {title}
-Objective: {objective}
-Post type: {post_type}
+        # Target audience information
+        target_gender = post_data.get('target_gender', 'Não especificado')
+        target_age = post_data.get('target_age', 'Não especificado')
+        target_location = post_data.get('target_location', 'Não especificado')
+        target_interests = post_data.get(
+            'target_interests', 'Não especificado')
 
-Style requirements:
-- Professional and modern design
-- Suitable for social media
-- Eye-catching and engaging
-- Clean and readable
-- Appropriate for the content theme
-- High quality and visually appealing
+        # Build target audience description
+        publico_alvo = f"Gênero: {target_gender}, Idade: {target_age}, Localização: {target_location}, Interesses: {target_interests}"
 
-Avoid including text in the image itself."""
+        # Creator profile information for brand identity (if available)
+        identidade_marca = "Estilo profissional e moderno"
+        if hasattr(self, 'user') and self.user:
+            from CreatorProfile.models import CreatorProfile
+            profile = CreatorProfile.objects.filter(user=self.user).first()
+            if profile:
+                brand_info = []
+                if profile.business_name:
+                    brand_info.append(f"Empresa: {profile.business_name}")
+
+                # Color palette
+                colors = [profile.color_1, profile.color_2,
+                          profile.color_3, profile.color_4, profile.color_5]
+                valid_colors = [
+                    color for color in colors if color and color.strip()]
+                if valid_colors:
+                    brand_info.append(
+                        f"Cores da marca: {', '.join(valid_colors)}")
+
+                if brand_info:
+                    identidade_marca = f"{', '.join(brand_info)}, estilo profissional"
+
+        prompt = f"""Você é um especialista em criação visual para marketing digital e redes sociais.  
+Sua missão é gerar imagens criativas, profissionais e impactantes que transmitam a mensagem central da campanha.  
+
+### DADOS DE ENTRADA:  
+- Tema da imagem: {tema}
+- Objetivo da campanha: {objective}
+- Tipo de conteúdo: {post_type} → pode ser Post, Reel (capa), Carousel, Story, Anúncio  
+- Público-Alvo: {publico_alvo}
+- Estilo visual desejado: MODERNO, PROFISSIONAL, REALISTA
+- Cores/Identidade da marca: {identidade_marca}
+
+---
+
+### REGRAS PARA GERAÇÃO DA IMAGEM:
+
+1. A imagem deve ser **clara, atrativa e coerente** com o tema central e o objetivo da campanha.  
+2. Ajustar o **formato da arte** conforme o tipo de conteúdo (ex.: Story 1080x1920, Post 1080x1080, Reel capa 1080x1920).  
+3. Representar a mensagem de forma **ética e respeitosa**, sem estereótipos ou sensacionalismo.  
+4. Usar elementos visuais que conectem com o **público-alvo e seus interesses**.  
+5. Se houver informações da empresa (logo, paleta de cores, estilo visual), elas devem ser integradas.  
+6. Evite excesso de texto. Se for necessário, use frases curtas e legíveis.  
+7. A imagem deve parecer **profissional e de alta qualidade**, pronta para publicação em redes sociais.  
+
+---
+
+### SAÍDA ESPERADA:
+- Uma descrição detalhada da imagem a ser criada, no estilo de prompt para ferramenta de geração de imagens.  
+- O prompt deve incluir: tema, elementos visuais principais, estilo artístico, cores predominantes, formato da imagem e público-alvo."""
 
         return prompt
 
@@ -460,8 +612,7 @@ Certifique-se de que as melhorias atendam especificamente ao feedback fornecido.
             else:
                 raise Exception("Empty response from AI service")
 
-        except Exception as e:
-            print(f"Error in AI generation: {e}")
+        except Exception:
             # Fallback: return a simple response
             return """Título: Conteúdo Gerado por IA
 

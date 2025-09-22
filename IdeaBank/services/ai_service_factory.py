@@ -26,7 +26,6 @@ class AIServiceFactory:
                 default_model = model_name or 'gemini-1.5-flash'
                 return GeminiService(model_name=default_model)
             except ImportError:
-                print("Gemini service not available")
                 return None
 
         elif provider_lower in ['openai', 'gpt']:
@@ -35,7 +34,6 @@ class AIServiceFactory:
                 default_model = model_name or 'gpt-3.5-turbo'
                 return OpenAIService(model_name=default_model)
             except ImportError:
-                print("OpenAI service not available")
                 return None
 
         elif provider_lower in ['anthropic', 'claude']:
@@ -44,11 +42,9 @@ class AIServiceFactory:
                 default_model = model_name or 'claude-3-sonnet'
                 return AnthropicService(model_name=default_model)
             except ImportError:
-                print("Anthropic service not available")
                 return None
 
         else:
-            print(f"Unknown provider: {provider}")
             return None
 
     @staticmethod

@@ -11,71 +11,117 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Populate AI models with default configurations."""
 
-        # Credit costs include margin for business sustainability
-        # Formula: (Provider Cost USD * 5.0 BRL/USD * 100 credits/BRL * 1.5 margin) * 100
-        # Costs multiplied by 100x from original for higher credit consumption
+        # Credit costs adjusted based on user feedback:
+        # - Text generation reduced by 80% (now 20% of original cost)
+        # - Image generation increased by 80% (now 180% of original cost)
+        # Formula: (Provider Cost USD * 5.0 BRL/USD * 100 credits/BRL * 1.5 margin) * adjustment
         models_data = [
             {
                 'name': 'gemini-1.5-flash',
                 'provider': 'Google',
-                # Very affordable for users
-                'cost_per_token': Decimal('0.04'),
+                # Reduced by 80% - was 0.04, now 0.008
+                'cost_per_token': Decimal('0.008'),
+                'cost_per_image': Decimal('0.00'),  # No image support
+                'supports_image_generation': False,
                 'is_active': True
             },
             {
                 'name': 'gemini-1.5-pro',
                 'provider': 'Google',
-                'cost_per_token': Decimal('0.2'),   # Premium model
+                # Reduced by 80% - was 0.2, now 0.04
+                'cost_per_token': Decimal('0.04'),
+                'cost_per_image': Decimal('0.00'),  # No image support
+                'supports_image_generation': False,
+                'is_active': True
+            },
+            {
+                'name': 'gemini-imagen',
+                'provider': 'Google',
+                'cost_per_token': Decimal('0.1'),  # Minimal text processing
+                # Image cost increased by 80% - was ~2.0, now 3.6
+                'cost_per_image': Decimal('36'),
+                'supports_image_generation': True,
                 'is_active': True
             },
             {
                 'name': 'claude-3-haiku',
                 'provider': 'Anthropic',
-                # Fastest, cheapest Claude
-                'cost_per_token': Decimal('0.02'),
+                # Reduced by 80% - was 0.02, now 0.004
+                'cost_per_token': Decimal('0.004'),
+                'cost_per_image': Decimal('0.00'),
+                'supports_image_generation': False,
                 'is_active': True
             },
             {
                 'name': 'claude-3-sonnet',
                 'provider': 'Anthropic',
-                'cost_per_token': Decimal('0.2'),   # Balanced Claude model
+                # Reduced by 80% - was 0.2, now 0.04
+                'cost_per_token': Decimal('0.04'),
+                'cost_per_image': Decimal('0.00'),
+                'supports_image_generation': False,
                 'is_active': True
             },
             {
                 'name': 'claude-3-opus',
                 'provider': 'Anthropic',
-                'cost_per_token': Decimal('1.0'),    # Most powerful Claude
+                # Reduced by 80% - was 1.0, now 0.2
+                'cost_per_token': Decimal('0.2'),
+                'cost_per_image': Decimal('0.00'),
+                'supports_image_generation': False,
                 'is_active': True
             },
             {
                 'name': 'gpt-3.5-turbo',
                 'provider': 'OpenAI',
-                'cost_per_token': Decimal('0.15'),  # Budget OpenAI option
+                # Reduced by 80% - was 0.15, now 0.03
+                'cost_per_token': Decimal('0.03'),
+                'cost_per_image': Decimal('0.00'),
+                'supports_image_generation': False,
                 'is_active': True
             },
             {
                 'name': 'gpt-4',
                 'provider': 'OpenAI',
-                'cost_per_token': Decimal('4.5'),   # Legacy GPT-4
+                # Reduced by 80% - was 4.5, now 0.9
+                'cost_per_token': Decimal('0.9'),
+                'cost_per_image': Decimal('0.00'),
+                'supports_image_generation': False,
                 'is_active': True
             },
             {
                 'name': 'gpt-4-turbo',
                 'provider': 'OpenAI',
-                'cost_per_token': Decimal('1.5'),   # Current best GPT-4
+                # Reduced by 80% - was 1.5, now 0.3
+                'cost_per_token': Decimal('0.3'),
+                'cost_per_image': Decimal('0.00'),
+                'supports_image_generation': False,
                 'is_active': True
             },
             {
                 'name': 'gpt-4o',
                 'provider': 'OpenAI',
-                'cost_per_token': Decimal('0.8'),   # Latest GPT-4 Omni
+                # Reduced by 80% - was 0.8, now 0.16
+                'cost_per_token': Decimal('0.16'),
+                'cost_per_image': Decimal('0.00'),
+                'supports_image_generation': False,
                 'is_active': True
             },
             {
                 'name': 'gpt-4o-mini',
                 'provider': 'OpenAI',
-                # Affordable GPT-4 quality
-                'cost_per_token': Decimal('0.06'),
+                # Reduced by 80% - was 0.06, now 0.012
+                'cost_per_token': Decimal('0.012'),
+                'cost_per_image': Decimal('0.00'),
+                'supports_image_generation': False,
+                'is_active': True
+            },
+            {
+                'name': 'dall-e-3',
+                'provider': 'OpenAI',
+                'cost_per_token': Decimal('0.01'),  # Minimal text processing
+                # Image cost increased by 80% - was ~4.0, now 7.2
+                'cost_per_image': Decimal('7.2'),
+                'supports_image_generation': True,
                 'is_active': True
             }
         ]

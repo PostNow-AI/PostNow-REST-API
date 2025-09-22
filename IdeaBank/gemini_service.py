@@ -99,8 +99,7 @@ class GeminiService:
 
         try:
             return AIModelService.validate_user_credits(user, model_name, estimated_tokens)
-        except Exception as e:
-            print(f"Error validating credits: {str(e)}")
+        except Exception:
             return False
 
     def _deduct_credits(self, user: User, actual_tokens: int, model_name: str = 'gemini-1.5-flash', description: str = "Campaign idea generation") -> bool:
@@ -121,8 +120,7 @@ class GeminiService:
 
         try:
             return AIModelService.deduct_credits(user, model_name, actual_tokens, description)
-        except Exception as e:
-            print(f"Error deducting credits: {str(e)}")
+        except Exception:
             return False
 
     def _estimate_tokens(self, prompt: str, model_name: str = 'gemini-1.5-flash') -> int:
@@ -425,10 +423,6 @@ IMPORTANTE:
                 raise Exception(
                     "Insufficient credits for this operation. Please purchase more credits.")
 
-            print("=== PROMPT ENVIADO PARA GEMINI ===")
-            print(prompt)
-            print("=====================================")
-
             response = self.model.generate_content(prompt)
             response_text = response.text.strip()
 
@@ -438,10 +432,6 @@ IMPORTANTE:
             if not self._deduct_credits(user, actual_tokens, model_name, "Campaign idea generation"):
                 print(
                     "Warning: Failed to deduct credits, but operation completed successfully")
-
-            print("=== RESPOSTA DO GEMINI ===")
-            print(response_text)
-            print("=============================")
 
             # Parse the response and structure it
             ideas = self._parse_campaign_response(response_text, config)
@@ -508,8 +498,7 @@ IMPORTANTE:
 
             return ideas
 
-        except Exception as e:
-            print(f"Erro ao processar resposta: {str(e)}")
+        except Exception:
             # Fallback: create basic ideas for each platform
             return self._create_fallback_ideas(config)
 
@@ -1146,9 +1135,6 @@ IMPORTANTE:
                 # Parse JSON response
                 content_text = response.text.strip()
 
-                print(
-                    f"=== DEBUG: Raw AI response: {content_text[:500]}... ===")
-
                 # Remove markdown code blocks if present
                 if content_text.startswith('```json'):
                     content_text = content_text[7:]
@@ -1156,29 +1142,19 @@ IMPORTANTE:
                     content_text = content_text[:-3]
 
                 content_text = content_text.strip()
-                print(
-                    f"=== DEBUG: Cleaned content text: {content_text[:500]}... ===")
 
                 # Parse JSON
                 try:
                     parsed_content = json.loads(content_text)
-                    print(
-                        f"=== DEBUG: Successfully parsed JSON with keys: {list(parsed_content.keys())} ===")
 
                     # Validate that content field exists and is not empty
                     if 'content' not in parsed_content or not parsed_content['content']:
-                        print(
-                            "=== DEBUG: Content field missing or empty in parsed JSON ===")
                         # Generate fallback content
                         parsed_content[
                             'content'] = f"Conteúdo gerado para {platform} - {content_type}. {parsed_content.get('title', '')} - {parsed_content.get('description', '')}"
-                        print(
-                            f"=== DEBUG: Generated fallback content: {parsed_content['content']} ===")
 
                     return parsed_content
-                except json.JSONDecodeError as e:
-                    print(f"JSON decode error: {e}")
-                    print(f"Raw content: {content_text}")
+                except json.JSONDecodeError:
 
                     # Try to extract content using regex as fallback
                     import re
@@ -1204,17 +1180,13 @@ IMPORTANTE:
                             'metricas_sucesso': ['Métrica 1', 'Métrica 2'],
                             'proximos_passos': ['Passo 1', 'Passo 2']
                         }
-                        print(
-                            f"=== DEBUG: Using fallback content: {fallback_content} ===")
                         return fallback_content
 
                     return None
             else:
-                print("No response from Gemini")
                 return None
 
-        except Exception as e:
-            print(f"Error generating single idea: {e}")
+        except Exception:
             return None
 
     def generate_campaign_ideas_with_progress(self, user: User, config: Dict, progress_callback=None) -> Tuple[List[Dict], Dict]:
@@ -1412,9 +1384,6 @@ IMPORTANTE:
                 if progress_callback:
                     progress_callback(progress.get_progress())
             except json.JSONDecodeError as e:
-                print(f"JSON Parse Error: {e}")
-                print(f"Raw response: {content_text[:500]}...")
-                print(f"Cleaned text: {cleaned_text[:500]}...")
                 raise Exception(
                     f"Resposta da IA não é JSON válido. Erro: {str(e)}")
 
@@ -1541,10 +1510,6 @@ IMPORTANTE:
                                     json.dumps(py_obj2, ensure_ascii=False))
                         except Exception as e_regex:
                             # Log context to aid debugging
-                            print("=== DEBUG: Improve Idea - JSON parse failed ===")
-                            print(
-                                f"Raw response (first 500): {response_text[:500]}")
-                            print(f"Cleaned (first 500): {cleaned_text[:500]}")
                             raise Exception(
                                 f"Resposta da IA não é JSON válido. Erros: JSON={str(e_json)} | AST={str(e_ast)} | REGEX={str(e_regex)}"
                             )

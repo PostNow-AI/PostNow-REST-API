@@ -324,8 +324,7 @@ REGRAS OBRIGATÓRIAS:
 
             return ideas_data
 
-        except Exception as e:
-            print(f"Error parsing campaign response: {e}")
+        except Exception:
             return self._create_fallback_ideas(config)
 
     def _extract_multiple_json_objects(self, response_text: str, config: Dict) -> List[Dict]:
@@ -522,7 +521,6 @@ REGRAS OBRIGATÓRIAS:
             return final_ideas, self.progress_tracker.get_progress()
 
         except Exception as e:
-            print(f"Error in generate_campaign_ideas_with_progress: {e}")
             raise e
 
     def _create_idea_from_campaign_data(self, campaign_data: Dict, config: Dict) -> Dict:
@@ -657,7 +655,6 @@ REGRAS OBRIGATÓRIAS:
             return improved_data, self.progress_tracker.get_progress()
 
         except Exception as e:
-            print(f"Error in improve_idea_with_progress: {e}")
             raise e
 
     def _build_improvement_prompt(self, user: User, current_idea: CampaignIdea, improvement_prompt: str) -> str:
@@ -801,8 +798,7 @@ REGRAS OBRIGATÓRIAS:
                 'color_composition': primary_variation.get('color_composition', '') if primary_variation else ''
             }
 
-        except Exception as e:
-            print(f"Error processing improved idea: {e}")
+        except Exception:
             return None
 
     def generate_single_idea_with_progress(self, user: User, campaign: Dict, idea_params: Dict, progress_callback=None) -> Tuple[Dict, Dict]:
@@ -900,7 +896,6 @@ REGRAS OBRIGATÓRIAS:
             return final_idea, self.progress_tracker.get_progress()
 
         except Exception as e:
-            print(f"Error in generate_single_idea_with_progress: {e}")
             raise e
 
     def _build_single_idea_prompt(self, campaign: Dict, idea_params: Dict) -> str:
@@ -981,8 +976,7 @@ REGRAS:
             idea_data = json.loads(json_text)
             return idea_data
 
-        except Exception as e:
-            print(f"Error parsing single idea response: {e}")
+        except Exception:
             return None
 
     def _create_single_idea_from_data(self, idea_data: Dict, idea_params: Dict, campaign: Dict) -> Dict:

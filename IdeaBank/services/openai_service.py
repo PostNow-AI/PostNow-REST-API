@@ -16,15 +16,12 @@ from .base_ai_service import BaseAIService
 class OpenAIService(BaseAIService):
     def generate_image(self, prompt: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using OpenAI's DALL·E API and return the image URL."""
-        print("=== OPENAI IMAGE GENERATION START ===")
 
         if not OPENAI_AVAILABLE:
-            print("❌ OpenAI not available - openai package not installed")
             return ""
 
         api_key = self.default_api_key
         if not api_key:
-            print("❌ No API key available for OpenAI image generation")
             return ""
 
         # Enhance prompt with post data and idea content
@@ -36,15 +33,10 @@ class OpenAIService(BaseAIService):
             from .ai_model_service import AIModelService
             model_name = 'dall-e-3'
             if not AIModelService.validate_image_credits(user, model_name, 1):
-                print("❌ Insufficient credits for image generation")
                 raise ValueError("Créditos insuficientes para gerar imagem")
-
-        print(f"✅ OpenAI API key available: {api_key[:10]}...")
 
         client = openai.OpenAI(api_key=api_key)
         try:
-            print(
-                f"🔄 Generating image with DALL-E-3, prompt: {enhanced_prompt[:100]}...")
 
             response = client.images.generate(
                 model="dall-e-3",
@@ -78,7 +70,6 @@ class OpenAIService(BaseAIService):
                     import traceback
                     return str(traceback.format_exc())
             else:
-                print("❌ Empty response from OpenAI Image API")
                 return ""
 
         except Exception:
@@ -201,7 +192,6 @@ class OpenAIService(BaseAIService):
                 raise Exception("Empty response from OpenAI API")
 
         except Exception as e:
-            print(f"Error making OpenAI request: {e}")
             raise Exception(f"Falha na comunicação com OpenAI: {str(e)}")
 
     # All other methods inherit from BaseAIService

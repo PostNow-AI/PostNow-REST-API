@@ -16,15 +16,12 @@ from .base_ai_service import BaseAIService
 class GeminiService(BaseAIService):
     def generate_image(self, prompt: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using Gemini's image generation API and return a data URL (base64)."""
-        print("=== GEMINI IMAGE GENERATION START ===")
 
         if not GEMINI_AVAILABLE:
-            print("❌ Gemini not available - google-generativeai not installed")
             return ""
 
         api_key = self.default_api_key
         if not api_key:
-            print("❌ No API key available for Gemini image generation")
             return ""
 
         # Enhance prompt with post data and idea content
@@ -36,28 +33,31 @@ class GeminiService(BaseAIService):
             from .ai_model_service import AIModelService
             model_name = 'gemini-imagen'
             if not AIModelService.validate_image_credits(user, model_name, 1):
-                print("❌ Insufficient credits for image generation")
                 raise ValueError("Créditos insuficientes para gerar imagem")
 
-        print(f"✅ API key available: {api_key[:10]}...")
+        # Flag to track if we should deduct credits
+        should_deduct_credits = user and user.is_authenticated
+
         genai.configure(api_key=api_key)
+
+        # Helper function to deduct credits after successful generation
+        def deduct_credits_for_image(description_suffix=""):
+            if should_deduct_credits:
+                try:
+                    from .ai_model_service import AIModelService
+                    AIModelService.deduct_image_credits(
+                        user, 'gemini-imagen', 1, f"Gemini image generation{description_suffix} - {prompt[:50]}...")
+                except ImportError:
+                    print("⚠️ Could not deduct credits - AIModelService not available")
 
         try:
             # Try different model names for image generation
             model_names = [
-                'gemini-2.0-flash-exp',  # Latest experimental model
-                'gemini-1.5-pro-002',     # Pro model with potential image capabilities
-                'gemini-1.5-flash-002',   # Flash model
-                # Direct image generation model (if available)
-                'imagen-3.0-generate-001',
                 'gemini-2.5-flash-image-preview',
-                'gemini-pro-vision'
             ]
 
             for model_name in model_names:
                 try:
-                    print(
-                        f"🔄 Trying to generate image with model: {model_name}")
                     model = genai.GenerativeModel(model_name)
 
                     # Try image generation with clear instructions
@@ -74,13 +74,9 @@ class GeminiService(BaseAIService):
                                         part.inline_data.data)
                                     if compressed_data:
                                         # Deduct credits for successful image generation
-                                        if user and user.is_authenticated:
-                                            from .ai_model_service import AIModelService
-                                            AIModelService.deduct_image_credits(
-                                                user, 'gemini-imagen', 1, f"Gemini image generation - {prompt[:50]}...")
+                                        deduct_credits_for_image(
+                                            " (inline data)")
 
-                                        print(
-                                            f"✅ Successfully generated and compressed image with model: {model_name}")
                                         return compressed_data
                                     else:
                                         print(
@@ -91,15 +87,10 @@ class GeminiService(BaseAIService):
                                     print(
                                         f"📝 Model {model_name} returned text: {part.text[:100]}...")
 
-                    print(
-                        f"⚠️ Model {model_name} generated content but no image data found")
-
-                except Exception as model_error:
-                    print(f"❌ Model {model_name} failed: {model_error}")
+                except Exception:
                     continue
 
             # If no models worked, try using Imagen (Google's dedicated image model) via different approach
-            print("🔄 Trying Imagen API approach...")
             try:
                 # Note: This may require different API setup
                 model = genai.GenerativeModel('gemini-1.5-pro')
@@ -108,19 +99,12 @@ class GeminiService(BaseAIService):
 
                 if response.text and 'base64' in response.text.lower():
                     # Deduct credits for successful image generation
-                    if user and user.is_authenticated:
-                        from .ai_model_service import AIModelService
-                        AIModelService.deduct_image_credits(
-                            user, 'gemini-imagen', 1, f"Gemini Imagen - {prompt[:50]}...")
+                    deduct_credits_for_image(" (Imagen API)")
 
-                    print("✅ Potential image data found in text response")
                     return response.text
 
             except Exception as imagen_error:
                 print(f"❌ Imagen approach failed: {imagen_error}")
-
-            print(
-                "❌ All Gemini image generation approaches failed - trying text-to-image prompt")
 
             # Final fallback: Generate a detailed text description for image generation
             try:
@@ -137,8 +121,8 @@ Format as: "A professional marketing image showing [detailed description]"
 """
                 response = model.generate_content(fallback_prompt)
                 if response.text:
-                    print(
-                        f"✅ Generated enhanced prompt for fallback: {response.text[:100]}...")
+                    # Deduct credits for generating enhanced prompt (still an AI service call)
+                    deduct_credits_for_image(" (enhanced prompt)")
                     # Return empty to trigger OpenAI with enhanced prompt
                     # Store enhanced prompt for potential use
                     setattr(self, '_enhanced_prompt', response.text)
@@ -146,14 +130,9 @@ Format as: "A professional marketing image showing [detailed description]"
             except Exception as fallback_error:
                 print(f"❌ Fallback prompt generation failed: {fallback_error}")
 
-            print(
-                "❌ All Gemini image generation methods failed - returning empty for OpenAI fallback")
             return ""
 
-        except Exception as e:
-            print(f"❌ Error generating image with Gemini: {e}")
-            import traceback
-            print(f"🔍 Detailed error: {traceback.format_exc()}")
+        except Exception:
             return ""
 
     def _enhance_image_prompt(self, base_prompt: str, post_data: dict = None, idea_content: str = None) -> str:
@@ -193,74 +172,54 @@ Format as: "A professional marketing image showing [detailed description]"
 
             from PIL import Image
 
-            print(f"📏 Original image data size: {len(image_data)} bytes")
-
             # Load image from bytes
             image = Image.open(io.BytesIO(image_data))
-            print(f"📐 Original image dimensions: {image.size}")
 
             # Convert to RGB if necessary
             if image.mode in ('RGBA', 'LA', 'P'):
                 image = image.convert('RGB')
 
-            # Resize image to a reasonable size for web display (max 300x300)
-            max_size = (300, 300)
+            # Resize image to a higher resolution for better quality (max 800x800)
+            max_size = (800, 800)
             image.thumbnail(max_size, Image.Resampling.LANCZOS)
-            print(f"📐 Compressed image dimensions: {image.size}")
 
-            # Save as JPEG with moderate compression for good quality/size balance
+            # Save as JPEG with high quality for better visual appeal
             buffer = io.BytesIO()
-            image.save(buffer, format='JPEG', quality=60, optimize=True)
+            image.save(buffer, format='JPEG', quality=85, optimize=True)
             compressed_data = buffer.getvalue()
-
-            print(
-                f"📏 Compressed image data size: {len(compressed_data)} bytes")
 
             # Convert to base64
             b64_data = base64.b64encode(compressed_data).decode('utf-8')
             data_url = f"data:image/jpeg;base64,{b64_data}"
 
-            print(f"📏 Final data URL length: {len(data_url)} characters")
-
             # TextField can handle much larger data, but let's still be reasonable
-            if len(data_url) > 100000:  # 100KB limit for reasonable performance
-                print("⚠️ Image is very large, applying more compression")
+            if len(data_url) > 300000:  # 300KB limit for high quality images
 
-                # Smaller size and lower quality if too large
+                # Medium size and good quality for large images
                 image = Image.open(io.BytesIO(image_data))
                 if image.mode in ('RGBA', 'LA', 'P'):
                     image = image.convert('RGB')
 
-                image.thumbnail((200, 200), Image.Resampling.LANCZOS)
+                image.thumbnail((600, 600), Image.Resampling.LANCZOS)
                 buffer = io.BytesIO()
-                image.save(buffer, format='JPEG', quality=40, optimize=True)
+                image.save(buffer, format='JPEG', quality=75, optimize=True)
                 compressed_data = buffer.getvalue()
 
                 b64_data = base64.b64encode(compressed_data).decode('utf-8')
                 data_url = f"data:image/jpeg;base64,{b64_data}"
 
-                print(
-                    f"📏 After additional compression: {len(data_url)} characters")
-
-            if len(data_url) > 200000:  # 200KB absolute limit
-                print("❌ Image still too large even with maximum compression")
-                print(
-                    f"📏 Final length: {len(data_url)} characters (max allowed: 200000)")
+            if len(data_url) > 500000:  # 500KB absolute limit for high quality
                 return ""
 
             return data_url
 
         except ImportError:
-            print("❌ PIL/Pillow not available for image compression")
             # Fallback to original base64 without compression
             import base64
             b64_data = base64.b64encode(image_data).decode('utf-8')
             return f"data:image/png;base64,{b64_data}"
 
-        except Exception as e:
-            print(f"❌ Error compressing image: {e}")
-            import traceback
-            print(f"🔍 Compression error details: {traceback.format_exc()}")
+        except Exception:
             return ""
 
     """Service for interacting with Google Gemini AI."""
@@ -345,7 +304,6 @@ Format as: "A professional marketing image showing [detailed description]"
                 raise Exception("Empty response from Gemini API")
 
         except Exception as e:
-            print(f"Error making Gemini request: {e}")
             raise Exception(f"Falha na comunicação com Gemini: {str(e)}")
 
     # Legacy method compatibility

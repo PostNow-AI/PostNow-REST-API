@@ -130,12 +130,6 @@ DB_PORT = os.getenv('DB_PORT', '3306')
 
 # Validate database configuration
 if not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST]):
-    print("⚠️  WARNING: Database environment variables not fully configured!")
-    print(f"   DB_NAME: {DB_NAME}")
-    print(f"   DB_USER: {DB_USER}")
-    print(f"   DB_HOST: {DB_HOST}")
-    print(f"   DB_PORT: {DB_PORT}")
-
     # For Vercel, we might want to use a different database or fail gracefully
     if os.getenv('VERCEL_ENV'):
         print("🚀 Vercel environment detected - using fallback configuration")
