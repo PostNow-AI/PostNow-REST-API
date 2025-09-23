@@ -1,5 +1,4 @@
 import os
-from typing import Dict, List
 
 try:
     import google.generativeai as genai
@@ -146,14 +145,9 @@ Format as: "A professional marketing image showing [detailed description]"
                     f"Post objective: {post_data['objective']}")
             if post_data.get('type'):
                 enhanced_parts.append(f"Content type: {post_data['type']}")
-            if post_data.get('target_gender') or post_data.get('target_age'):
-                target_info = []
-                if post_data.get('target_gender'):
-                    target_info.append(f"gender: {post_data['target_gender']}")
-                if post_data.get('target_age'):
-                    target_info.append(f"age: {post_data['target_age']}")
+            if post_data.get('further_details'):
                 enhanced_parts.append(
-                    f"Target audience ({', '.join(target_info)})")
+                    f"Additional details: {post_data['further_details']}")
 
         if idea_content:
             # Extract key themes from idea content for visual inspiration
@@ -273,18 +267,6 @@ Format as: "A professional marketing image showing [detailed description]"
         # Fallback estimation: roughly 4 characters per token
         return len(prompt) // 4
 
-    def _select_optimal_model(self, user: User, estimated_tokens: int, preferred_provider: str = None) -> str:
-        """Select the optimal AI model for the operation."""
-        try:
-            from .ai_model_service import AIModelService
-            if AIModelService:
-                return AIModelService.select_optimal_model(user, estimated_tokens, preferred_provider)
-        except ImportError:
-            pass
-
-        # Fallback to default model
-        return self.model_name
-
     def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None) -> str:
         """Make the actual AI API request to Gemini."""
         # Configure API key
@@ -305,26 +287,3 @@ Format as: "A professional marketing image showing [detailed description]"
 
         except Exception as e:
             raise Exception(f"Falha na comunicação com Gemini: {str(e)}")
-
-    # Legacy method compatibility
-
-    def generate_campaign_ideas(self, user: User, config: Dict) -> List[Dict]:
-        """Legacy method - now redirects to generate_campaign_ideas_with_progress."""
-        ideas, _ = self.generate_campaign_ideas_with_progress(user, config)
-        return ideas
-
-    def generate_ideas(self, user: User, config: Dict) -> List[Dict]:
-        """Legacy method - now redirects to generate_campaign_ideas_with_progress."""
-        return self.generate_campaign_ideas(user, config)
-
-    def improve_idea(self, user: User, current_idea, improvement_prompt: str, api_key: str = None) -> Dict:
-        """Legacy method - now redirects to improve_idea_with_progress."""
-        improved_data, _ = self.improve_idea_with_progress(
-            user, current_idea, improvement_prompt, api_key)
-        return improved_data
-
-    def generate_single_idea(self, user: User, campaign: Dict, idea_params: Dict) -> Dict:
-        """Legacy method - now redirects to generate_single_idea_with_progress."""
-        idea_data, _ = self.generate_single_idea_with_progress(
-            user, campaign, idea_params)
-        return idea_data

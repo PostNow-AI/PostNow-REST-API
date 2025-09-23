@@ -6,7 +6,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import Gender, Post, PostIdea, PostObjective, PostType
+from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
     ImageGenerationRequestSerializer,
     PostCreateSerializer,
@@ -98,8 +98,8 @@ def generate_post_idea(request):
 
         # Extract AI preferences
         ai_provider = post_data.pop('preferred_provider', 'google')
-        ai_model = post_data.pop('preferred_model', 'gemini-1.5-flash')
-        include_image = post_data.pop('include_image', False)
+        ai_model = post_data.pop('preferred_model', 'gemini-2.5-flash')
+        include_image = post_data.get('include_image', False)
 
         # Create the post
         post = Post.objects.create(user=request.user, **post_data)
@@ -116,9 +116,7 @@ def generate_post_idea(request):
         # Create the post idea with generated content
         post_idea = PostIdea.objects.create(
             post=post,
-            content=result['content'],
-            ai_provider=result['ai_provider'],
-            ai_model=result['ai_model']
+            content=result['content']
         )
 
         # Generate image if requested
@@ -185,6 +183,8 @@ def generate_image_for_idea(request, idea_id):
             'name': post_idea.post.name,
             'objective': post_idea.post.objective,
             'type': post_idea.post.type,
+            'further_details': post_idea.post.further_details,
+            'include_image': post_idea.post.include_image,
         }
 
         # Generate image
@@ -242,18 +242,15 @@ def edit_post_idea(request, idea_id):
         ai_provider = serializer.validated_data.get(
             'preferred_provider', 'google')
         ai_model = serializer.validated_data.get(
-            'preferred_model', 'gemini-1.5-flash')
+            'preferred_model', 'gemini-2.5-flash')
 
         # Prepare post data
         post_data = {
             'name': post_idea.post.name,
             'objective': post_idea.post.objective,
             'type': post_idea.post.type,
-            'target_gender': post_idea.post.target_gender,
-            'target_age': post_idea.post.target_age,
-            'target_location': post_idea.post.target_location,
-            'target_salary': post_idea.post.target_salary,
-            'target_interests': post_idea.post.target_interests,
+            'further_details': post_idea.post.further_details,
+            'include_image': post_idea.post.include_image,
         }
 
         # Regenerate content
@@ -269,8 +266,6 @@ def edit_post_idea(request, idea_id):
 
         # Update the post idea
         post_idea.content = result['content']
-        post_idea.ai_provider = result['ai_provider']
-        post_idea.ai_model = result['ai_model']
         post_idea.save()
 
         return Response({
@@ -317,6 +312,8 @@ def regenerate_image_for_idea(request, idea_id):
             'name': post_idea.post.name,
             'objective': post_idea.post.objective,
             'type': post_idea.post.type,
+            'further_details': post_idea.post.further_details,
+            'include_image': post_idea.post.include_image,
         }
 
         # Regenerate image
@@ -359,10 +356,6 @@ def get_post_options(request):
         'types': [
             {'value': choice[0], 'label': choice[1]}
             for choice in PostType.choices
-        ],
-        'genders': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in Gender.choices
         ]
     }
 
@@ -400,14 +393,6 @@ def get_post_stats(request):
     try:
         total_posts = Post.objects.filter(user=request.user).count()
         total_ideas = PostIdea.objects.filter(post__user=request.user).count()
-        approved_ideas = PostIdea.objects.filter(
-            post__user=request.user,
-            status='approved'
-        ).count()
-        draft_ideas = PostIdea.objects.filter(
-            post__user=request.user,
-            status='draft'
-        ).count()
 
         # Count by post type
         post_types = {}
@@ -420,8 +405,6 @@ def get_post_stats(request):
         return Response({
             'total_posts': total_posts,
             'total_ideas': total_ideas,
-            'approved_ideas': approved_ideas,
-            'draft_ideas': draft_ideas,
             'post_types_distribution': post_types
         })
     except Exception as e:

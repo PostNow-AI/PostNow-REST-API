@@ -11,9 +11,9 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None
 
-from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
 
+from CreatorProfile.models import CreatorProfile
 from IdeaBank.models import CampaignIdea, VoiceTone
 
 # Import AI model service for credit management
@@ -141,27 +141,6 @@ class GeminiService:
         estimated_tokens = len(prompt) // 4
         total_estimated = estimated_tokens * 3
         return max(total_estimated, 100)
-
-    def _select_optimal_model(self, user: User, estimated_tokens: int, preferred_provider: str = None) -> str:
-        """
-        Select the optimal AI model based on user credits and preferences.
-
-        Args:
-            user: User requesting the operation
-            estimated_tokens: Estimated number of tokens needed
-            preferred_provider: Preferred AI provider (optional)
-
-        Returns:
-            str: Name of the optimal model
-        """
-        if AI_MODEL_SERVICE_AVAILABLE:
-            optimal_model = AIModelService.select_optimal_model(
-                user, estimated_tokens, preferred_provider)
-            if optimal_model:
-                return optimal_model
-
-        # Fallback to default model
-        return 'gemini-1.5-flash'
 
     def _build_campaign_prompt(self, user: User, config: Dict) -> str:
         """Build the new structured prompt for campaign generation."""
@@ -416,8 +395,7 @@ IMPORTANTE:
 
             # Select optimal model and validate credits
             estimated_tokens = self._estimate_tokens(prompt)
-            model_name = self._select_optimal_model(
-                user, estimated_tokens, config.get('preferred_provider'))
+            model_name = 'gemini-2.5-flash'
 
             if not self._validate_credits(user, estimated_tokens, model_name):
                 raise Exception(
@@ -1237,8 +1215,7 @@ IMPORTANTE:
             # Step 5: Validate credits
             progress.next_step()
             estimated_tokens = self._estimate_tokens(prompt)
-            model_name = self._select_optimal_model(
-                user, estimated_tokens, config.get('preferred_provider'))
+            model_name = 'gemini-2.5-flash'
 
             if not self._validate_credits(user, estimated_tokens, model_name):
                 raise Exception(

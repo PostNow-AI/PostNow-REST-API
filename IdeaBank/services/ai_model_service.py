@@ -18,92 +18,37 @@ class AIModelService:
     """Service for managing AI model configurations and credit costs."""
 
     # Default model configurations if database is not available
-    # Token costs reduced by 80% as per user request (now 20% of original cost)
+    # Only Gemini 2.5 Flash is supported
     DEFAULT_MODELS = {
-        'gemini-1.5-flash': {
+        'gemini-2.5-flash': {
             'provider': 'Google',
-            'cost_per_token': Decimal('0.008'),  # Reduced from 0.04 to 0.008
+            'cost_per_token': Decimal('0.008'),  # Reduced cost
             'max_tokens': 8192,
             'supports_streaming': False,
-            'is_active': True
-        },
-        'gemini-1.5-pro': {
-            'provider': 'Google',
-            'cost_per_token': Decimal('0.04'),  # Reduced from 0.2 to 0.04
-            'max_tokens': 32768,
-            'supports_streaming': False,
-            'is_active': True
-        },
-        'claude-3-sonnet': {
-            'provider': 'Anthropic',
-            'cost_per_token': Decimal('0.04'),  # Reduced from 0.2 to 0.04
-            'max_tokens': 200000,
-            'supports_streaming': True,
-            'is_active': True
-        },
-        'gpt-4': {
-            'provider': 'OpenAI',
-            'cost_per_token': Decimal('0.9'),   # Reduced from 4.5 to 0.9
-            'max_tokens': 8192,
-            'supports_streaming': True,
-            'is_active': True
-        },
-        'gpt-3.5-turbo': {
-            'provider': 'OpenAI',
-            'cost_per_token': Decimal('0.03'),  # Reduced from 0.15 to 0.03
-            'max_tokens': 4096,
-            'supports_streaming': True,
             'is_active': True
         }
     }
 
     @classmethod
     def get_available_models(cls) -> List[Dict]:
-        """Get list of available AI models with their configurations."""
-        if CREDIT_SYSTEM_AVAILABLE:
-            try:
-                db_models = AIModel.objects.filter(is_active=True)
-                return [
-                    {
-                        'name': model.name,
-                        'provider': model.provider,
-                        'cost_per_token': float(model.cost_per_token),
-                        'is_active': model.is_active
-                    }
-                    for model in db_models
-                ]
-            except Exception:
-                pass
-
-        # Fallback to default models
+        """Get list of available AI models with their configurations. Only Gemini 2.5 Flash is supported."""
+        # Force to return only Gemini 2.5 Flash regardless of database content
         return [
             {
-                'name': name,
-                'provider': config['provider'],
-                'cost_per_token': float(config['cost_per_token']),
-                'is_active': config['is_active']
+                'name': 'gemini-2.5-flash',
+                'provider': 'Google',
+                'cost_per_token': float(cls.DEFAULT_MODELS['gemini-2.5-flash']['cost_per_token']),
+                'is_active': True
             }
-            for name, config in cls.DEFAULT_MODELS.items()
-            if config['is_active']
         ]
 
     @classmethod
     def get_model_config(cls, model_name: str) -> Optional[Dict]:
-        """Get configuration for a specific AI model."""
-        if CREDIT_SYSTEM_AVAILABLE:
-            try:
-                model = AIModel.objects.get(name=model_name, is_active=True)
-                return {
-                    'name': model.name,
-                    'provider': model.provider,
-                    'cost_per_token': float(model.cost_per_token),
-                    'is_active': model.is_active
-                }
-            except AIModel.DoesNotExist:
-                pass
-
-        # Fallback to default models
-        return cls.DEFAULT_MODELS.get(model_name)
+        """Get configuration for a specific AI model. Only Gemini 2.5 Flash is supported."""
+        # Only return config for Gemini 2.5 Flash
+        if model_name == 'gemini-2.5-flash':
+            return cls.DEFAULT_MODELS.get(model_name)
+        return None
 
     @classmethod
     def calculate_cost(cls, model_name: str, estimated_tokens: int) -> float:
@@ -133,19 +78,13 @@ class AIModelService:
                 # Fallback to default image costs
                 pass
 
-        # Fallback to default image costs (increased by 80% as per user request)
+        # Fallback to default image costs
         default_image_costs = {
-            # Increased from ~4.0 to 7.2 (80% increase)
-            'dall-e-3': 7.2,
-            # Increased from ~2.0 to 3.6 (80% increase)
-            'gemini-imagen': 3.6,
-            'gemini-1.5-pro': 3.6,    # Image support, increased cost
-            'gemini-1.5-flash': 2.7,  # Image support, increased cost
+            'gemini-2.5-flash': 2.7,  # Only supported model for image generation
         }
 
-        # Default increased cost per image
-        # Default increased from 3.0 to 5.4
-        return default_image_costs.get(model_name, 5.4) * num_images
+        # Default cost per image (only for gemini-2.5-flash)
+        return default_image_costs.get(model_name, 2.7) * num_images
 
     @classmethod
     def validate_user_credits(cls, user: User, model_name: str, estimated_tokens: int) -> bool:
@@ -217,11 +156,15 @@ class AIModelService:
             return 0.0
 
     @classmethod
-    def estimate_tokens(cls, text: str, model_name: str = 'gemini-1.5-flash') -> int:
+    def estimate_tokens(cls, text: str, model_name: str = 'gemini-2.5-flash') -> int:
         """
         Estimate token count for text. This is a rough estimation.
-        Different models may have different tokenization.
+        Only supports gemini-2.5-flash model.
         """
+        # Only allow gemini-2.5-flash
+        if model_name != 'gemini-2.5-flash':
+            model_name = 'gemini-2.5-flash'
+
         # Rough estimation: 1 token ≈ 4 characters for most languages
         # This is conservative and may overestimate
         estimated_tokens = len(text) // 4
@@ -342,21 +285,8 @@ class AIModelService:
         Higher score = better quality.
         """
         quality_scores = {
-            # Google Gemini
-            'gemini-1.5-flash': 7.0,
-            'gemini-1.5-pro': 8.5,
-
-            # OpenAI GPT
-            'gpt-3.5-turbo': 6.5,
-            'gpt-4': 9.0,
-            'gpt-4-turbo': 9.2,
-            'gpt-4o': 9.5,
-            'gpt-4o-mini': 7.5,
-
-            # Anthropic Claude
-            'claude-3-haiku': 7.0,
-            'claude-3-sonnet': 8.5,
-            'claude-3-opus': 9.5,
+            # Google Gemini - Only supported model
+            'gemini-2.5-flash': 8.0,  # High quality score for our primary model
         }
 
         # Default score for unknown models

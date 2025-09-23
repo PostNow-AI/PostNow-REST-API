@@ -9,24 +9,18 @@ from django.contrib.auth.models import User
 from .ai_service_factory import AIServiceFactory
 from .base_ai_service import BaseAIService
 
-try:
-    from .ai_model_service import AIModelService
-    AI_MODEL_SERVICE_AVAILABLE = True
-except ImportError:
-    AI_MODEL_SERVICE_AVAILABLE = False
-
 
 class PostAIService(BaseAIService):
     """Service for generating post ideas using AI models."""
 
     def __init__(self):
-        super().__init__("gemini-1.5-flash")  # Initialize parent with default model
+        super().__init__("gemini-2.5-flash")  # Initialize parent with default model
         self.default_provider = 'google'
-        self.default_model = 'gemini-1.5-flash'
+        self.default_model = 'gemini-2.5-flash'
 
     def _validate_credits(self, user: User, estimated_tokens: int, model_name: str) -> bool:
         """Validate if user has sufficient credits for the AI operation."""
-        if not AI_MODEL_SERVICE_AVAILABLE or not user.is_authenticated:
+        if not user.is_authenticated:
             return True
 
         try:
@@ -37,7 +31,7 @@ class PostAIService(BaseAIService):
 
     def _deduct_credits(self, user: User, actual_tokens: int, model_name: str, description: str) -> bool:
         """Deduct credits after AI operation."""
-        if not AI_MODEL_SERVICE_AVAILABLE or not user.is_authenticated:
+        if not user.is_authenticated:
             return True
 
         try:
@@ -48,39 +42,26 @@ class PostAIService(BaseAIService):
 
     def _estimate_tokens(self, prompt: str, model_name: str) -> int:
         """Estimate token count for a prompt."""
-        if AI_MODEL_SERVICE_AVAILABLE:
-            try:
-                from .ai_model_service import AIModelService
-                return AIModelService.estimate_tokens(prompt, model_name)
-            except ImportError:
-                pass
-
-        # Fallback estimation: roughly 4 characters per token
-        return len(prompt) // 4
+        try:
+            from .ai_model_service import AIModelService
+            return AIModelService.estimate_tokens(prompt, model_name)
+        except ImportError:
+            return len(prompt) // 4
 
     def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None) -> str:
         """Make AI request using the AI service factory."""
+        # Force to use only supported model
+        if model_name != 'gemini-2.5-flash':
+            model_name = 'gemini-2.5-flash'
+
         # Create AI service
-        ai_service = AIServiceFactory.create_service(
-            self.default_provider, model_name)
+        ai_service = AIServiceFactory.create_service('google', model_name)
         if not ai_service:
             raise Exception(
                 f"AI service not available for provider: {self.default_provider}")
 
         # Make the request
         return ai_service._make_ai_request(prompt, model_name, api_key)
-
-    def _select_optimal_model(self, user: User, estimated_tokens: int, preferred_provider: str = None) -> str:
-        """Select the optimal AI model for the operation."""
-        if AI_MODEL_SERVICE_AVAILABLE:
-            try:
-                from .ai_model_service import AIModelService
-                return AIModelService.select_optimal_model(user, estimated_tokens, preferred_provider)
-            except ImportError:
-                pass
-
-        # Fallback to default model
-        return self.default_model
 
     def generate_post_content(
         self,
@@ -94,15 +75,15 @@ class PostAIService(BaseAIService):
 
         Args:
             user: The user requesting the generation
-            post_data: Dictionary containing post information (name, objective, type, target audience)
-            ai_provider: AI provider preference (google, openai, anthropic)
-            ai_model: Specific AI model to use
+            post_data: Dictionary containing post information (name, objective, type, further details, include_image)
+            ai_provider: AI provider preference (google)
+            ai_model: gemini-2.5-flash
 
         Returns:
             Dictionary containing the generated content
         """
-        provider = ai_provider or self.default_provider
-        model = ai_model or self.default_model
+        provider = 'google'
+        model = 'gemini-2.5-flash'
 
         # Store user and post_data for profile access
         self.user = user
@@ -118,7 +99,7 @@ class PostAIService(BaseAIService):
                 raise Exception("Créditos insuficientes para gerar conteúdo")
 
         # Create AI service
-        ai_service = AIServiceFactory.create_service(provider, model)
+        ai_service = AIServiceFactory.create_service('google', model)
         if not ai_service:
             raise Exception(
                 f"AI service not available for provider: {provider}")
@@ -163,8 +144,8 @@ class PostAIService(BaseAIService):
             URL or base64 data of the generated image
         """
         # Validate credits before generation (skip for unauthenticated users)
-        model_name = 'gemini-imagen'
-        if user and user.is_authenticated and AI_MODEL_SERVICE_AVAILABLE:
+        model_name = 'gemini-2.5-flash'  # Only supported model
+        if user and user.is_authenticated:
             try:
                 from .ai_model_service import AIModelService
                 if not AIModelService.validate_image_credits(user, model_name, 1):
@@ -174,7 +155,7 @@ class PostAIService(BaseAIService):
 
         # Use Google for image generation by default
         ai_service = AIServiceFactory.create_service(
-            'google', 'gemini-1.5-flash')
+            'google', 'gemini-2.5-flash')
         if not ai_service:
             raise Exception(
                 "Google service not available for image generation")
@@ -267,14 +248,8 @@ class PostAIService(BaseAIService):
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
         post_type = post_data.get('type', '')
-
-        # Target audience information
-        target_gender = post_data.get('target_gender', 'Não especificado')
-        target_age = post_data.get('target_age', 'Não especificado')
-        target_location = post_data.get('target_location', 'Não especificado')
-        target_salary = post_data.get('target_salary', 'Não especificado')
-        target_interests = post_data.get(
-            'target_interests', 'Não especificado')
+        further_details = post_data.get('further_details', '')
+        include_image = post_data.get('include_image', False)
 
         # Creator profile information (if available)
         creator_profile_section = ""
@@ -309,6 +284,13 @@ class PostAIService(BaseAIService):
                 if creator_info:
                     creator_profile_section = f"\n\nPERFIL DO CRIADOR:\n{chr(10).join(f'- {info}' for info in creator_info)}"
 
+        # Add further details if provided
+        additional_context = f"\n\nDetalhes Adicionais: {further_details}" if further_details and further_details.strip(
+        ) else ""
+
+        # Add image generation context if requested
+        image_context = "\n\nNOTA: Uma imagem será gerada automaticamente para este post usando IA." if include_image else ""
+
         prompt = f"""
 Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
 Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, sempre respeitando as políticas do Meta e Google Ads, evitando qualquer tipo de sensacionalismo, promessa exagerada ou afirmações que possam violar as diretrizes dessas plataformas.
@@ -317,22 +299,14 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
 - Nome do Post (tema principal): {name}
 - Objetivo da campanha: {objective}
 - Tipo de conteúdo: {post_type} → pode ser Live, Reel, Post, Carousel ou Story
-- Plataforma: instagram
-- Público-Alvo:
-   • Gênero: {target_gender}
-   • Faixa Etária: {target_age}
-   • Localização: {target_location}
-   • Renda Mensal: {target_salary}
-   • Interesses: {target_interests}
-- Linguagem/Tom de voz: profissional{creator_profile_section}
-
+- Plataforma: instagram{creator_profile_section}{additional_context}{image_context}
 
 ### REGRAS PARA CONSTRUÇÃO DA COPY:
 
 1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.  
    O resultado deve ser apenas o texto final, fluido e pronto para publicação.  
 
-2. A copy deve respeitar o tom de voz definido no formulário da empresa (ex.: técnico, acolhedor, inspirador, educativo, leve ou persuasivo).  
+2. A copy deve respeitar o tom de voz definido no perfil do criador (se disponível) ou usar tom profissional como padrão.
 
 3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
    - Não usar comparações negativas diretas.  
@@ -349,7 +323,7 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
    - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
    - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
 
-6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido no formulário.  
+6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido.
 
 7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.  
 
@@ -364,7 +338,7 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
 ### SAÍDA ESPERADA:
 - Texto final pronto para ser copiado e colado.  
 - Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.  
-- Linguagem alinhada ao público e ao tom cadastrado no formulário da empresa.  
+- Linguagem alinhada ao perfil do criador e ao tom cadastrado.
 - Respeito às boas práticas do Meta e Google Ads.  
 - Emojis distribuídos de forma natural, sem excesso.  
 - Parágrafos curtos, fáceis de ler e escaneáveis.  
@@ -378,6 +352,7 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
         post_type = post_data.get('type', '')
         objective = post_data.get('objective', '')
         name = post_data.get('name', '')
+        further_details = post_data.get('further_details', '')
 
         # Extract title from content if available
         title = ""
@@ -388,16 +363,6 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
         # Use title from content if available, otherwise use name from post_data
         tema = title if title else name
 
-        # Target audience information
-        target_gender = post_data.get('target_gender', 'Não especificado')
-        target_age = post_data.get('target_age', 'Não especificado')
-        target_location = post_data.get('target_location', 'Não especificado')
-        target_interests = post_data.get(
-            'target_interests', 'Não especificado')
-
-        # Build target audience description
-        publico_alvo = f"Gênero: {target_gender}, Idade: {target_age}, Localização: {target_location}, Interesses: {target_interests}"
-
         # Creator profile information for brand identity (if available)
         identidade_marca = "Estilo profissional e moderno"
         if hasattr(self, 'user') and self.user:
@@ -407,6 +372,8 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
                 brand_info = []
                 if profile.business_name:
                     brand_info.append(f"Empresa: {profile.business_name}")
+                if profile.profession:
+                    brand_info.append(f"Profissão: {profile.profession}")
 
                 # Color palette
                 colors = [profile.color_1, profile.color_2,
@@ -420,14 +387,17 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
                 if brand_info:
                     identidade_marca = f"{', '.join(brand_info)}, estilo profissional"
 
+        # Add further details context if available
+        context_adicional = f" - Contexto adicional: {further_details}" if further_details and further_details.strip(
+        ) else ""
+
         prompt = f"""Você é um especialista em criação visual para marketing digital e redes sociais.  
 Sua missão é gerar imagens criativas, profissionais e impactantes que transmitam a mensagem central da campanha.  
 
 ### DADOS DE ENTRADA:  
 - Tema da imagem: {tema}
 - Objetivo da campanha: {objective}
-- Tipo de conteúdo: {post_type} → pode ser Post, Reel (capa), Carousel, Story, Anúncio  
-- Público-Alvo: {publico_alvo}
+- Tipo de conteúdo: {post_type} → pode ser Post, Reel (capa), Carousel, Story, Anúncio{context_adicional}
 - Estilo visual desejado: MODERNO, PROFISSIONAL, REALISTA
 - Cores/Identidade da marca: {identidade_marca}
 
@@ -438,7 +408,7 @@ Sua missão é gerar imagens criativas, profissionais e impactantes que transmit
 1. A imagem deve ser **clara, atrativa e coerente** com o tema central e o objetivo da campanha.  
 2. Ajustar o **formato da arte** conforme o tipo de conteúdo (ex.: Story 1080x1920, Post 1080x1080, Reel capa 1080x1920).  
 3. Representar a mensagem de forma **ética e respeitosa**, sem estereótipos ou sensacionalismo.  
-4. Usar elementos visuais que conectem com o **público-alvo e seus interesses**.  
+4. Usar elementos visuais que conectem com o **perfil do criador e sua área de atuação**.  
 5. Se houver informações da empresa (logo, paleta de cores, estilo visual), elas devem ser integradas.  
 6. Evite excesso de texto. Se for necessário, use frases curtas e legíveis.  
 7. A imagem deve parecer **profissional e de alta qualidade**, pronta para publicação em redes sociais.  
@@ -446,8 +416,7 @@ Sua missão é gerar imagens criativas, profissionais e impactantes que transmit
 ---
 
 ### SAÍDA ESPERADA:
-- Uma descrição detalhada da imagem a ser criada, no estilo de prompt para ferramenta de geração de imagens.  
-- O prompt deve incluir: tema, elementos visuais principais, estilo artístico, cores predominantes, formato da imagem e público-alvo."""
+- A imagem, em alta qualidade, compreendendo todas as informações passadas"""
 
         return prompt
 
@@ -456,6 +425,11 @@ Sua missão é gerar imagens criativas, profissionais e impactantes que transmit
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
         post_type = post_data.get('type', '')
+        further_details = post_data.get('further_details', '')
+
+        # Add further details context if available
+        context_adicional = f"\n- Detalhes Adicionais: {further_details}" if further_details and further_details.strip(
+        ) else ""
 
         prompt = f"""
 Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
@@ -471,14 +445,14 @@ FEEDBACK/SOLICITAÇÃO DO USUÁRIO:
 ESPECIFICAÇÕES ORIGINAIS:
 - Nome do post: {name}
 - Objetivo: {objective}
-- Tipo: {post_type}
+- Tipo: {post_type}{context_adicional}
 
 ## REGRAS PARA CONSTRUÇÃO DA COPY:
 
 1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.  
    O resultado deve ser apenas o texto final, fluido e pronto para publicação.  
 
-2. A copy deve respeitar o tom de voz definido no formulário da empresa (ex.: técnico, acolhedor, inspirador, educativo, leve ou persuasivo).  
+2. A copy deve respeitar o tom de voz definido no perfil do criador (se disponível) ou usar tom profissional como padrão.
 
 3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
    - Não usar comparações negativas diretas.  
@@ -495,7 +469,7 @@ ESPECIFICAÇÕES ORIGINAIS:
    - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
    - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
 
-6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido no formulário.  
+6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido.
 
 7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.  
 
@@ -510,7 +484,7 @@ ESPECIFICAÇÕES ORIGINAIS:
 ### SAÍDA ESPERADA:
 - Texto final pronto para ser copiado e colado.  
 - Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.  
-- Linguagem alinhada ao público e ao tom cadastrado no formulário da empresa.  
+- Linguagem alinhada ao perfil do criador e ao contexto fornecido.
 - Respeito às boas práticas do Meta e Google Ads.  
 - Emojis distribuídos de forma natural, sem excesso.  
 - Parágrafos curtos, fáceis de ler e escaneáveis.  
@@ -528,6 +502,11 @@ Certifique-se de que as melhorias atendam especificamente ao feedback fornecido.
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
         post_type = post_data.get('type', '')
+        further_details = post_data.get('further_details', '')
+
+        # Add further details context if available
+        context_adicional = f"\n- Detalhes Adicionais: {further_details}" if further_details and further_details.strip(
+        ) else ""
 
         prompt = f"""
 Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
@@ -540,7 +519,7 @@ CONTEÚDO ORIGINAL:
 ESPECIFICAÇÕES:
 - Nome do post: {name}
 - Objetivo: {objective}
-- Tipo: {post_type}
+- Tipo: {post_type}{context_adicional}
 
 Crie uma nova versão que:
 - Mantenha o mesmo objetivo e propósito
@@ -554,7 +533,7 @@ Crie uma nova versão que:
 1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.  
    O resultado deve ser apenas o texto final, fluido e pronto para publicação.  
 
-2. A copy deve respeitar o tom de voz definido no formulário da empresa (ex.: técnico, acolhedor, inspirador, educativo, leve ou persuasivo).  
+2. A copy deve respeitar o tom de voz definido no perfil do criador (se disponível) ou usar tom profissional como padrão.
 
 3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
    - Não usar comparações negativas diretas.  
@@ -571,7 +550,7 @@ Crie uma nova versão que:
    - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
    - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
 
-6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido no formulário.  
+6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido.
 
 7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.  
 
@@ -586,15 +565,13 @@ Crie uma nova versão que:
 ### SAÍDA ESPERADA:
 - Texto final pronto para ser copiado e colado.  
 - Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.  
-- Linguagem alinhada ao público e ao tom cadastrado no formulário da empresa.  
+- Linguagem alinhada ao perfil do criador e ao contexto fornecido.
 - Respeito às boas práticas do Meta e Google Ads.  
 - Emojis distribuídos de forma natural, sem excesso.  
 - Parágrafos curtos, fáceis de ler e escaneáveis.  
 - Uma única CTA ao final do texto.  
 
-Por favor, recrie o conteúdo incorporando o feedback do usuário.
-
-Certifique-se de que as melhorias atendam especificamente ao feedback fornecido.
+Por favor, recrie o conteúdo como uma variação criativa do original.
 
 """
 
