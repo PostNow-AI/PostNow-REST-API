@@ -19,7 +19,8 @@ urlpatterns = [
 
     # Complete profile management
     path('profile/', views.CreatorProfileView.as_view(), name='profile'),
-    path('profile/reset/', views.reset_profile, name='reset_profile'),
+    path('profile/reset/', views.ResetCreatorProfileStatusView.as_view(),
+         name='reset_profile'),
 
     # User behavior tracking
     path('behavior/', views.UserBehaviorView.as_view(), name='behavior'),

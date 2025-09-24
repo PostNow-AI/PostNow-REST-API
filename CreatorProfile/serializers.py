@@ -61,7 +61,7 @@ class Step1PersonalSerializer(serializers.ModelSerializer):
 
 
 class Step2BusinessSerializer(serializers.ModelSerializer):
-    """Step 2: Business information - business_name, specialization, business_instagram_handle, business_website, business_city, business_description"""
+    """Step 2: Business information - business_name, specialization, business_instagram_handle, business_website, business_city, business_description, target demographics"""
 
     class Meta:
         model = CreatorProfile
@@ -71,7 +71,11 @@ class Step2BusinessSerializer(serializers.ModelSerializer):
             'business_instagram_handle',
             'business_website',
             'business_city',
-            'business_description'
+            'business_description',
+            'target_gender',
+            'target_age_range',
+            'target_interests',
+            'target_location'
         ]
 
     def validate_business_name(self, value):
@@ -103,6 +107,30 @@ class Step2BusinessSerializer(serializers.ModelSerializer):
         if not value or len(value.strip()) < 10:
             raise serializers.ValidationError(
                 "Descrição do negócio é obrigatória e deve ter pelo menos 10 caracteres."
+            )
+        return value.strip()
+
+    def validate_target_gender(self, value):
+        """Validate target gender is required."""
+        if not value or len(value.strip()) < 1:
+            raise serializers.ValidationError(
+                "Gênero do público-alvo é obrigatório."
+            )
+        return value.strip()
+
+    def validate_target_age_range(self, value):
+        """Validate target age range is required."""
+        if not value or len(value.strip()) < 1:
+            raise serializers.ValidationError(
+                "Faixa etária do público-alvo é obrigatória."
+            )
+        return value.strip()
+
+    def validate_target_location(self, value):
+        """Validate target location is required."""
+        if not value or len(value.strip()) < 2:
+            raise serializers.ValidationError(
+                "Localização do público-alvo é obrigatória."
             )
         return value.strip()
 
@@ -185,8 +213,6 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
     """Complete Creator Profile serializer with all fields and step status."""
 
     user = UserBasicSerializer(read_only=True)
-    current_step = serializers.ReadOnlyField()
-    color_palette = serializers.ReadOnlyField()
 
     class Meta:
         model = CreatorProfile
@@ -203,10 +229,11 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
             # Step 2: Business information
             'business_name',
             'specialization',
-            'business_instagram_handle',
-            'business_website',
-            'business_city',
             'business_description',
+            'target_gender',
+            'target_age_range',
+            'target_interests',
+            'target_location',
 
             # Step 3: Branding
             'logo',
@@ -216,25 +243,11 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
             'color_3',
             'color_4',
             'color_5',
-            'color_palette',
 
-            # Onboarding status
-            'step_1_completed',
-            'step_2_completed',
-            'step_3_completed',
-            'onboarding_completed',
-            'current_step',
 
             # Metadata
             'created_at',
             'updated_at',
-            'onboarding_completed_at',
-        ]
-        read_only_fields = [
-            'user', 'current_step', 'color_palette',
-            'step_1_completed', 'step_2_completed', 'step_3_completed',
-            'onboarding_completed', 'created_at', 'updated_at',
-            'onboarding_completed_at'
         ]
 
 

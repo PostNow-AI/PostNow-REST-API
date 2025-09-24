@@ -75,7 +75,7 @@ class Step1PersonalView(generics.RetrieveUpdateAPIView):
 
 
 class Step2BusinessView(generics.RetrieveUpdateAPIView):
-    """Handle Step 2: Business information (business_name, specialization, business_instagram_handle, business_website, business_city, business_description)"""
+    """Handle Step 2: Business information (business_name, specialization, business_instagram_handle, business_website, business_city, business_description, target demographics)"""
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = Step2BusinessSerializer
 
@@ -170,6 +170,33 @@ class CreatorProfileView(generics.RetrieveUpdateAPIView):
             'message': 'Perfil atualizado com sucesso!',
             'profile': response_serializer.data
         })
+
+
+class ResetCreatorProfileStatusView(generics.GenericAPIView):
+    """Reset user profile to start onboarding again."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            success = CreatorProfileService.reset_profile(request.user)
+            print("Reset success:", success)  # Debugging line
+            if success:
+                return Response({
+                    'message': 'Perfil resetado com sucesso!',
+                    'reset': True
+                })
+            else:
+                return Response({
+                    'message': 'Nenhum perfil encontrado para resetar',
+                    'reset': False
+                }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            print("Error during reset:", str(e))  # Debugging line
+            return Response({
+                'message': 'Erro ao resetar o perfil',
+                'reset': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class UserBehaviorView(generics.RetrieveUpdateAPIView):

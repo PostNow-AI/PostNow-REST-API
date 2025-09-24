@@ -38,8 +38,13 @@ class CreatorProfileService:
     def reset_profile(user: User) -> bool:
         """Reset user profile."""
         try:
-            profile = CreatorProfile.objects.get(user=user)
-            profile.delete()
+            CreatorProfile.objects.filter(user=user).update(
+                step_1_completed=False,
+                step_2_completed=False,
+                step_3_completed=False,
+                onboarding_completed=False,
+            )
+
             return True
         except CreatorProfile.DoesNotExist:
             return False
@@ -91,6 +96,31 @@ class SuggestionService:
         ]
 
     @staticmethod
+    def get_target_gender_suggestions() -> List[str]:
+        """Get target gender suggestions."""
+        return [
+            'Masculino', 'Feminino', 'Todos', 'Não-binário', 'Outro'
+        ]
+
+    @staticmethod
+    def get_target_age_range_suggestions() -> List[str]:
+        """Get target age range suggestions."""
+        return [
+            '18-24 anos', '25-34 anos', '35-44 anos', '45-54 anos',
+            '55-64 anos', '65+ anos', 'Todas as idades'
+        ]
+
+    @staticmethod
+    def get_target_location_suggestions() -> List[str]:
+        """Get target location suggestions."""
+        return [
+            'Nacional', 'São Paulo', 'Rio de Janeiro', 'Belo Horizonte',
+            'Brasília', 'Salvador', 'Fortaleza', 'Curitiba', 'Recife',
+            'Porto Alegre', 'Goiânia', 'Belém', 'Manaus', 'Florianópolis',
+            'Região Sudeste', 'Região Sul', 'Região Nordeste', 'Região Norte', 'Região Centro-Oeste'
+        ]
+
+    @staticmethod
     def get_all_suggestions() -> Dict[str, List[str]]:
         """Get all suggestions."""
         return {
@@ -98,4 +128,7 @@ class SuggestionService:
             'specializations': SuggestionService.get_specialization_suggestions(),
             'voice_tones': SuggestionService.get_voice_tone_suggestions(),
             'business_cities': SuggestionService.get_business_city_suggestions(),
+            'target_genders': SuggestionService.get_target_gender_suggestions(),
+            'target_age_ranges': SuggestionService.get_target_age_range_suggestions(),
+            'target_locations': SuggestionService.get_target_location_suggestions(),
         }

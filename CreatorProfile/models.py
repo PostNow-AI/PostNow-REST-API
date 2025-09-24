@@ -97,6 +97,35 @@ class CreatorProfile(models.Model):
         help_text="Conte sobre seu negócio e o que você faz"
     )
 
+    # Target Audience Fields
+    target_gender = models.CharField(
+        max_length=50,
+        default='',
+        verbose_name="Público-Alvo Gênero",
+        help_text="Ex: Masculino, Feminino, Todos"
+    )
+
+    target_age_range = models.CharField(
+        max_length=50,
+        default='',
+        verbose_name="Faixa Etária do Público-Alvo",
+        help_text="Ex: 25-35 anos, 18-25 anos"
+    )
+
+    target_interests = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Interesses do Público-Alvo",
+        help_text="Interesses e hobbies do seu público-alvo"
+    )
+
+    target_location = models.CharField(
+        max_length=100,
+        default='',
+        verbose_name="Localização do Público-Alvo",
+        help_text="Onde seu público-alvo está localizado"
+    )
+
     # === STEP 3: BRANDING ===
     logo = models.TextField(
         blank=True,
@@ -210,9 +239,10 @@ class CreatorProfile(models.Model):
 
         self.step_2_completed = bool(
             self.business_name and self.business_name.strip() and
-            self.specialization and self.specialization.strip() and
-            self.business_city and self.business_city.strip() and
-            self.business_description and self.business_description.strip()
+            self.business_description and self.business_description.strip() and
+            self.target_gender and self.target_gender.strip() and
+            self.target_age_range and self.target_age_range.strip() and
+            self.target_location and self.target_location.strip()
         )
 
         self.step_3_completed = bool(

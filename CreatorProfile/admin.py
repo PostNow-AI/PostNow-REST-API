@@ -26,6 +26,9 @@ class CreatorProfileAdmin(admin.ModelAdmin):
         'step_3_completed',
         'profession',
         'business_city',
+        'target_gender',
+        'target_age_range',
+        'target_location',
         'created_at',
     ]
 
@@ -83,6 +86,10 @@ class CreatorProfileAdmin(admin.ModelAdmin):
                 'business_website',
                 'business_city',
                 'business_description',
+                'target_gender',
+                'target_age_range',
+                'target_interests',
+                'target_location',
             )
         }),
         ('Etapa 3 - Identidade da Marca', {
