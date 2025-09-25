@@ -197,11 +197,6 @@ class StripeWebhookView(APIView):
         try:
             with open(log_file, 'a') as f:
                 timestamp = datetime.now().isoformat()
-                print(f"=== WEBHOOK RECEIVED {timestamp} ===")
-                print(f"Headers: {dict(request.META)}")
-                print(f"Body length: {len(request.body)}")
-                print(
-                    f"Stripe signature present: {'HTTP_STRIPE_SIGNATURE' in request.META}")
                 f.write(f"\n=== WEBHOOK RECEIVED {timestamp} ===\n")
                 f.write(f"Headers: {dict(request.META)}\n")
                 f.write(f"Body length: {len(request.body)}\n")
@@ -213,7 +208,6 @@ class StripeWebhookView(APIView):
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
 
-        print(f"payload: {payload}")
         if not sig_header:
             return Response(
                 {'success': False, 'message': 'Assinatura Stripe não fornecida'},
@@ -223,8 +217,6 @@ class StripeWebhookView(APIView):
         try:
             stripe_service = StripeService()
             result = stripe_service.process_webhook(payload, sig_header)
-            print("Processing result:")
-            print(result)
 
             if result.get('status') == 'success':
                 return Response({
@@ -238,7 +230,6 @@ class StripeWebhookView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
         except ValidationError as e:
-            print(e)
             return Response({
                 'success': False,
                 'message': f'Webhook error: {str(e)}'

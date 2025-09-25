@@ -179,7 +179,6 @@ class ResetCreatorProfileStatusView(generics.GenericAPIView):
     def post(self, request):
         try:
             success = CreatorProfileService.reset_profile(request.user)
-            print("Reset success:", success)  # Debugging line
             if success:
                 return Response({
                     'message': 'Perfil resetado com sucesso!',
@@ -191,7 +190,6 @@ class ResetCreatorProfileStatusView(generics.GenericAPIView):
                     'reset': False
                 }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            print("Error during reset:", str(e))  # Debugging line
             return Response({
                 'message': 'Erro ao resetar o perfil',
                 'reset': False,

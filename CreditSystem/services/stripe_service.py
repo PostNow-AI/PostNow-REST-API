@@ -105,18 +105,14 @@ class StripeService:
         except stripe.error.SignatureVerificationError as e:
             raise ValidationError(f"Assinatura inválida: {str(e)}")
 
-        print('aqui')
-        print(event)
         # Processa o evento
         if event['type'] == 'checkout.session.completed':
             return self._handle_checkout_completed(event['data']['object'])
         elif event['type'] == 'payment_intent.succeeded':
             return self._handle_payment_succeeded(event['data']['object'])
         elif event['type'] == 'payment_intent.payment_failed':
-            print('entrou aqui')
             return self._handle_payment_failed(event['data']['object'])
 
-        print('Evento:', event['type'])
         return {'status': 'ignored', 'event_type': event['type']}
 
     def _handle_checkout_completed(self, session):
@@ -143,8 +139,6 @@ class StripeService:
             from django.contrib.auth import get_user_model
             User = get_user_model()
 
-            print(customer_email)
-            print(session)
             user = User.objects.filter(email=customer_email).first()
             if not user:
                 raise ValidationError(
@@ -187,12 +181,6 @@ class StripeService:
         """
         # Esta função pode ser usada para casos onde o webhook de checkout
         # não é suficiente ou para pagamentos recorrentes
-        print({
-            'status': 'success',
-            'payment_intent_id': payment_intent.id,
-            'amount': payment_intent.amount / 100  # Stripe usa centavos
-        })
-        print('handle success')
         return {
             'status': 'success',
             'payment_intent_id': payment_intent.id,
