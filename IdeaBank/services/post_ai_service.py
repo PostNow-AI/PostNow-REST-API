@@ -129,7 +129,8 @@ class PostAIService(BaseAIService):
         user: User,
         post_data: Dict,
         content: str,
-        custom_prompt: str = None
+        custom_prompt: str = None,
+        regenerate: bool = False
     ) -> str:
         """
         Generate an image for the post using DALL-E or other image generation models.
@@ -161,8 +162,9 @@ class PostAIService(BaseAIService):
                 "Google service not available for image generation")
 
         # Build image prompt
-        if custom_prompt:
-            prompt = custom_prompt
+        if regenerate:
+            prompt = self._build_image_regeneration_prompt(
+                content, custom_prompt)
         else:
             prompt = self._build_image_prompt(post_data, content)
 
@@ -208,9 +210,9 @@ class PostAIService(BaseAIService):
         # Build the regeneration prompt
         if user_prompt:
             prompt = self._build_regeneration_prompt(
-                post_data, current_content, user_prompt)
+                current_content, user_prompt)
         else:
-            prompt = self._build_variation_prompt(post_data, current_content)
+            prompt = self._build_variation_prompt(current_content)
 
         # Validate credits before regenerating (skip for unauthenticated users)
         if user and user.is_authenticated:
@@ -244,14 +246,22 @@ class PostAIService(BaseAIService):
             raise Exception(f"Failed to regenerate content: {str(e)}")
 
     def _build_content_prompt(self, post_data: Dict) -> str:
-        """Build the prompt for content generation using the same advanced copywriting prompt as base_ai_service."""
-        name = post_data.get('name', '')
-        objective = post_data.get('objective', '')
-        post_type = post_data.get('type', '')
-        further_details = post_data.get('further_details', '')
-        include_image = post_data.get('include_image', False)
+        """Build the prompt for content generation based on post type."""
+        post_type = post_data.get('type', '').lower()
 
-        # Creator profile information (if available)
+        # Route to specific prompt based on post type
+        if post_type == 'post':
+            return self._build_feed_post_prompt(post_data)
+        elif post_type == 'reel':
+            return self._build_reel_prompt(post_data)
+        elif post_type == 'story':
+            return self._build_story_prompt(post_data)
+        else:
+            # Default fallback for other types (carousel, live, etc.)
+            return self._build_default_prompt(post_data)
+
+    def _get_creator_profile_section(self) -> str:
+        """Get creator profile information for prompt context."""
         creator_profile_section = ""
         if hasattr(self, 'user') and self.user:
             from CreatorProfile.models import CreatorProfile
@@ -284,15 +294,240 @@ class PostAIService(BaseAIService):
                 if creator_info:
                     creator_profile_section = f"\n\nPERFIL DO CRIADOR:\n{chr(10).join(f'- {info}' for info in creator_info)}"
 
+        return creator_profile_section
+
+    def _build_all_details(self, further_details: str) -> str:
+        """Build the audience and tone section combining further details with creator profile data."""
+        sections = []
+
         # Add further details if provided
+        if further_details and further_details.strip():
+            sections.append(further_details.strip())
+
+        # Get creator profile data for target audience and voice tone
+        if hasattr(self, 'user') and self.user:
+            from CreatorProfile.models import CreatorProfile
+            profile = CreatorProfile.objects.filter(user=self.user).first()
+            if profile:
+                audience_info = []
+                brand_info = []
+                if profile.business_name:
+                    brand_info.append(f"Empresa: {profile.business_name}")
+                if profile.profession:
+                    brand_info.append(f"Profissão: {profile.profession}")
+                if profile.specialization:
+                    brand_info.append(
+                        f"Especialização: {profile.specialization}")
+                # Target audience information
+                if profile.target_gender and profile.target_gender.strip():
+                    audience_info.append(
+                        f"Gênero do Público: {profile.target_gender}")
+
+                if profile.target_age_range and profile.target_age_range.strip():
+                    audience_info.append(
+                        f"Faixa Etária: {profile.target_age_range}")
+
+                if profile.target_location and profile.target_location.strip():
+                    audience_info.append(
+                        f"Localização: {profile.target_location}")
+
+                if profile.target_interests and profile.target_interests.strip():
+                    audience_info.append(
+                        f"Interesses: {profile.target_interests}")
+
+                if profile.voice_tone and profile.voice_tone.strip():
+                    brand_info.append(
+                        f"Tom de Voz da Marca: {profile.voice_tone}")
+
+                colors = [profile.color_1, profile.color_2,
+                          profile.color_3, profile.color_4, profile.color_5]
+                valid_colors = [
+                    color for color in colors if color and color.strip()]
+                if valid_colors:
+                    brand_info.append(
+                        f"Cores da marca: {', '.join(valid_colors)}")
+
+                if audience_info:
+                    sections.append(
+                        f"Dados do Público-Alvo: {' | '.join(audience_info)}")
+                if brand_info:
+                    sections.append(
+                        f"Dados da Marca: {' | '.join(brand_info)}")
+        return ' - '.join(sections) if sections else "Informações não fornecidas"
+
+    def _build_feed_post_prompt(self, post_data: Dict) -> str:
+        """Build prompt specifically for feed posts."""
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+
+        details = self._build_all_details(further_details)
+
+        prompt = f"""
+Você é um especialista em copywriting estratégico, criativo e persuasivo.
+Sua missão é gerar copies otimizadas para posts de Feed em redes sociais, com foco em clareza, engajamento e relevância, respeitando sempre as boas práticas do Meta e Google Ads.
+
+### DADOS DE ENTRADA
+- Assunto do post: {name}
+- Objetivo do post: {objective}
+- Tipo do post: Feed
+- Mais detalhes: {details}
+
+---
+
+### REGRAS PARA A COPY:
+
+1. Estruture internamente no método AIDA (Atenção, Interesse, Desejo, Ação), mas entregue a copy final **sem rótulos ou divisões visíveis**.
+
+2. O texto deve ser fluido, natural e pronto para publicação no Feed.
+
+3. Utilize **parágrafos curtos e bem separados**, que facilitem a leitura rápida e escaneável nas redes sociais.
+
+4. Insira **emojis de forma moderada e estratégica**, para dar leveza e proximidade, mas nunca em excesso.
+
+5. Respeite sempre o **tom de voz e estilo definidos nos detalhes** pelo profissional (ex.: técnico, acolhedor, inspirador, educativo, motivacional, etc.).
+
+6. Não use linguagem sensacionalista, promessas exageradas ou afirmações que violem políticas do Meta e Google Ads.
+   - Não fazer comparações negativas diretas.
+   - Não prometer resultados absolutos.
+   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.
+   - Priorizar comunicação positiva, inclusiva e motivadora.
+
+7. Se possível, traga expressões ou referências atuais que estejam em tendência no tema do post.
+
+8. Sempre finalize com **uma única CTA natural e clara**, coerente com o objetivo definido do post.
+
+---
+
+### SAÍDA ESPERADA:
+- Uma copy pronta para Feed, já formatada com parágrafos curtos e emojis leves.
+- Texto direto para copiar e colar no post.
+- Apenas **uma CTA final**, integrada de forma natural ao texto.
+- Copy envolvente, relevante e alinhada ao objetivo da campanha e ao tom da marca.
+"""
+        return prompt.strip()
+
+    def _build_reel_prompt(self, post_data: Dict) -> str:
+        """Build prompt specifically for reels."""
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+
+        details = self._build_all_details(further_details)
+        # TODO: Replace with your specific reel prompt
+        prompt = f"""
+Você é um especialista em copywriting estratégico, criativo e persuasivo.
+Sua missão é gerar roteiros curtos, impactantes e envolventes para Reels, otimizados para gerar atenção e engajamento já nos primeiros segundos.
+O conteúdo deve ser dinâmico, direto e fácil de acompanhar, respeitando as boas práticas do Meta e Google Ads.
+
+### DADOS DE ENTRADA
+- Assunto do post: {name}
+- Objetivo do post: {objective}
+- Tipo do post: Reel
+- Mais detalhes: {details}
+
+---
+
+### REGRAS PARA A COPY:
+
+1. Estruture o roteiro internamente no método AIDA, mas entregue o resultado final **sem rótulos ou divisões visíveis de Atenção, Interesse, etc.**.
+
+2. O texto deve estar organizado em um **roteiro de até 15 segundos**, dividido por blocos de tempo, exemplo:
+   - [0s – 3s]
+   - [3s – 6s]
+   - [6s – 12s]
+   - [12s – 15s]
+
+3. O gancho inicial deve ser **forte e impactante**, capaz de prender a atenção já nos 3 primeiros segundos.
+
+4. A linguagem deve ser fluida, natural e alinhada ao **tom de voz definido no formulário da empresa** (ex.: motivacional, técnico, acolhedor, educativo, inspirador).
+
+5. Use **frases curtas, fáceis de ler e de ouvir**, perfeitas para um vídeo rápido.
+
+6. Utilize **emojis moderados e estratégicos**, mas nunca em excesso.
+
+7. Sempre finalize com **uma única CTA clara e objetiva**, coerente com o objetivo da campanha (ex.: “Clique no link da bio”, “Marque alguém”, “Agende agora”).
+
+8. Nunca use linguagem sensacionalista ou promessas exageradas. Sempre respeite as políticas do Meta e Google Ads.
+
+---
+
+### SAÍDA ESPERADA:
+- Um roteiro curto para Reel, com blocos de tempo (até 15 segundos).
+- Copy pronta para ser usada no vídeo, fluida e envolvente.
+- Texto dividido de forma natural em parágrafos curtos.
+- Emojis aplicados de forma leve e estratégica.
+- Apenas **uma CTA final** integrada ao texto.
+
+
+
+"""
+        return prompt.strip()
+
+    def _build_story_prompt(self, post_data: Dict) -> str:
+        """Build prompt specifically for stories."""
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+        details = self._build_all_details(further_details)
+        prompt = f"""
+Você é um especialista em copywriting estratégico, criativo e persuasivo.
+Sua missão é gerar copies curtas, envolventes e interativas para Stories em redes sociais, com foco em atenção imediata, clareza e incentivo à ação.
+
+### DADOS DE ENTRADA
+- Assunto do post: {name}
+- Objetivo do post: {objective}
+- Tipo do post: Story
+- Mais detalhes: {details}
+
+---
+
+### REGRAS PARA A COPY:
+
+1. Estruture a copy em **2 ou 3 telas curtas de até 15 segundos cada**, com mensagens simples, claras e fáceis de ler.
+
+2. Cada tela deve conter **uma frase curta e impactante**, que mantenha a atenção e conduza o público até a CTA final.
+
+3. O tom de voz deve seguir exatamente o definido nos detalhes do formulário (ex.: inspirador, educativo, acolhedor, motivacional).
+
+4. Use **emojis moderados e estratégicos** para dar proximidade, mas sem exageros.
+
+5. A primeira tela deve ser um **gancho forte** que capture a atenção imediatamente.
+
+6. A última tela deve sempre conter **uma única CTA clara e direta**, coerente com o objetivo do post (ex.: “Arraste pra cima 🚀”, “Clique no link da bio 👉”, “Responda essa enquete ✨”).
+
+7. Frases devem ser curtas, de leitura rápida, evitando blocos longos de texto.
+
+8. A copy deve ser positiva, inclusiva e motivadora, nunca sensacionalista ou proibida pelas diretrizes do Meta/Google Ads.
+
+---
+
+### SAÍDA ESPERADA:
+- Copy finalizada para Story, dividida em 2 ou 3 telas curtas.
+- Texto pronto para copiar e colar.
+- Frases curtas, impactantes e fáceis de ler.
+- Emojis usados de forma leve e natural.
+- Apenas **uma CTA final** integrada ao último Story.
+
+
+"""
+        return prompt.strip()
+
+    def _build_default_prompt(self, post_data: Dict) -> str:
+        """Build default prompt for other content types (carousel, live, etc.)."""
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        post_type = post_data.get('type', '')
+        further_details = post_data.get('further_details', '')
+        include_image = post_data.get('include_image', False)
+
+        creator_profile_section = self._get_creator_profile_section()
         additional_context = f"\n\nDetalhes Adicionais: {further_details}" if further_details and further_details.strip(
         ) else ""
-
-        # Add image generation context if requested
         image_context = "\n\nNOTA: Uma imagem será gerada automaticamente para este post usando IA." if include_image else ""
 
         prompt = f"""
-Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
+Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.
 Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, sempre respeitando as políticas do Meta e Google Ads, evitando qualquer tipo de sensacionalismo, promessa exagerada ou afirmações que possam violar as diretrizes dessas plataformas.
 
 ### DADOS DE ENTRADA:
@@ -303,52 +538,67 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
 
 ### REGRAS PARA CONSTRUÇÃO DA COPY:
 
-1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.  
-   O resultado deve ser apenas o texto final, fluido e pronto para publicação.  
+1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.
+   O resultado deve ser apenas o texto final, fluido e pronto para publicação.
 
 2. A copy deve respeitar o tom de voz definido no perfil do criador (se disponível) ou usar tom profissional como padrão.
 
-3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
-   - Não usar comparações negativas diretas.  
-   - Não prometer resultados absolutos.  
-   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.  
-   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.  
+3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.
+   - Não usar comparações negativas diretas.
+   - Não prometer resultados absolutos.
+   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.
+   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.
 
-4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.  
+4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.
 
-5. **Adaptação ao Tipo de Conteúdo**  
-   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.  
-   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.  
-   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).  
-   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
-   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
+5. **Adaptação ao Tipo de Conteúdo**
+   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.
+   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.
+   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).
+   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.
+   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.
 
 6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido.
 
-7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.  
+7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.
 
-8. Faça a **separação de parágrafos de forma natural**, garantindo boa legibilidade em redes sociais e anúncios, evitando blocos de texto longos.  
+8. Faça a **separação de parágrafos de forma natural**, garantindo boa legibilidade em redes sociais e anúncios, evitando blocos de texto longos.
 
-9. Entregue **apenas uma CTA final**, integrada ao texto, natural e clara, sem listas ou alternativas extras.  
+9. Entregue **apenas uma CTA final**, integrada ao texto, natural e clara, sem listas ou alternativas extras.
 
 10. NÃO inclua textos explicativos, como por exemplo "Título:", "Texto:", "CTA:", ou qualquer outro rótulo.
 
 ---
 
 ### SAÍDA ESPERADA:
-- Texto final pronto para ser copiado e colado.  
-- Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.  
+- Texto final pronto para ser copiado e colado.
+- Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.
 - Linguagem alinhada ao perfil do criador e ao tom cadastrado.
-- Respeito às boas práticas do Meta e Google Ads.  
-- Emojis distribuídos de forma natural, sem excesso.  
-- Parágrafos curtos, fáceis de ler e escaneáveis.  
-- Uma única CTA ao final do texto.  
+- Respeito às boas práticas do Meta e Google Ads.
+- Emojis distribuídos de forma natural, sem excesso.
+- Parágrafos curtos, fáceis de ler e escaneáveis.
+- Uma única CTA ao final do texto.
 
 """
         return prompt.strip()
 
     def _build_image_prompt(self, post_data: Dict, content: str) -> str:
-        """Build the prompt for image generation."""
+        """Build the prompt for image generation based on post type."""
+        post_type = post_data.get('type', '').lower()
+
+        # Route to specific image prompt based on post type
+        if post_type == 'post':
+            return self._build_feed_image_prompt(post_data, content)
+        elif post_type == 'reel':
+            return self._build_reel_image_prompt(post_data, content)
+        elif post_type == 'story':
+            return self._build_story_image_prompt(post_data, content)
+        else:
+            # Default fallback for other types (carousel, live, etc.)
+            return self._build_default_image_prompt(post_data, content)
+
+    def _get_image_context_section(self, post_data: Dict, content: str) -> tuple:
+        """Get common image context information for all image prompt types."""
         post_type = post_data.get('type', '')
         objective = post_data.get('objective', '')
         name = post_data.get('name', '')
@@ -370,10 +620,39 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
             profile = CreatorProfile.objects.filter(user=self.user).first()
             if profile:
                 brand_info = []
+                audience_info = []
                 if profile.business_name:
                     brand_info.append(f"Empresa: {profile.business_name}")
                 if profile.profession:
                     brand_info.append(f"Profissão: {profile.profession}")
+                if profile.specialization:
+                    brand_info.append(
+                        f"Especialização: {profile.specialization}")
+
+                # Target audience information
+                if profile.target_gender and profile.target_gender.strip():
+                    audience_info.append(
+                        f"Gênero do Público: {profile.target_gender}")
+
+                if profile.target_age_range and profile.target_age_range.strip():
+                    audience_info.append(
+                        f"Faixa Etária: {profile.target_age_range}")
+
+                if profile.target_location and profile.target_location.strip():
+                    audience_info.append(
+                        f"Localização: {profile.target_location}")
+
+                if profile.target_interests and profile.target_interests.strip():
+                    audience_info.append(
+                        f"Interesses: {profile.target_interests}")
+
+                if profile.voice_tone and profile.voice_tone.strip():
+                    audience_info.append(
+                        f"Tom de Voz da Marca: {profile.voice_tone}")
+
+                if audience_info:
+                    brand_info.append(
+                        f"Dados do Público-Alvo e Marca: {' | '.join(audience_info)}")
 
                 # Color palette
                 colors = [profile.color_1, profile.color_2,
@@ -391,15 +670,167 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
         context_adicional = f" - Contexto adicional: {further_details}" if further_details and further_details.strip(
         ) else ""
 
+        return tema, objective, post_type, identidade_marca, context_adicional
+
+    def _build_feed_image_prompt(self, post_data: Dict, content: str) -> str:
+        """Build prompt specifically for feed post images."""
+        tema, objective, post_type, identidade_marca, context_adicional = self._get_image_context_section(
+            post_data, content)
+
+        # TODO: Replace with your specific feed image prompt
+        prompt = f"""
+Você é um especialista em design para marketing digital e redes sociais.  
+Sua missão é gerar artes visuais profissionais e impactantes, otimizadas para posts de Feed no Instagram ou Facebook.  
+
+### DADOS DE ENTRADA 
+- Assunto do post: {tema}
+- Objetivo do post: {objective}
+- Tipo do post: Feed
+- Mais detalhes: {context_adicional}
+
+---
+
+### REGRAS PARA A IMAGEM:
+
+1. A imagem deve ser **clara, atrativa e diretamente relacionada ao tema do post**.  
+2. Formato padrão de Feed: **quadrado 1080x1080 px**.  
+3. Use **chamadas curtas e impactantes como título na imagem**, sem excesso de texto.  
+   - Exemplo: “Mais energia no seu dia 💧”, “Transforme sua rotina com saúde ✨”.  
+   - Nunca coloque blocos longos de texto.  
+4. O design deve ser limpo, moderno e profissional, respeitando a identidade visual da marca (quando fornecida).  
+5. As cores, tipografia e estilo devem transmitir **o tom da marca** descrito nos detalhes (ex.: acolhedor, sofisticado, jovem, minimalista).  
+6. Usar elementos visuais que conectem com o **público-alvo e seus interesses**.  
+7. Respeitar sempre comunicação ética e positiva, sem sensacionalismo ou imagens que possam gerar desconforto.  
+8. Se apropriado, incluir ícones ou ilustrações sutis que reforcem a mensagem (ex.: gotas para hidratação, folha para saúde, raio de energia para disposição).  
+
+---
+
+### SAÍDA ESPERADA:
+- **Uma imagem final, pronta para ser publicada no Feed.**  
+- A arte deve conter apenas uma chamada curta e impactante como título.  
+- O design deve estar finalizado de acordo com os dados fornecidos e pronto para uso imediato.  
+
+
+
+"""
+        return prompt.strip()
+
+    def _build_reel_image_prompt(self, post_data: Dict, content: str) -> str:
+        """Build prompt specifically for reel cover images."""
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+        details = self._build_all_details(further_details)
+        # TODO: Replace with your specific reel image prompt
+        prompt = f"""
+Você é um especialista em design para marketing digital e redes sociais.  
+Sua missão é criar capas de Reels profissionais, modernas e impactantes, que chamem a atenção do público já no primeiro contato.  
+A capa deve ser clara, objetiva e reforçar a ideia central do conteúdo, sem excesso de elementos ou textos longos.  
+
+### DADOS DE ENTRADA:
+- Assunto do post: {name}  
+- Objetivo do post: {objective}  
+- Tipo do post: Capa de Reel  
+- Mais detalhes: {details}  
+
+---
+
+### REGRAS PARA A CAPA:
+
+1. Formato: **vertical 1080x1920 px**, otimizado para Reels.  
+
+2. A capa deve conter **uma chamada curta e impactante**, em forma de título, que incentive o clique no vídeo.  
+   - Exemplo: “Energia no pós-bariátrico 💧”, “O segredo do emagrecimento saudável ✨”.  
+   - Nunca usar blocos longos de texto.  
+
+3. O design deve ser limpo, moderno e profissional, com hierarquia visual clara:  
+   - Título curto em destaque.  
+   - Elementos visuais que remetam ao tema.  
+
+4. Usar **cores, tipografia e estilo compatíveis com a identidade visual da marca** (quando fornecida).  
+
+5. Se apropriado, incluir elementos visuais sutis que conectem ao tema (ex.: gotas d’água para soroterapia, coração para saúde, ícones de energia, etc.).  
+
+6. Evitar poluição visual e excesso de informações. A capa deve ser simples, mas altamente chamativa.  
+
+7. Comunicação sempre ética e positiva, sem sensacionalismo ou exageros.  
+
+---
+
+### SAÍDA ESPERADA:
+- **Uma imagem final no formato de capa para Reel (1080x1920 px)**.  
+- O design deve conter apenas **um título curto e impactante**, sem blocos longos de texto.  
+- A arte deve estar finalizada, pronta para uso como capa do Reel.  
+
+
+
+"""
+        return prompt.strip()
+
+    def _build_story_image_prompt(self, post_data: Dict, content: str) -> str:
+        """Build prompt specifically for story images."""
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+        details = self._build_all_details(further_details)
+
+        # TODO: Replace with your specific story image prompt
+        prompt = f"""
+Você é um especialista em design para marketing digital e redes sociais.  
+Sua missão é gerar artes visuais modernas, profissionais e impactantes para Stories, otimizadas para captar a atenção imediata e conduzir o público até a ação final.  
+
+### DADOS DE ENTRADA (serão fornecidos pelo sistema):
+- Assunto do post: {name}
+- Objetivo do post: {objective}
+- Tipo do post: Story
+- Mais detalhes: {details}
+
+---
+
+### REGRAS PARA A IMAGEM:
+
+1. O Story deve estar em **formato vertical 1080x1920 px**, próprio para Instagram/Facebook Stories.  
+
+2. Cada tela deve ter **uma chamada curta e impactante**, correspondente à copy gerada (sem blocos longos de texto).  
+
+3. O design deve ser **limpo, moderno e profissional**, sempre com hierarquia visual clara: título curto em destaque + elementos visuais de apoio.  
+
+4. Usar **cores, tipografia e estilo compatíveis com a identidade da marca** (quando fornecida).  
+
+5. Elementos visuais devem reforçar o tema do post (ex.: gotas d’água para soroterapia, coração para saúde, ícones de energia, etc.), mas sem poluição visual.  
+
+6. Emojis podem ser usados como parte do design, de forma leve e moderada.  
+
+7. A última tela deve conter **uma CTA destacada**, coerente com o objetivo do post (ex.: “Arraste pra cima 🚀”, “Clique no link da bio 👉”, “Responda aqui ✨”).  
+
+8. Comunicação sempre positiva e ética, sem sensacionalismo, exageros ou imagens que causem desconforto.  
+
+---
+
+### SAÍDA ESPERADA:
+- **Imagens finais no formato de Story (1080x1920 px)**, correspondentes à copy gerada.  
+- Cada tela deve conter apenas uma chamada curta e impactante.  
+- O design deve estar pronto para publicação, com uma **CTA clara na última tela**.  
+
+
+
+"""
+        return prompt.strip()
+
+    def _build_default_image_prompt(self, post_data: Dict, content: str) -> str:
+        """Build default prompt for other image types (carousel, live, etc.)."""
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+        details = self._build_all_details(further_details)
         prompt = f"""Você é um especialista em criação visual para marketing digital e redes sociais.  
 Sua missão é gerar imagens criativas, profissionais e impactantes que transmitam a mensagem central da campanha.  
 
-### DADOS DE ENTRADA:  
-- Tema da imagem: {tema}
-- Objetivo da campanha: {objective}
-- Tipo de conteúdo: {post_type} → pode ser Post, Reel (capa), Carousel, Story, Anúncio{context_adicional}
-- Estilo visual desejado: MODERNO, PROFISSIONAL, REALISTA
-- Cores/Identidade da marca: {identidade_marca}
+### DADOS DE ENTRADA (serão fornecidos pelo sistema):
+- Assunto do post: {name}
+- Objetivo do post: {objective}
+- Tipo do post: Story ou feed ou reels
+- Mais detalhes: {details}
 
 ---
 
@@ -418,160 +849,125 @@ Sua missão é gerar imagens criativas, profissionais e impactantes que transmit
 ### SAÍDA ESPERADA:
 - A imagem, em alta qualidade, compreendendo todas as informações passadas"""
 
-        return prompt
+        return prompt.strip()
 
-    def _build_regeneration_prompt(self, post_data: Dict, current_content: str, user_prompt: str) -> str:
+    def _build_regeneration_prompt(self, current_content: str, user_prompt: str) -> str:
         """Build the prompt for content regeneration with user feedback."""
-        name = post_data.get('name', '')
-        objective = post_data.get('objective', '')
-        post_type = post_data.get('type', '')
-        further_details = post_data.get('further_details', '')
-
-        # Add further details context if available
-        context_adicional = f"\n- Detalhes Adicionais: {further_details}" if further_details and further_details.strip(
-        ) else ""
 
         prompt = f"""
-Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
-Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, sempre respeitando as políticas do Meta e Google Ads, evitando qualquer tipo de sensacionalismo, promessa exagerada ou afirmações que possam violar as diretrizes dessas plataformas.        
-Você precisa melhorar o seguinte conteúdo de rede social baseado no feedback do usuário:
+Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.  
+Sua missão é editar o material já criado (copy) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.  
 
-CONTEÚDO ATUAL:
-{current_content}
+### DADOS DE ENTRADA:
+- Conteúdo original: {current_content}  
+- Alterações solicitadas: {user_prompt}
 
-FEEDBACK/SOLICITAÇÃO DO USUÁRIO:
-{user_prompt}
+---
 
-ESPECIFICAÇÕES ORIGINAIS:
-- Nome do post: {name}
-- Objetivo: {objective}
-- Tipo: {post_type}{context_adicional}
+### REGRAS PARA EDIÇÃO:
 
-## REGRAS PARA CONSTRUÇÃO DA COPY:
+1. **Mantenha toda a identidade visual e estilística do conteúdo original**:  
+   - Paleta de cores  
+   - Tipografia  
+   - Layout  
+   - Tom de voz e estilo da copy  
+   - Estrutura do design ou texto  
 
-1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.  
-   O resultado deve ser apenas o texto final, fluido e pronto para publicação.  
+2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.  
 
-2. A copy deve respeitar o tom de voz definido no perfil do criador (se disponível) ou usar tom profissional como padrão.
+3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a mesma estrutura, tom e parágrafos curtos.  
 
-3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
-   - Não usar comparações negativas diretas.  
-   - Não prometer resultados absolutos.  
-   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.  
-   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.  
+4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.  
 
-4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.  
-
-5. **Adaptação ao Tipo de Conteúdo**  
-   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.  
-   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.  
-   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).  
-   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
-   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
-
-6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido.
-
-7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.  
-
-8. Faça a **separação de parágrafos de forma natural**, garantindo boa legibilidade em redes sociais e anúncios, evitando blocos de texto longos.  
-
-9. Entregue **apenas uma CTA final**, integrada ao texto, natural e clara, sem listas ou alternativas extras.  
-
-10. NÃO inclua textos explicativos, como por exemplo "Título:", "Texto:", "CTA:", ou qualquer outro rótulo.
+5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.  
 
 ---
 
 ### SAÍDA ESPERADA:
-- Texto final pronto para ser copiado e colado.  
-- Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.  
-- Linguagem alinhada ao perfil do criador e ao contexto fornecido.
-- Respeito às boas práticas do Meta e Google Ads.  
-- Emojis distribuídos de forma natural, sem excesso.  
-- Parágrafos curtos, fáceis de ler e escaneáveis.  
-- Uma única CTA ao final do texto.  
+- Versão revisada do conteúdo (copy), com **as alterações solicitadas aplicadas**.  
+- Todo o restante deve permanecer idêntico ao original.  
+- Material final pronto para publicação.  
 
-Por favor, recrie o conteúdo incorporando o feedback do usuário.
-
-Certifique-se de que as melhorias atendam especificamente ao feedback fornecido.
 """
 
         return prompt
 
-    def _build_variation_prompt(self, post_data: Dict, current_content: str) -> str:
+    def _build_variation_prompt(self, current_content: str) -> str:
         """Build the prompt for creating a variation of existing content."""
-        name = post_data.get('name', '')
-        objective = post_data.get('objective', '')
-        post_type = post_data.get('type', '')
-        further_details = post_data.get('further_details', '')
-
-        # Add further details context if available
-        context_adicional = f"\n- Detalhes Adicionais: {further_details}" if further_details and further_details.strip(
-        ) else ""
-
         prompt = f"""
-Você é um especialista em copywriting estratégico, criativo e persuasivo, com domínio do método AIDA (Atenção, Interesse, Desejo, Ação) e das boas práticas de comunicação digital.  
-Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, sempre respeitando as políticas do Meta e Google Ads, evitando qualquer tipo de sensacionalismo, promessa exagerada ou afirmações que possam violar as diretrizes dessas plataformas.
-Crie uma variação do seguinte conteúdo de rede social, mantendo o mesmo objetivo mas com abordagem diferente:
+Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.  
+Sua missão é editar o material já criado (copy) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.  
 
-CONTEÚDO ORIGINAL:
-{current_content}
+### DADOS DE ENTRADA:
+- Conteúdo original: {current_content}  
 
-ESPECIFICAÇÕES:
-- Nome do post: {name}
-- Objetivo: {objective}
-- Tipo: {post_type}{context_adicional}
+---
 
-Crie uma nova versão que:
-- Mantenha o mesmo objetivo e propósito
-- Use uma abordagem ou angle diferente
-- Tenha um tom ligeiramente diferente
-- Mantenha a qualidade e efetividade
+### REGRAS PARA EDIÇÃO:
 
+1. **Mantenha toda a identidade visual e estilística do conteúdo original**:  
+   - Paleta de cores  
+   - Tipografia  
+   - Layout  
+   - Tom de voz e estilo da copy  
+   - Estrutura do design ou texto  
 
-### REGRAS PARA CONSTRUÇÃO DA COPY:
+2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.  
 
-1. Estruture o texto internamente seguindo o método AIDA, mas **não mostre as etapas nem insira rótulos**.  
-   O resultado deve ser apenas o texto final, fluido e pronto para publicação.  
+3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a mesma estrutura, tom e parágrafos curtos.  
 
-2. A copy deve respeitar o tom de voz definido no perfil do criador (se disponível) ou usar tom profissional como padrão.
+4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.  
 
-3. Respeite as políticas de publicidade do Meta e Google Ads, sem sensacionalismo, promessas exageradas ou afirmações proibidas.  
-   - Não usar comparações negativas diretas.  
-   - Não prometer resultados absolutos.  
-   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.  
-   - Priorizar sempre uma comunicação positiva, inclusiva e motivadora.  
-
-4. Sempre que possível, conecte a copy com tendências e expressões atuais relacionadas ao tema.  
-
-5. **Adaptação ao Tipo de Conteúdo**  
-   - Se for **Post**: texto curto, envolvente e objetivo, pronto para feed.  
-   - Se for **Reel**: entregue um roteiro estruturado em até 15 segundos, dividido por blocos de tempo (ex.: [0s – 3s], [3s – 6s], etc.), para que a gravação siga o ritmo ideal de engajamento. A copy deve ser curta, dinâmica e clara, sempre com CTA no final.  
-   - Se for **Story**: copy leve, direta e conversacional, podendo ser dividida em 2 ou 3 telas curtas, incentivando interação (ex.: enquete, resposta rápida, link).  
-   - Se for **Carousel**: texto dividido em partes curtas que façam sentido em sequência, cada card reforçando um ponto até a CTA final.  
-   - Se for **Live**: copy no formato de convite, explicando tema, horário, benefício de participar e incentivo para salvar a data.  
-
-6. Ajuste o tamanho, tom e formatação da copy sempre de acordo com o tipo de conteúdo escolhido.
-
-7. Utilize **emojis de forma estratégica e moderada** para dar leveza e proximidade ao texto, sem exageros ou excesso.  
-
-8. Faça a **separação de parágrafos de forma natural**, garantindo boa legibilidade em redes sociais e anúncios, evitando blocos de texto longos.  
-
-9. Entregue **apenas uma CTA final**, integrada ao texto, natural e clara, sem listas ou alternativas extras.  
-
-10. NÃO inclua textos explicativos, como por exemplo "Título:", "Texto:", "CTA:", ou qualquer outro rótulo.
+5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.  
 
 ---
 
 ### SAÍDA ESPERADA:
-- Texto final pronto para ser copiado e colado.  
-- Copy fluida, envolvente e natural, sem divisões ou rótulos técnicos.  
-- Linguagem alinhada ao perfil do criador e ao contexto fornecido.
-- Respeito às boas práticas do Meta e Google Ads.  
-- Emojis distribuídos de forma natural, sem excesso.  
-- Parágrafos curtos, fáceis de ler e escaneáveis.  
-- Uma única CTA ao final do texto.  
+- Versão revisada do conteúdo (copy), com **as alterações solicitadas aplicadas**.  
+- Todo o restante deve permanecer idêntico ao original.  
+- Material final pronto para publicação.  
 
-Por favor, recrie o conteúdo como uma variação criativa do original.
+
+"""
+
+        return prompt
+
+    def _build_image_regeneration_prompt(self, current_content: str, user_prompt: str) -> str:
+        """Build the prompt for content regeneration with user feedback."""
+
+        prompt = f"""
+Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.  
+Sua missão é editar o material já criado (imagem) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.  
+
+### DADOS DE ENTRADA:
+- Conteúdo original: {current_content}  
+- Alterações solicitadas: {user_prompt if user_prompt else 'Nenhuma alteração específica fornecida'}
+
+---
+
+### REGRAS PARA EDIÇÃO:
+
+1. **Mantenha toda a identidade visual e estilística do conteúdo original**:  
+   - Paleta de cores  
+   - Tipografia  
+   - Layout  
+   - Tom de voz e estilo da copy  
+   - Estrutura do design ou texto  
+
+2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.  
+
+3. Preserve todos os elementos visuais originais e mude apenas os pontos descritos (ex.: cor de fundo, frase da chamada, ícone ou CTA).  
+
+4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.  
+
+5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.  
+
+---
+
+### SAÍDA ESPERADA:
+- Versão revisada do conteúdo (imagem), com **as alterações solicitadas aplicadas**.  
+- Todo o restante deve permanecer idêntico ao original.  
+- Material final pronto para publicação.  
 
 """
 

@@ -125,7 +125,9 @@ def generate_post_idea(request):
                 image_url = post_ai_service.generate_image_for_post(
                     user=request.user,
                     post_data=post_data,
-                    content=result['content']
+                    content=result['content'],
+                    custom_prompt=None,
+                    regenerate=False
                 )
                 post_idea.image_url = image_url
                 post_idea.save()
@@ -193,7 +195,8 @@ def generate_image_for_idea(request, idea_id):
             user=request.user,
             post_data=post_data,
             content=post_idea.content,
-            custom_prompt=custom_prompt
+            custom_prompt=custom_prompt,
+            regenerate=False
         )
 
         # Update the post idea with the image URL
@@ -322,7 +325,9 @@ def regenerate_image_for_idea(request, idea_id):
             user=request.user,
             post_data=post_data,
             content=post_idea.content,
-            custom_prompt=custom_prompt
+            custom_prompt=custom_prompt,
+            regenerate=True
+
         )
 
         # Update the post idea with new image
