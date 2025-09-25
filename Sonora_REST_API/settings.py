@@ -74,7 +74,7 @@ INSTALLED_APPS = [
     'CreditSystem',
 ]
 
-SITE_ID = 1
+SITE_ID = 2
 
 # Authentication backends for django-allauth email authentication
 AUTHENTICATION_BACKENDS = [
