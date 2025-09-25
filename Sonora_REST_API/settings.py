@@ -269,6 +269,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
     "https://sonora-ui.vercel.app",  # Vercel frontend
+    "https://sonoria-posts.vercel.app",  # Production domain
 ]
 
 # Add additional CORS origins from environment variable
