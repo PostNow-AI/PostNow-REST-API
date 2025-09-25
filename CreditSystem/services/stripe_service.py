@@ -105,14 +105,18 @@ class StripeService:
         except stripe.error.SignatureVerificationError as e:
             raise ValidationError(f"Assinatura inválida: {str(e)}")
 
+        print('aqui')
+        print(event)
         # Processa o evento
         if event['type'] == 'checkout.session.completed':
             return self._handle_checkout_completed(event['data']['object'])
         elif event['type'] == 'payment_intent.succeeded':
             return self._handle_payment_succeeded(event['data']['object'])
         elif event['type'] == 'payment_intent.payment_failed':
+            print('entrou aqui')
             return self._handle_payment_failed(event['data']['object'])
 
+        print('Evento:', event['type'])
         return {'status': 'ignored', 'event_type': event['type']}
 
     def _handle_checkout_completed(self, session):
