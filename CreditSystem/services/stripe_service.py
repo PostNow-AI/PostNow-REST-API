@@ -145,14 +145,10 @@ class StripeService:
 
             print(customer_email)
             print(session)
-            users = User.objects.filter(email=customer_email)
-            if users.count() == 0:
+            user = User.objects.filter(email=customer_email).first()
+            if not user:
                 raise ValidationError(
                     f"Usuário não encontrado: {customer_email}")
-            elif users.count() > 1:
-                raise ValidationError(
-                    f"Mais de um usuário encontrado com o email: {customer_email}")
-            user = users.first()
 
             # Adiciona os créditos ao usuário
             amount = float(credits)
