@@ -970,7 +970,8 @@ Sua missão é editar o material já criado (imagem) mantendo sua identidade vis
 - Material final pronto para publicação.  
 
 """
-
+        print('image regeneration prompt:')
+        print(prompt)
         return prompt
 
     def _generate_content_with_ai(self, ai_service, prompt: str) -> str:
