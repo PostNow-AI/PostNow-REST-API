@@ -163,8 +163,12 @@ class PostAIService(BaseAIService):
 
         # Build image prompt
         if regenerate:
+            from IdeaBank.models import PostIdea
+            post_idea = PostIdea.objects.filter(
+                post_id=post_data.get('id')).first()
+            current_image = post_idea.image_url if post_idea else None
             prompt = self._build_image_regeneration_prompt(
-                content, custom_prompt)
+                current_image, custom_prompt)
         else:
             prompt = self._build_image_prompt(post_data, content)
 
@@ -932,42 +936,43 @@ Sua missão é editar o material já criado (copy) mantendo sua identidade visua
 
         return prompt
 
-    def _build_image_regeneration_prompt(self, current_content: str, user_prompt: str) -> str:
+    def _build_image_regeneration_prompt(self, current_image: str, user_prompt: str) -> str:
         """Build the prompt for content regeneration with user feedback."""
 
         prompt = f"""
-Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.  
-Sua missão é editar o material já criado (imagem) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.  
+Você é um especialista em design digital e edição de imagens para marketing.  
+Sua missão é editar a imagem já criada, mantendo **100% da identidade visual, layout, estilo, cores e elementos originais**, alterando **apenas o que for solicitado**.  
 
 ### DADOS DE ENTRADA:
-- Conteúdo original: {current_content}  
+- Imagem original: {current_image}  
 - Alterações solicitadas: {user_prompt if user_prompt else 'Nenhuma alteração específica fornecida'}
 
 ---
 
 ### REGRAS PARA EDIÇÃO:
 
-1. **Mantenha toda a identidade visual e estilística do conteúdo original**:  
-   - Paleta de cores  
-   - Tipografia  
-   - Layout  
-   - Tom de voz e estilo da copy  
-   - Estrutura do design ou texto  
+1. **Nunca recrie a imagem do zero.**  
+   - O design, estilo, paleta de cores, tipografia, elementos gráficos e identidade visual devem permanecer exatamente iguais à arte original.  
 
-2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.  
+2. **Aplique apenas as mudanças solicitadas.**  
+   - Exemplo: se o pedido for “mudar o título para X”, altere somente o texto do título, mantendo a fonte, cor, tamanho e posicionamento original.  
+   - Se o pedido for “trocar a cor do fundo”, altere apenas essa cor, mantendo todos os demais elementos intactos.  
 
-3. Preserve todos os elementos visuais originais e mude apenas os pontos descritos (ex.: cor de fundo, frase da chamada, ícone ou CTA).  
+3. **Não adicione novos elementos** que não foram solicitados.  
+   - O layout deve permanecer idêntico.  
 
-4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.  
+4. **Respeite sempre a logomarca oficial** caso já esteja aplicada na arte.  
 
-5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.  
+5. O resultado deve parecer exatamente a mesma imagem original, com apenas os pontos ajustados conforme solicitado.  
 
 ---
 
 ### SAÍDA ESPERADA:
-- Versão revisada do conteúdo (imagem), com **as alterações solicitadas aplicadas**.  
-- Todo o restante deve permanecer idêntico ao original.  
-- Material final pronto para publicação.  
+- **A mesma imagem original, com apenas as alterações solicitadas aplicadas.**  
+- Nada além do que foi pedido deve ser modificado.  
+- O design final deve estar pronto para uso, fiel ao original.  
+
+
 
 """
         print('image regeneration prompt:')
