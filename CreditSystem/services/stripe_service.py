@@ -143,11 +143,16 @@ class StripeService:
             from django.contrib.auth import get_user_model
             User = get_user_model()
 
-            try:
-                user = User.objects.get(email=customer_email)
-            except User.DoesNotExist:
+            print(customer_email)
+            print(session)
+            users = User.objects.filter(email=customer_email)
+            if users.count() == 0:
                 raise ValidationError(
                     f"Usuário não encontrado: {customer_email}")
+            elif users.count() > 1:
+                raise ValidationError(
+                    f"Mais de um usuário encontrado com o email: {customer_email}")
+            user = users.first()
 
             # Adiciona os créditos ao usuário
             amount = float(credits)
@@ -186,6 +191,12 @@ class StripeService:
         """
         # Esta função pode ser usada para casos onde o webhook de checkout
         # não é suficiente ou para pagamentos recorrentes
+        print({
+            'status': 'success',
+            'payment_intent_id': payment_intent.id,
+            'amount': payment_intent.amount / 100  # Stripe usa centavos
+        })
+        print('handle success')
         return {
             'status': 'success',
             'payment_intent_id': payment_intent.id,
