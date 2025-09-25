@@ -212,6 +212,7 @@ REST_AUTH = {
     # "JWT_AUTH_COOKIE": "_auth",  # Name of access token cookie
     # "JWT_AUTH_REFRESH_COOKIE": "_refresh",  # Name of refresh token cookie
     "JWT_AUTH_HTTPONLY": False,  # Makes sure refresh token is sent
+    'REGISTER_SERIALIZER': 'Users.serializers.CustomRegisterSerializer',
 }
 
 
