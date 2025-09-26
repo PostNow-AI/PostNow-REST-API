@@ -193,12 +193,12 @@ class PostAIService(BaseAIService):
             prompt = self._build_image_prompt(post_data, content)
 
         try:
-            if current_image:
+            if current_image is not None:
                 image_url = ai_service.generate_image(
                     prompt, current_image, user, post_data, content)
             else:
                 image_url = ai_service.generate_image(
-                    prompt, user, post_data, content)
+                    prompt, '', user, post_data, content)
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
 
