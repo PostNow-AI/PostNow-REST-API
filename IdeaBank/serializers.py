@@ -45,7 +45,8 @@ class PostCreateSerializer(serializers.ModelSerializer):
 class PostIdeaSerializer(serializers.ModelSerializer):
     """Serializer for PostIdea model."""
     content_preview = serializers.ReadOnlyField()
-    post_name = serializers.CharField(source='post.name', read_only=True)
+    post_name = serializers.CharField(
+        source='post.name', read_only=True, allow_blank=True, required=False)
     post_type = serializers.CharField(
         source='post.get_type_display', read_only=True)
 
@@ -85,7 +86,8 @@ class PostGenerationRequestSerializer(serializers.Serializer):
     """Serializer for AI post generation requests."""
 
     # Required fields
-    name = serializers.CharField(max_length=200, help_text="Nome do post")
+    name = serializers.CharField(
+        max_length=200, help_text="Nome do post", required=False, allow_blank=True)
     objective = serializers.ChoiceField(
         choices=PostObjective.choices, help_text="Objetivo do post")
     type = serializers.ChoiceField(
@@ -106,12 +108,11 @@ class PostGenerationRequestSerializer(serializers.Serializer):
 
     def validate(self, data):
         """Validate the request data."""
-        # Ensure required fields are present
-        required_fields = ['name', 'objective', 'type']
+        # Only require objective and type
+        required_fields = ['objective', 'type']
         for field in required_fields:
             if not data.get(field):
                 raise serializers.ValidationError(f"{field} é obrigatório.")
-
         return data
 
 

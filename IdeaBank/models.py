@@ -31,7 +31,8 @@ class Post(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
 
     # Required fields
-    name = models.CharField(max_length=200, help_text="Nome do post")
+    name = models.CharField(
+        max_length=200, help_text="Nome do post", blank=True, null=True)
     objective = models.CharField(
         max_length=50,
         choices=PostObjective.choices,
