@@ -7,13 +7,30 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None
 
+import base64
+import re
+
 from django.contrib.auth.models import User
 
 from .base_ai_service import BaseAIService
 
 
+def extract_base64_image(data_url: str) -> bytes:
+    """
+    Extracts and decodes base64 image data from a data URL.
+    Returns image bytes suitable for Gemini.
+    """
+    # Example data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+    match = re.match(r"^data:image/(png|jpeg);base64,(.*)$", data_url)
+    if match:
+        base64_str = match.group(2)
+        return base64.b64decode(base64_str)
+    # If not a data URL, assume it's plain base64
+    return base64.b64decode(data_url)
+
+
 class GeminiService(BaseAIService):
-    def generate_image(self, prompt: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
+    def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using Gemini's image generation API and return a data URL (base64)."""
 
         if not GEMINI_AVAILABLE:
@@ -59,9 +76,22 @@ class GeminiService(BaseAIService):
                 try:
                     model = genai.GenerativeModel(model_name)
 
-                    # Try image generation with clear instructions
-                    response = model.generate_content([enhanced_prompt])
+                    # When calling model.generate_content, include image if provided
 
+                    if current_image:
+                        image_bytes = extract_base64_image(current_image)
+
+                        response = model.generate_content([
+                            enhanced_prompt,
+                            {
+                                "inline_data": {
+                                    "mime_type": "image/png",  # Or appropriate MIME type
+                                    "data": image_bytes
+                                }
+                            },
+                        ])
+                    else:
+                        response = model.generate_content([enhanced_prompt])
                     # Check if response has image data
                     if response.candidates and len(response.candidates) > 0:
                         candidate = response.candidates[0]
@@ -151,7 +181,7 @@ Format as: "A professional marketing image showing [detailed description]"
 
         if idea_content:
             # Extract key themes from idea content for visual inspiration
-            enhanced_parts.append(f"Content context: {idea_content[:200]}...")
+            enhanced_parts.append(f"Content context: {idea_content}...")
 
         enhanced_parts.append(
             "Create a visually appealing, professional marketing image suitable for social media.")

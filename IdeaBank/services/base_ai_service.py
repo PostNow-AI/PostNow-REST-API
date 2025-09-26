@@ -2,9 +2,8 @@ import time
 from abc import ABC, abstractmethod
 from typing import Dict, List
 
-from django.contrib.auth.models import User
-
 from CreatorProfile.models import CreatorProfile
+from django.contrib.auth.models import User
 
 
 class ProgressTracker:
@@ -58,7 +57,7 @@ class ProgressTracker:
 class BaseAIService(ABC):
     """Base class for AI service implementations."""
 
-    def generate_image(self, prompt: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
+    def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image for the given prompt. Should be implemented by subclasses."""
         raise NotImplementedError(
             "Image generation is not implemented for this provider.")

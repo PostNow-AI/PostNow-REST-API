@@ -122,9 +122,17 @@ def generate_post_idea(request):
         # Generate image if requested
         if include_image:
             try:
+                # Add the created post ID and post_idea ID to post_data for image generation
+                post_data_with_ids = {
+                    **post_data,
+                    'post_id': post.id,
+                    'post_idea_id': post_idea.id,
+                    'post': post
+                }
+
                 image_url = post_ai_service.generate_image_for_post(
                     user=request.user,
-                    post_data=post_data,
+                    post_data=post_data_with_ids,
                     content=result['content'],
                     custom_prompt=None,
                     regenerate=False
@@ -180,13 +188,16 @@ def generate_image_for_idea(request, idea_id):
         # Get the custom prompt or use default
         custom_prompt = serializer.validated_data.get('prompt')
 
-        # Prepare post data for image generation
+        # Prepare post data for image generation with IDs
         post_data = {
             'name': post_idea.post.name,
             'objective': post_idea.post.objective,
             'type': post_idea.post.type,
             'further_details': post_idea.post.further_details,
             'include_image': post_idea.post.include_image,
+            'post_id': post_idea.post.id,
+            'post_idea_id': post_idea.id,
+            'post': post_idea.post
         }
 
         # Generate image
@@ -310,13 +321,16 @@ def regenerate_image_for_idea(request, idea_id):
     try:
         custom_prompt = serializer.validated_data.get('prompt')
 
-        # Prepare post data
+        # Prepare post data with IDs for image regeneration
         post_data = {
             'name': post_idea.post.name,
             'objective': post_idea.post.objective,
             'type': post_idea.post.type,
             'further_details': post_idea.post.further_details,
             'include_image': post_idea.post.include_image,
+            'post_id': post_idea.post.id,
+            'post_idea_id': post_idea.id,
+            'post': post_idea.post
         }
 
         # Regenerate image
@@ -327,7 +341,6 @@ def regenerate_image_for_idea(request, idea_id):
             content=post_idea.content,
             custom_prompt=custom_prompt,
             regenerate=True
-
         )
 
         # Update the post idea with new image

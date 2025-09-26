@@ -146,6 +146,7 @@ class PostAIService(BaseAIService):
         """
         # Validate credits before generation (skip for unauthenticated users)
         model_name = 'gemini-2.5-flash'  # Only supported model
+        current_image = None
         if user and user.is_authenticated:
             try:
                 from .ai_model_service import AIModelService
@@ -164,17 +165,40 @@ class PostAIService(BaseAIService):
         # Build image prompt
         if regenerate:
             from IdeaBank.models import PostIdea
-            post_idea = PostIdea.objects.filter(
-                post_id=post_data.get('id')).first()
-            current_image = post_idea.image_url if post_idea else None
+            # Try different ways to get the post idea with current image
+            post_idea = None
+            # Method 1: If post_data contains a post_idea_id
+            if post_data.get('post_idea_id'):
+                post_idea = PostIdea.objects.filter(
+                    id=post_data.get('post_idea_id')).first()
+
+            # Method 2: If post_data contains a post_id, get the latest PostIdea for that post
+            elif post_data.get('post_id'):
+                from IdeaBank.models import Post
+                post = Post.objects.filter(id=post_data.get('post_id')).first()
+                if post:
+                    post_idea = PostIdea.objects.filter(
+                        post=post).order_by('-created_at').first()
+
+            # Method 3: If we have a post object directly
+            elif post_data.get('post'):
+                post_idea = PostIdea.objects.filter(
+                    post=post_data.get('post')).order_by('-created_at').first()
+
+            current_image = post_idea.image_url if (
+                post_idea and post_idea.image_url) else None
             prompt = self._build_image_regeneration_prompt(
-                current_image, custom_prompt)
+                custom_prompt)
         else:
             prompt = self._build_image_prompt(post_data, content)
 
         try:
-            image_url = ai_service.generate_image(
-                prompt, user, post_data, content)
+            if current_image:
+                image_url = ai_service.generate_image(
+                    prompt, current_image, user, post_data, content)
+            else:
+                image_url = ai_service.generate_image(
+                    prompt, user, post_data, content)
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
 
@@ -936,16 +960,17 @@ Sua missão é editar o material já criado (copy) mantendo sua identidade visua
 
         return prompt
 
-    def _build_image_regeneration_prompt(self, current_image: str, user_prompt: str) -> str:
-        """Build the prompt for content regeneration with user feedback."""
+    def _build_image_regeneration_prompt(self, user_prompt: str) -> str:
+        """Build the prompt for image regeneration with user feedback."""
 
+        # If no current image is found, we need to create a new image based on the user's request
         prompt = f"""
 Você é um especialista em design digital e edição de imagens para marketing.  
 Sua missão é editar a imagem já criada, mantendo **100% da identidade visual, layout, estilo, cores e elementos originais**, alterando **apenas o que for solicitado**.  
 
 ### DADOS DE ENTRADA:
-- Imagem original: {current_image}  
-- Alterações solicitadas: {user_prompt if user_prompt else 'Nenhuma alteração específica fornecida'}
+- Imagem original: [IMAGEM ANEXADA]
+- Alterações solicitadas: {user_prompt if user_prompt else 'imagem parecida mas diferente, dê-me uma nova versão'}
 
 ---
 
@@ -975,8 +1000,7 @@ Sua missão é editar a imagem já criada, mantendo **100% da identidade visual,
 
 
 """
-        print('image regeneration prompt:')
-        print(prompt)
+
         return prompt
 
     def _generate_content_with_ai(self, ai_service, prompt: str) -> str:
