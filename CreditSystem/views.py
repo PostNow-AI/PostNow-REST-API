@@ -31,6 +31,7 @@ from .serializers import (
 )
 from .services.credit_service import CreditService
 from .services.stripe_service import StripeService
+from .services.subscription_service import SubscriptionService
 
 stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
 
@@ -113,190 +114,75 @@ class StripeSubscriptionWebhookView(APIView):
     permission_classes = []  # Sem autenticação para webhooks
 
     def post(self, request):
+        """Processa webhook do Stripe para assinaturas"""
+        # Simple logging to file for debugging
+        from datetime import datetime
+
+        # Create a simple log file to track webhook attempts
+        log_file = '/tmp/stripe_subscription_webhook_debug.log'
+        try:
+            with open(log_file, 'a') as f:
+                timestamp = datetime.now().isoformat()
+                f.write(
+                    f"\n=== SUBSCRIPTION WEBHOOK RECEIVED {timestamp} ===\n")
+                f.write(f"Headers: {dict(request.META)}\n")
+                f.write(f"Body length: {len(request.body)}\n")
+                f.write(
+                    f"Stripe signature present: {'HTTP_STRIPE_SIGNATURE' in request.META}\n")
+        except Exception as e:
+            print(f"Logging error: {e}")
+
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
-        endpoint_secret = getattr(settings, 'STRIPE_WEBHOOK_SECRET', None)
-        event = None
-        try:
-            event = stripe.Webhook.construct_event(
-                payload, sig_header, endpoint_secret
+
+        if not sig_header:
+            return Response(
+                {'success': False, 'message': 'Assinatura Stripe não fornecida'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-        except ValueError:
-            return Response({'success': False, 'message': 'Payload inválido'}, status=status.HTTP_400_BAD_REQUEST)
-        except stripe.error.SignatureVerificationError:
-            return Response({'success': False, 'message': 'Assinatura Stripe inválida'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Process subscription created event
-        if event['type'] == 'customer.subscription.created':
-            subscription = event['data']['object']
-            stripe_subscription_id = subscription['id']
-            user_id = None
-            plan_id = None
+        try:
+            subscription_service = SubscriptionService()
+            result = subscription_service.process_webhook(payload, sig_header)
 
-            # Get metadata from subscription
-            metadata = subscription.get('metadata', {})
-            user_id = metadata.get('user_id')
-            plan_id = metadata.get('plan_id')
-
-            # If metadata is missing, try to find plan by price ID
-            if not user_id or not plan_id:
-                # Get the price ID from the subscription
-                price_id = None
-                if subscription.get('items', {}).get('data'):
-                    price_id = subscription['items']['data'][0]['price']['id']
-
-                if price_id:
-                    # Try to find the plan by stripe_price_id
-                    try:
-                        from .models import SubscriptionPlan
-                        plan = SubscriptionPlan.objects.get(
-                            stripe_price_id=price_id, is_active=True)
-                        plan_id = str(plan.id)
-
-                        # For user_id, try to get it from the customer
-                        customer_id = subscription.get('customer')
-                        if customer_id:
-                            # Try to get customer details from Stripe
-                            try:
-                                customer = stripe.Customer.retrieve(
-                                    customer_id)
-                                customer_email = customer.get('email')
-
-                                if customer_email:
-                                    # Find user by email
-                                    from django.contrib.auth import get_user_model
-                                    User = get_user_model()
-                                    try:
-                                        user = User.objects.get(
-                                            email=customer_email)
-                                        user_id = str(user.id)
-                                    except User.DoesNotExist:
-                                        return Response({
-                                            'success': False,
-                                            'message': f'Usuário não encontrado com email: {customer_email}'
-                                        }, status=status.HTTP_404_NOT_FOUND)
-                                else:
-                                    return Response({
-                                        'success': False,
-                                        'message': f'Customer {customer_id} não tem email associado'
-                                    }, status=status.HTTP_400_BAD_REQUEST)
-                            except stripe.error.StripeError as e:
-                                return Response({
-                                    'success': False,
-                                    'message': f'Erro ao buscar customer no Stripe: {str(e)}'
-                                }, status=status.HTTP_400_BAD_REQUEST)
-                    except SubscriptionPlan.DoesNotExist:
-                        return Response({
-                            'success': False,
-                            'message': f'Plano não encontrado para price_id: {price_id}'
-                        }, status=status.HTTP_404_NOT_FOUND)
-
-                if not user_id or not plan_id:
-                    return Response({
-                        'success': False,
-                        'message': 'Metadados incompletos na assinatura e não foi possível determinar o plano/usuário'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-            from django.contrib.auth import get_user_model
-            from django.utils import timezone
-
-            from .models import SubscriptionPlan, UserSubscription
-
-            User = get_user_model()
-            try:
-                user = User.objects.get(id=user_id)
-                plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
-
-                # Check if subscription already exists
-                existing_sub = UserSubscription.objects.filter(
-                    stripe_subscription_id=stripe_subscription_id
-                ).first()
-                if existing_sub:
-                    return Response({
-                        'success': True,
-                        'message': 'Assinatura já registrada'
-                    }, status=status.HTTP_200_OK)
-
-                # Cancel any existing active subscriptions for this user
-                UserSubscription.objects.filter(
-                    user=user, status='active'
-                ).update(status='cancelled', end_date=timezone.now())
-
-                # Calculate end_date for non-lifetime plans
-                interval = plan.interval
-                end_date = None
-                if interval == 'monthly':
-                    end_date = timezone.now() + timezone.timedelta(days=30)
-                elif interval == 'quarterly':
-                    end_date = timezone.now() + timezone.timedelta(days=90)
-                elif interval == 'semester':
-                    end_date = timezone.now() + timezone.timedelta(days=180)
-                elif interval == 'yearly':
-                    end_date = timezone.now() + timezone.timedelta(days=365)
-                # Lifetime: end_date stays None
-
-                UserSubscription.objects.create(
-                    user=user,
-                    plan=plan,
-                    start_date=timezone.now(),
-                    end_date=end_date,
-                    status='active',
-                    stripe_subscription_id=stripe_subscription_id
-                )
+            if result.get('status') == 'success':
                 return Response({
                     'success': True,
-                    'message': 'Assinatura registrada com sucesso'
+                    'message': result.get('message', 'Webhook processado com sucesso'),
+                    'data': {
+                        'subscription_id': result.get('subscription_id'),
+                        'user_id': result.get('user_id'),
+                        'plan_name': result.get('plan_name')
+                    }
                 }, status=status.HTTP_200_OK)
-
-            except User.DoesNotExist:
+            elif result.get('status') == 'warning':
+                return Response({
+                    'success': True,
+                    'message': result.get('message', 'Webhook processado com alerta'),
+                    'warning': True
+                }, status=status.HTTP_200_OK)
+            elif result.get('status') == 'ignored':
+                return Response({
+                    'success': True,
+                    'message': result.get('message', 'Evento ignorado')
+                }, status=status.HTTP_200_OK)
+            else:
                 return Response({
                     'success': False,
-                    'message': f'Usuário não encontrado: {user_id}'
-                }, status=status.HTTP_404_NOT_FOUND)
-            except SubscriptionPlan.DoesNotExist:
-                return Response({
-                    'success': False,
-                    'message': f'Plano não encontrado: {plan_id}'
-                }, status=status.HTTP_404_NOT_FOUND)
-            except Exception as e:
-                return Response({
-                    'success': False,
-                    'message': f'Erro ao criar assinatura: {str(e)}'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        # Process subscription cancelled event
-        elif event['type'] == 'customer.subscription.deleted':
-            subscription = event['data']['object']
-            stripe_subscription_id = subscription['id']
-            try:
-                from django.utils import timezone
+                    'message': result.get('message', 'Erro ao processar webhook')
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-                from .models import UserSubscription
-
-                sub = UserSubscription.objects.filter(
-                    stripe_subscription_id=stripe_subscription_id,
-                    status='active'
-                ).first()
-
-                if sub:
-                    sub.status = 'cancelled'
-                    sub.end_date = timezone.now()
-                    sub.save()
-                    return Response({
-                        'success': True,
-                        'message': 'Assinatura cancelada com sucesso'
-                    }, status=status.HTTP_200_OK)
-                else:
-                    # This is not necessarily an error - subscription might have been cancelled already
-                    return Response({
-                        'success': True,
-                        'message': 'Assinatura não encontrada ou já cancelada'
-                    }, status=status.HTTP_200_OK)
-            except Exception as e:
-                return Response({
-                    'success': False,
-                    'message': f'Erro ao cancelar assinatura: {str(e)}'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        return Response({'success': True, 'message': 'Evento ignorado'}, status=status.HTTP_200_OK)
+        except ValidationError as e:
+            return Response({
+                'success': False,
+                'message': f'Webhook error: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Erro interno do servidor',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class SubscriptionPlanListView(generics.ListAPIView):
@@ -353,9 +239,9 @@ class CreateStripeCheckoutSessionView(APIView):
                     'is_test_environment': True
                 }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-            # Get domain URL from settings with fallback
-            domain_url = getattr(settings, 'FRONTEND_URL',
-                                 'http://localhost:3000')
+            # Get frontend URL from settings with fallback
+            frontend_url = getattr(settings, 'FRONTEND_URL',
+                                   'http://localhost:3000')
 
             checkout_session = stripe.checkout.Session.create(
                 customer_email=user.email,
@@ -365,8 +251,8 @@ class CreateStripeCheckoutSessionView(APIView):
                     'quantity': 1,
                 }],
                 mode='subscription' if plan.interval != 'lifetime' else 'payment',
-                success_url=f'{domain_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}',
-                cancel_url=f'{domain_url}/subscription/cancel',
+                success_url=f'{frontend_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}',
+                cancel_url=f'{frontend_url}/subscription/cancel',
                 metadata={
                     'user_id': str(user.id),
                     'plan_id': str(plan.id),
