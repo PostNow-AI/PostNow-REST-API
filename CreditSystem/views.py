@@ -354,7 +354,7 @@ class CreateStripeCheckoutSessionView(APIView):
                 }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
             # Get domain URL from settings with fallback
-            domain_url = getattr(settings, 'DOMAIN_URL',
+            domain_url = getattr(settings, 'FRONTEND_URL',
                                  'http://localhost:3000')
 
             checkout_session = stripe.checkout.Session.create(
