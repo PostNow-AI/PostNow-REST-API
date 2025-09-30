@@ -43,6 +43,11 @@ class SubscriptionService:
         except stripe.error.SignatureVerificationError as e:
             raise ValidationError(f"Assinatura inválida: {str(e)}")
 
+        # Log do evento recebido para debug
+        print(f"[WEBHOOK DEBUG] Evento recebido: {event['type']}")
+        if event.get('data', {}).get('object', {}).get('mode'):
+            print(f"[WEBHOOK DEBUG] Modo: {event['data']['object']['mode']}")
+
         # Processa o evento
         if event['type'] == 'customer.subscription.created':
             return self._handle_subscription_created(event['data']['object'])
@@ -54,6 +59,10 @@ class SubscriptionService:
             return self._handle_payment_succeeded(event['data']['object'])
         elif event['type'] == 'invoice.payment_failed':
             return self._handle_payment_failed(event['data']['object'])
+        elif event['type'] == 'checkout.session.completed':
+            return self._handle_checkout_session_completed(event['data']['object'])
+        elif event['type'] == 'payment_intent.succeeded':
+            return self._handle_payment_intent_succeeded(event['data']['object'])
 
         return {'status': 'ignored', 'event_type': event['type']}
 
@@ -271,6 +280,203 @@ class SubscriptionService:
                 'stripe_subscription_id': subscription_id
             }
         return {'status': 'ignored', 'message': 'Fatura não relacionada a assinatura'}
+
+    def _handle_checkout_session_completed(self, session):
+        """
+        Processa checkout session completada (para pagamentos únicos como lifetime)
+
+        Args:
+            session: Dados da sessão de checkout
+
+        Returns:
+            dict: Resultado do processamento
+        """
+        try:
+            # Verifica se é modo 'payment' (lifetime) ou 'subscription'
+            mode = session.get('mode')
+
+            if mode == 'payment':
+                # É um pagamento único (lifetime)
+                return self._handle_lifetime_purchase(session)
+            elif mode == 'subscription':
+                # É uma assinatura recorrente - será processada em customer.subscription.created
+                return {
+                    'status': 'success',
+                    'message': 'Checkout de assinatura completado - aguardando criação da assinatura'
+                }
+            else:
+                return {
+                    'status': 'ignored',
+                    'message': f'Modo de checkout não reconhecido: {mode}'
+                }
+
+        except Exception as e:
+            raise ValidationError(
+                f'Erro ao processar checkout session: {str(e)}')
+
+    def _handle_payment_intent_succeeded(self, payment_intent):
+        """
+        Processa payment intent bem-sucedido (backup para lifetime purchases)
+
+        Args:
+            payment_intent: Dados do payment intent
+
+        Returns:
+            dict: Resultado do processamento
+        """
+        try:
+            # Verifica se temos charges associadas
+            charges = payment_intent.get('charges', {}).get('data', [])
+            if charges:
+
+                # Se temos metadados no payment intent, processa como lifetime
+                metadata = payment_intent.get('metadata', {})
+                if metadata.get('user_id') and metadata.get('plan_id'):
+                    return self._create_lifetime_subscription_from_metadata(metadata)
+
+            return {
+                'status': 'ignored',
+                'message': 'Payment intent sem metadados de assinatura'
+            }
+
+        except Exception as e:
+            raise ValidationError(
+                f'Erro ao processar payment intent: {str(e)}')
+
+    def _handle_lifetime_purchase(self, session):
+        """
+        Processa compra de assinatura lifetime
+
+        Args:
+            session: Dados da sessão de checkout
+
+        Returns:
+            dict: Resultado do processamento
+        """
+        try:
+            user_id = None
+            plan_id = None
+
+            # Tenta obter metadados da sessão
+            metadata = session.get('metadata', {})
+            user_id = metadata.get('user_id')
+            plan_id = metadata.get('plan_id')
+
+            # Se metadados não estão disponíveis, tenta buscar por customer e line items
+            if not user_id or not plan_id:
+                customer_id = session.get('customer')
+                line_items = session.get('line_items', {}).get('data', [])
+
+                if customer_id:
+                    user_id = self._get_user_id_from_customer(customer_id)
+
+                if line_items:
+                    price_id = line_items[0].get('price', {}).get('id')
+                    if price_id:
+                        try:
+                            plan = SubscriptionPlan.objects.get(
+                                stripe_price_id=price_id, is_active=True)
+                            plan_id = str(plan.id)
+                        except SubscriptionPlan.DoesNotExist:
+                            raise ValidationError(
+                                f'Plano não encontrado para price_id: {price_id}')
+
+            # Se ainda não temos os dados, tenta buscar pela customer_email
+            if not user_id:
+                customer_details = session.get('customer_details', {})
+                customer_email = customer_details.get('email')
+                if customer_email:
+                    User = get_user_model()
+                    try:
+                        user = User.objects.get(email=customer_email)
+                        user_id = str(user.id)
+                    except User.DoesNotExist:
+                        raise ValidationError(
+                            f'Usuário não encontrado com email: {customer_email}')
+
+            if not user_id or not plan_id:
+                raise ValidationError(
+                    'Não foi possível determinar usuário ou plano da compra lifetime')
+
+            return self._create_lifetime_subscription_from_metadata({
+                'user_id': user_id,
+                'plan_id': plan_id
+            })
+
+        except Exception as e:
+            raise ValidationError(
+                f'Erro ao processar compra lifetime: {str(e)}')
+
+    def _create_lifetime_subscription_from_metadata(self, metadata):
+        """
+        Cria assinatura lifetime a partir dos metadados
+
+        Args:
+            metadata: Metadados com user_id e plan_id
+
+        Returns:
+            dict: Resultado do processamento
+        """
+        try:
+            user_id = metadata.get('user_id')
+            plan_id = metadata.get('plan_id')
+
+            # Busca usuário e plano
+            User = get_user_model()
+            user = User.objects.get(id=user_id)
+            plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+
+            # Verifica se é realmente um plano lifetime
+            if plan.interval != 'lifetime':
+                return {
+                    'status': 'warning',
+                    'message': f'Tentativa de criar assinatura lifetime para plano {plan.interval}'
+                }
+
+            # Verifica se usuário já tem uma assinatura lifetime ativa
+            existing_lifetime = UserSubscription.objects.filter(
+                user=user,
+                plan__interval='lifetime',
+                status='active'
+            ).first()
+
+            if existing_lifetime:
+                return {
+                    'status': 'success',
+                    'message': 'Usuário já possui assinatura lifetime ativa',
+                    'subscription_id': existing_lifetime.id
+                }
+
+            # Cancela assinaturas ativas existentes (lifetime substitui tudo)
+            UserSubscription.objects.filter(
+                user=user, status='active'
+            ).update(status='cancelled', end_date=timezone.now())
+
+            # Cria nova assinatura lifetime
+            user_subscription = UserSubscription.objects.create(
+                user=user,
+                plan=plan,
+                start_date=timezone.now(),
+                end_date=None,  # Lifetime não tem data de fim
+                status='active',
+                stripe_subscription_id=None  # Lifetime não tem subscription_id
+            )
+
+            return {
+                'status': 'success',
+                'message': 'Assinatura lifetime criada com sucesso',
+                'subscription_id': user_subscription.id,
+                'user_id': user.id,
+                'plan_name': plan.name
+            }
+
+        except User.DoesNotExist:
+            raise ValidationError(f'Usuário não encontrado: {user_id}')
+        except SubscriptionPlan.DoesNotExist:
+            raise ValidationError(f'Plano não encontrado: {plan_id}')
+        except Exception as e:
+            raise ValidationError(
+                f'Erro ao criar assinatura lifetime: {str(e)}')
 
     def _get_user_id_from_customer(self, customer_id):
         """
