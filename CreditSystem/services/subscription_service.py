@@ -135,13 +135,23 @@ class SubscriptionService:
             # Calcula data de fim
             end_date = self._calculate_end_date(plan.interval)
 
+            # Determina o status baseado no status do Stripe
+            stripe_status = subscription.get('status', 'active')
+            local_status = 'active'
+
+            # Se está em trial, ainda considera como ativa (usuário tem acesso)
+            if stripe_status in ['trialing', 'active']:
+                local_status = 'active'
+            elif stripe_status in ['incomplete', 'incomplete_expired', 'past_due']:
+                local_status = 'cancelled'
+
             # Cria nova assinatura
             user_subscription = UserSubscription.objects.create(
                 user=user,
                 plan=plan,
                 start_date=timezone.now(),
                 end_date=end_date,
-                status='active',
+                status=local_status,
                 stripe_subscription_id=stripe_subscription_id
             )
 
@@ -217,9 +227,9 @@ class SubscriptionService:
 
             if user_subscription:
                 # Mapear status do Stripe para nosso modelo
-                if stripe_status == 'active':
+                if stripe_status in ['trialing', 'active']:
                     user_subscription.status = 'active'
-                elif stripe_status in ['canceled', 'incomplete_expired']:
+                elif stripe_status in ['canceled', 'incomplete_expired', 'past_due', 'unpaid']:
                     user_subscription.status = 'cancelled'
                     if not user_subscription.end_date:
                         user_subscription.end_date = timezone.now()

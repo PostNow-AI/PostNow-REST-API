@@ -246,6 +246,17 @@ class CreateStripeCheckoutSessionView(APIView):
             load_dotenv()
             frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
+            # Configure subscription data with trial period for non-lifetime plans
+            subscription_data = None
+            if plan.interval != 'lifetime':
+                subscription_data = {
+                    'metadata': {
+                        'user_id': str(user.id),
+                        'plan_id': str(plan.id),
+                    },
+                    'trial_period_days': 7  # 7-day free trial
+                }
+
             checkout_session = stripe.checkout.Session.create(
                 customer_email=user.email,
                 payment_method_types=['card'],
@@ -260,12 +271,7 @@ class CreateStripeCheckoutSessionView(APIView):
                     'user_id': str(user.id),
                     'plan_id': str(plan.id),
                 },
-                subscription_data={
-                    'metadata': {
-                        'user_id': str(user.id),
-                        'plan_id': str(plan.id),
-                    }
-                } if plan.interval != 'lifetime' else None
+                subscription_data=subscription_data
             )
             return Response({
                 'success': True,
