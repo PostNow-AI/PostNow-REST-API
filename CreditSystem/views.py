@@ -49,10 +49,37 @@ class UserSubscriptionCancelView(APIView):
         if not sub:
             return Response({'success': False, 'message': 'Nenhuma assinatura ativa encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Cancel on Stripe first
+        # Handle different subscription types
         try:
+            # Case 1: Lifetime subscription (no Stripe subscription to cancel)
+            if sub.plan.interval == 'lifetime':
+                sub.status = 'cancelled'
+                if not sub.end_date:
+                    from django.utils import timezone
+                    sub.end_date = timezone.now()
+                sub.save()
+
+                return Response({
+                    'success': True,
+                    'message': 'Assinatura vitalícia cancelada com sucesso.'
+                }, status=status.HTTP_200_OK)
+
+            # Case 2: Recurring subscription - cancel on Stripe first
             if sub.stripe_subscription_id:
-                stripe.Subscription.delete(sub.stripe_subscription_id)
+                # Check if subscription exists in Stripe before trying to cancel
+                try:
+                    # First, try to retrieve the subscription to see if it exists
+                    stripe.Subscription.retrieve(sub.stripe_subscription_id)
+                    # If it exists, cancel it
+                    stripe.Subscription.delete(sub.stripe_subscription_id)
+                except stripe.error.InvalidRequestError as e:
+                    # Subscription doesn't exist in Stripe (maybe it's a test subscription)
+                    if 'No such subscription' in str(e):
+                        # Just cancel locally for test subscriptions
+                        pass
+                    else:
+                        # Re-raise if it's a different error
+                        raise e
 
             # Update local subscription status
             sub.status = 'cancelled'
@@ -65,11 +92,20 @@ class UserSubscriptionCancelView(APIView):
                 'success': True,
                 'message': 'Assinatura cancelada com sucesso.'
             }, status=status.HTTP_200_OK)
+
         except stripe.error.StripeError as e:
+            # If there's still a Stripe error, cancel locally but warn about Stripe
+            sub.status = 'cancelled'
+            if not sub.end_date:
+                from django.utils import timezone
+                sub.end_date = timezone.now()
+            sub.save()
+
             return Response({
-                'success': False,
-                'message': f'Erro ao cancelar no Stripe: {str(e)}'
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'success': True,
+                'message': f'Assinatura cancelada localmente. Aviso do Stripe: {str(e)}',
+                'warning': True
+            }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({
                 'success': False,
