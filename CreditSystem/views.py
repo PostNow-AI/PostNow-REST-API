@@ -132,16 +132,70 @@ class StripeSubscriptionWebhookView(APIView):
             stripe_subscription_id = subscription['id']
             user_id = None
             plan_id = None
-            # Get metadata from subscription or session
+
+            # Get metadata from subscription
             metadata = subscription.get('metadata', {})
             user_id = metadata.get('user_id')
             plan_id = metadata.get('plan_id')
-            # Validate required metadata
+
+            # If metadata is missing, try to find plan by price ID
             if not user_id or not plan_id:
-                return Response({
-                    'success': False,
-                    'message': 'Metadados incompletos na assinatura'
-                }, status=status.HTTP_400_BAD_REQUEST)
+                # Get the price ID from the subscription
+                price_id = None
+                if subscription.get('items', {}).get('data'):
+                    price_id = subscription['items']['data'][0]['price']['id']
+
+                if price_id:
+                    # Try to find the plan by stripe_price_id
+                    try:
+                        from .models import SubscriptionPlan
+                        plan = SubscriptionPlan.objects.get(
+                            stripe_price_id=price_id, is_active=True)
+                        plan_id = str(plan.id)
+
+                        # For user_id, try to get it from the customer
+                        customer_id = subscription.get('customer')
+                        if customer_id:
+                            # Try to get customer details from Stripe
+                            try:
+                                customer = stripe.Customer.retrieve(
+                                    customer_id)
+                                customer_email = customer.get('email')
+
+                                if customer_email:
+                                    # Find user by email
+                                    from django.contrib.auth import get_user_model
+                                    User = get_user_model()
+                                    try:
+                                        user = User.objects.get(
+                                            email=customer_email)
+                                        user_id = str(user.id)
+                                    except User.DoesNotExist:
+                                        return Response({
+                                            'success': False,
+                                            'message': f'Usuário não encontrado com email: {customer_email}'
+                                        }, status=status.HTTP_404_NOT_FOUND)
+                                else:
+                                    return Response({
+                                        'success': False,
+                                        'message': f'Customer {customer_id} não tem email associado'
+                                    }, status=status.HTTP_400_BAD_REQUEST)
+                            except stripe.error.StripeError as e:
+                                return Response({
+                                    'success': False,
+                                    'message': f'Erro ao buscar customer no Stripe: {str(e)}'
+                                }, status=status.HTTP_400_BAD_REQUEST)
+                    except SubscriptionPlan.DoesNotExist:
+                        return Response({
+                            'success': False,
+                            'message': f'Plano não encontrado para price_id: {price_id}'
+                        }, status=status.HTTP_404_NOT_FOUND)
+
+                if not user_id or not plan_id:
+                    return Response({
+                        'success': False,
+                        'message': 'Metadados incompletos na assinatura e não foi possível determinar o plano/usuário'
+                    }, status=status.HTTP_400_BAD_REQUEST)
 
             from django.contrib.auth import get_user_model
             from django.utils import timezone
@@ -316,7 +370,13 @@ class CreateStripeCheckoutSessionView(APIView):
                 metadata={
                     'user_id': str(user.id),
                     'plan_id': str(plan.id),
-                }
+                },
+                subscription_data={
+                    'metadata': {
+                        'user_id': str(user.id),
+                        'plan_id': str(plan.id),
+                    }
+                } if plan.interval != 'lifetime' else None
             )
             return Response({
                 'success': True,
