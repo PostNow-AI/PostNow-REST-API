@@ -278,8 +278,8 @@ class CreateStripeCheckoutSessionView(APIView):
         if not plan.stripe_price_id:
             return Response({
                 'success': False,
-                'message': 'Plano não configurado para pagamento'
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'message': 'Este plano está temporariamente indisponível. Entre em contato com o suporte.'
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         # Check if user already has an active subscription
         existing_sub = UserSubscription.objects.filter(
@@ -291,6 +291,14 @@ class CreateStripeCheckoutSessionView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            # Check if this is a test price ID
+            if plan.stripe_price_id.startswith('price_test_'):
+                return Response({
+                    'success': False,
+                    'message': 'Este é um ambiente de desenvolvimento. Os pagamentos reais não estão disponíveis.',
+                    'is_test_environment': True
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
             # Get domain URL from settings with fallback
             domain_url = getattr(settings, 'DOMAIN_URL',
                                  'http://localhost:3000')
