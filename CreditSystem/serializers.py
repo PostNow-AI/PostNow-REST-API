@@ -5,8 +5,38 @@ from .models import (
     AIModelPreferences,
     CreditPackage,
     CreditTransaction,
+    SubscriptionPlan,
     UserCredits,
+    UserSubscription,
 )
+
+
+class SubscriptionPlanSerializer(serializers.ModelSerializer):
+    interval_display = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = SubscriptionPlan
+        fields = ['id', 'name', 'description', 'price', 'interval', 'interval_display',
+                  'stripe_price_id', 'is_active']
+        read_only_fields = ['id', 'interval_display']
+
+    def to_representation(self, instance):
+        """Convert price to float for JSON serialization"""
+        data = super().to_representation(instance)
+        if 'price' in data:
+            data['price'] = float(instance.price)
+        return data
+
+
+class UserSubscriptionSerializer(serializers.ModelSerializer):
+    plan = SubscriptionPlanSerializer(read_only=True)
+    status_display = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = UserSubscription
+        fields = ['id', 'user', 'plan', 'start_date', 'end_date', 'status',
+                  'status_display', 'stripe_subscription_id']
+        read_only_fields = ['id', 'status_display']
 
 
 class CreditPackageSerializer(serializers.ModelSerializer):

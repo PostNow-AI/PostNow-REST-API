@@ -7,6 +7,54 @@ from django.db import models
 User = get_user_model()
 
 
+class SubscriptionPlan(models.Model):
+    INTERVAL_CHOICES = [
+        ('monthly', 'Mensal'),
+        ('quarterly', 'Trimestral'),
+        ('semester', 'Semestral'),
+        ('yearly', 'Anual'),
+        ('lifetime', 'Vitalício'),
+    ]
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default="")
+    interval = models.CharField(
+        max_length=20, choices=INTERVAL_CHOICES, unique=True)
+    price = models.DecimalField(max_digits=8, decimal_places=2)
+    stripe_price_id = models.CharField(max_length=100, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.get_interval_display()})"
+
+    @property
+    def interval_display(self):
+        return dict(self.INTERVAL_CHOICES).get(self.interval, self.interval)
+
+
+class UserSubscription(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Ativo'),
+        ('cancelled', 'Cancelado'),
+        ('expired', 'Expirado'),
+    ]
+
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.CASCADE)
+    start_date = models.DateTimeField(auto_now_add=True)
+    end_date = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='active')
+    stripe_subscription_id = models.CharField(
+        max_length=100, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.user} - {self.plan} ({self.status})"
+
+    @property
+    def status_display(self):
+        return dict(self.STATUS_CHOICES).get(self.status, self.status)
+
+
 class CreditPackage(models.Model):
     """
     Modelo para pacotes de créditos disponíveis para compra
@@ -234,7 +282,7 @@ class AIModelPreferences(models.Model):
 
         # Fallback baseado no provedor preferido e orçamento
         if self.preferred_provider == 'google':
-            return 'gemini-1.5-flash' if self.budget_preference == 'economy' else 'gemini-1.5-pro'
+            return 'gemini-2.5-flash' if self.budget_preference == 'economy' else 'gemini-2.5-pro'
         elif self.preferred_provider == 'openai':
             return 'gpt-4o-mini' if self.budget_preference == 'economy' else 'gpt-4o'
         elif self.preferred_provider == 'anthropic':

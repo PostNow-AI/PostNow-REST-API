@@ -35,4 +35,18 @@ urlpatterns = [
     # Uso de créditos
     path('usage/calculate/', views.CreditUsageView.as_view(), name='calculate-usage'),
     path('usage/deduct/', views.deduct_credits_view, name='deduct-credits'),
+
+    # Subscription Plans
+    path('plans/', views.SubscriptionPlanListView.as_view(),
+         name='subscription-plan-list'),
+    path('checkout/', views.CreateStripeCheckoutSessionView.as_view(),
+         name='stripe-checkout-session'),
+    path('webhook/subscription/', views.StripeSubscriptionWebhookView.as_view(),
+         name='stripe-subscription-webhook'),
+
+    # User subscription management
+    path('subscription/current/', views.UserSubscriptionView.as_view(),
+         name='user-subscription'),
+    path('subscription/cancel/', views.UserSubscriptionCancelView.as_view(),
+         name='subscription-cancel'),
 ]

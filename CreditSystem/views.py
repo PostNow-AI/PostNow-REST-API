@@ -1,13 +1,22 @@
+# Manual cancel view for users
+import stripe
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework import generics, status
+from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import AIModel, CreditPackage, CreditTransaction
+from .models import (
+    AIModel,
+    CreditPackage,
+    CreditTransaction,
+    SubscriptionPlan,
+    UserSubscription,
+)
 from .serializers import (
     AIModelPreferencesSerializer,
     AIModelSerializer,
@@ -16,10 +25,305 @@ from .serializers import (
     CreditUsageSerializer,
     ModelRecommendationSerializer,
     StripeCheckoutSerializer,
+    SubscriptionPlanSerializer,
     UserCreditsSerializer,
+    UserSubscriptionSerializer,
 )
 from .services.credit_service import CreditService
 from .services.stripe_service import StripeService
+
+stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
+
+
+class UserSubscriptionCancelView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        sub = UserSubscription.objects.filter(
+            user=user, status='active').order_by('-start_date').first()
+        if not sub:
+            return Response({'success': False, 'message': 'Nenhuma assinatura ativa encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Cancel on Stripe first
+        try:
+            if sub.stripe_subscription_id:
+                stripe.Subscription.delete(sub.stripe_subscription_id)
+
+            # Update local subscription status
+            sub.status = 'cancelled'
+            if not sub.end_date:
+                from django.utils import timezone
+                sub.end_date = timezone.now()
+            sub.save()
+
+            return Response({
+                'success': True,
+                'message': 'Assinatura cancelada com sucesso.'
+            }, status=status.HTTP_200_OK)
+        except stripe.error.StripeError as e:
+            return Response({
+                'success': False,
+                'message': f'Erro ao cancelar no Stripe: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Erro interno: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# --- Subscription Views ---
+
+class UserSubscriptionView(generics.RetrieveAPIView):
+    """
+    Get the current user's active subscription
+    """
+    serializer_class = UserSubscriptionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        """Return the user's active subscription or None"""
+        try:
+            return UserSubscription.objects.filter(
+                user=self.request.user,
+                status='active'
+            ).order_by('-start_date').first()
+        except UserSubscription.DoesNotExist:
+            return None
+
+    def retrieve(self, request, *args, **kwargs):
+        """Override to handle case when user has no subscription"""
+        instance = self.get_object()
+        if instance is None:
+            return Response(
+                {'detail': 'No active subscription found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+
+# --- Stripe Webhook for Subscriptions ---
+@method_decorator(csrf_exempt, name='dispatch')
+class StripeSubscriptionWebhookView(APIView):
+    """
+    Endpoint para receber webhooks do Stripe e criar UserSubscription
+    """
+    permission_classes = []  # Sem autenticação para webhooks
+
+    def post(self, request):
+        payload = request.body
+        sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+        endpoint_secret = getattr(settings, 'STRIPE_WEBHOOK_SECRET', None)
+        event = None
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, endpoint_secret
+            )
+        except ValueError:
+            return Response({'success': False, 'message': 'Payload inválido'}, status=status.HTTP_400_BAD_REQUEST)
+        except stripe.error.SignatureVerificationError:
+            return Response({'success': False, 'message': 'Assinatura Stripe inválida'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Process subscription created event
+        if event['type'] == 'customer.subscription.created':
+            subscription = event['data']['object']
+            stripe_subscription_id = subscription['id']
+            user_id = None
+            plan_id = None
+            # Get metadata from subscription or session
+            metadata = subscription.get('metadata', {})
+            user_id = metadata.get('user_id')
+            plan_id = metadata.get('plan_id')
+            # Validate required metadata
+            if not user_id or not plan_id:
+                return Response({
+                    'success': False,
+                    'message': 'Metadados incompletos na assinatura'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            from django.contrib.auth import get_user_model
+            from django.utils import timezone
+
+            from .models import SubscriptionPlan, UserSubscription
+
+            User = get_user_model()
+            try:
+                user = User.objects.get(id=user_id)
+                plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+
+                # Check if subscription already exists
+                existing_sub = UserSubscription.objects.filter(
+                    stripe_subscription_id=stripe_subscription_id
+                ).first()
+                if existing_sub:
+                    return Response({
+                        'success': True,
+                        'message': 'Assinatura já registrada'
+                    }, status=status.HTTP_200_OK)
+
+                # Cancel any existing active subscriptions for this user
+                UserSubscription.objects.filter(
+                    user=user, status='active'
+                ).update(status='cancelled', end_date=timezone.now())
+
+                # Calculate end_date for non-lifetime plans
+                interval = plan.interval
+                end_date = None
+                if interval == 'monthly':
+                    end_date = timezone.now() + timezone.timedelta(days=30)
+                elif interval == 'quarterly':
+                    end_date = timezone.now() + timezone.timedelta(days=90)
+                elif interval == 'semester':
+                    end_date = timezone.now() + timezone.timedelta(days=180)
+                elif interval == 'yearly':
+                    end_date = timezone.now() + timezone.timedelta(days=365)
+                # Lifetime: end_date stays None
+
+                UserSubscription.objects.create(
+                    user=user,
+                    plan=plan,
+                    start_date=timezone.now(),
+                    end_date=end_date,
+                    status='active',
+                    stripe_subscription_id=stripe_subscription_id
+                )
+                return Response({
+                    'success': True,
+                    'message': 'Assinatura registrada com sucesso'
+                }, status=status.HTTP_200_OK)
+
+            except User.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': f'Usuário não encontrado: {user_id}'
+                }, status=status.HTTP_404_NOT_FOUND)
+            except SubscriptionPlan.DoesNotExist:
+                return Response({
+                    'success': False,
+                    'message': f'Plano não encontrado: {plan_id}'
+                }, status=status.HTTP_404_NOT_FOUND)
+            except Exception as e:
+                return Response({
+                    'success': False,
+                    'message': f'Erro ao criar assinatura: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # Process subscription cancelled event
+        elif event['type'] == 'customer.subscription.deleted':
+            subscription = event['data']['object']
+            stripe_subscription_id = subscription['id']
+            try:
+                from django.utils import timezone
+
+                from .models import UserSubscription
+
+                sub = UserSubscription.objects.filter(
+                    stripe_subscription_id=stripe_subscription_id,
+                    status='active'
+                ).first()
+
+                if sub:
+                    sub.status = 'cancelled'
+                    sub.end_date = timezone.now()
+                    sub.save()
+                    return Response({
+                        'success': True,
+                        'message': 'Assinatura cancelada com sucesso'
+                    }, status=status.HTTP_200_OK)
+                else:
+                    # This is not necessarily an error - subscription might have been cancelled already
+                    return Response({
+                        'success': True,
+                        'message': 'Assinatura não encontrada ou já cancelada'
+                    }, status=status.HTTP_200_OK)
+            except Exception as e:
+                return Response({
+                    'success': False,
+                    'message': f'Erro ao cancelar assinatura: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'success': True, 'message': 'Evento ignorado'}, status=status.HTTP_200_OK)
+
+
+class SubscriptionPlanListView(generics.ListAPIView):
+    queryset = SubscriptionPlan.objects.all()
+    serializer_class = SubscriptionPlanSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+class CreateStripeCheckoutSessionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        plan_id = request.data.get('plan_id')
+
+        # Validate plan_id
+        if not plan_id:
+            return Response({
+                'success': False,
+                'message': 'plan_id é obrigatório'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Plano não encontrado ou inativo'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        user = request.user
+
+        # Check if plan has Stripe price ID
+        if not plan.stripe_price_id:
+            return Response({
+                'success': False,
+                'message': 'Plano não configurado para pagamento'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if user already has an active subscription
+        existing_sub = UserSubscription.objects.filter(
+            user=user, status='active').first()
+        if existing_sub:
+            return Response({
+                'success': False,
+                'message': 'Você já possui uma assinatura ativa'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Get domain URL from settings with fallback
+            domain_url = getattr(settings, 'DOMAIN_URL',
+                                 'http://localhost:3000')
+
+            checkout_session = stripe.checkout.Session.create(
+                customer_email=user.email,
+                payment_method_types=['card'],
+                line_items=[{
+                    'price': plan.stripe_price_id,
+                    'quantity': 1,
+                }],
+                mode='subscription' if plan.interval != 'lifetime' else 'payment',
+                success_url=f'{domain_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}',
+                cancel_url=f'{domain_url}/subscription/cancel',
+                metadata={
+                    'user_id': str(user.id),
+                    'plan_id': str(plan.id),
+                }
+            )
+            return Response({
+                'success': True,
+                'checkout_url': checkout_session.url
+            }, status=status.HTTP_200_OK)
+        except stripe.error.StripeError as e:
+            return Response({
+                'success': False,
+                'message': f'Erro no Stripe: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Erro interno: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CreditPackageListView(generics.ListAPIView):
