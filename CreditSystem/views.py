@@ -1,9 +1,12 @@
 # Manual cancel view for users
+import os
+
 import stripe
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from dotenv import load_dotenv
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -239,9 +242,9 @@ class CreateStripeCheckoutSessionView(APIView):
                     'is_test_environment': True
                 }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-            # Get frontend URL from settings with fallback
-            frontend_url = getattr(settings, 'FRONTEND_URL',
-                                   'http://localhost:3000')
+            # Load environment variables and get frontend URL
+            load_dotenv()
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
             checkout_session = stripe.checkout.Session.create(
                 customer_email=user.email,
