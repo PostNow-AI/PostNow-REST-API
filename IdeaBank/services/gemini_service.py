@@ -44,27 +44,28 @@ class GeminiService(BaseAIService):
         enhanced_prompt = self._enhance_image_prompt(
             prompt, post_data, idea_content)
 
-        # Validate credits before generation
-        if user and user.is_authenticated:
-            from .ai_model_service import AIModelService
-            model_name = 'gemini-imagen'
-            if not AIModelService.validate_image_credits(user, model_name, 1):
-                raise ValueError("Créditos insuficientes para gerar imagem")
+        # # Validate credits before generation
+        # if user and user.is_authenticated:
+        #     from .ai_model_service import AIModelService
+        #     model_name = 'gemini-imagen'
+        #     if not AIModelService.validate_image_credits(user, model_name, 1):
+        #         raise ValueError("Créditos insuficientes para gerar imagem")
 
         # Flag to track if we should deduct credits
         should_deduct_credits = user and user.is_authenticated
 
+        print(enhanced_prompt)
         genai.configure(api_key=api_key)
 
         # Helper function to deduct credits after successful generation
-        def deduct_credits_for_image(description_suffix=""):
-            if should_deduct_credits:
-                try:
-                    from .ai_model_service import AIModelService
-                    AIModelService.deduct_image_credits(
-                        user, 'gemini-imagen', 1, f"Gemini image generation{description_suffix} - {prompt[:50]}...")
-                except ImportError:
-                    print("⚠️ Could not deduct credits - AIModelService not available")
+        # def deduct_credits_for_image(description_suffix=""):
+        #     if should_deduct_credits:
+        #         try:
+        #             from .ai_model_service import AIModelService
+        #             AIModelService.deduct_image_credits(
+        #                 user, 'gemini-imagen', 1, f"Gemini image generation{description_suffix} - {prompt[:50]}...")
+        #         except ImportError:
+        #             print("⚠️ Could not deduct credits - AIModelService not available")
 
         try:
             # Try different model names for image generation
@@ -78,14 +79,21 @@ class GeminiService(BaseAIService):
 
                     # When calling model.generate_content, include image if provided
 
+                    # Prepare image data for the request
+                    image_bytes = None
+
                     if current_image:
                         image_bytes = extract_base64_image(current_image)
+                    elif post_data and post_data.get('type') in ['story', 'reel']:
+                        # Create empty white vertical image for stories/reels
+                        image_bytes = self._create_empty_vertical_image()
 
+                    if image_bytes:
                         response = model.generate_content([
                             enhanced_prompt,
                             {
                                 "inline_data": {
-                                    "mime_type": "image/png",  # Or appropriate MIME type
+                                    "mime_type": "image/png",
                                     "data": image_bytes
                                 }
                             },
@@ -100,11 +108,11 @@ class GeminiService(BaseAIService):
                                 if hasattr(part, 'inline_data') and part.inline_data:
                                     # Compress and optimize image data
                                     compressed_data = self._compress_image_data(
-                                        part.inline_data.data)
+                                        part.inline_data.data, post_data)
                                     if compressed_data:
                                         # Deduct credits for successful image generation
-                                        deduct_credits_for_image(
-                                            " (inline data)")
+                                        # deduct_credits_for_image(
+                                        #     " (inline data)")
 
                                         return compressed_data
                                     else:
@@ -128,7 +136,7 @@ class GeminiService(BaseAIService):
 
                 if response.text and 'base64' in response.text.lower():
                     # Deduct credits for successful image generation
-                    deduct_credits_for_image(" (Imagen API)")
+                    # deduct_credits_for_image(" (Imagen API)")
 
                     return response.text
 
@@ -151,7 +159,7 @@ Format as: "A professional marketing image showing [detailed description]"
                 response = model.generate_content(fallback_prompt)
                 if response.text:
                     # Deduct credits for generating enhanced prompt (still an AI service call)
-                    deduct_credits_for_image(" (enhanced prompt)")
+                    # deduct_credits_for_image(" (enhanced prompt)")
                     # Return empty to trigger OpenAI with enhanced prompt
                     # Store enhanced prompt for potential use
                     setattr(self, '_enhanced_prompt', response.text)
@@ -167,28 +175,57 @@ Format as: "A professional marketing image showing [detailed description]"
     def _enhance_image_prompt(self, base_prompt: str, post_data: dict = None, idea_content: str = None) -> str:
         """Enhance the image generation prompt with post data and idea content."""
         enhanced_parts = [
-            f"Generate a high-quality image based on this description: {base_prompt}"]
+            f"Gere uma imagem de alta qualidade com base nesta descrição: {base_prompt}"]
 
         if post_data:
             if post_data.get('objective'):
                 enhanced_parts.append(
-                    f"Post objective: {post_data['objective']}")
+                    f"Objetivo do post: {post_data['objective']}")
             if post_data.get('type'):
-                enhanced_parts.append(f"Content type: {post_data['type']}")
+                enhanced_parts.append(f"Tipo de conteúdo: {post_data['type']}")
             if post_data.get('further_details'):
                 enhanced_parts.append(
-                    f"Additional details: {post_data['further_details']}")
+                    f"Detalhes adicionais: {post_data['further_details']}")
 
         if idea_content:
             # Extract key themes from idea content for visual inspiration
-            enhanced_parts.append(f"Content context: {idea_content}...")
+            enhanced_parts.append(f"Contexto do conteúdo: {idea_content}...")
 
         enhanced_parts.append(
-            "Create a visually appealing, professional marketing image suitable for social media.")
+            "Crie uma imagem de marketing profissional e visualmente atraente, adequada para redes sociais.")
 
         return ". ".join(enhanced_parts)
 
-    def _compress_image_data(self, image_data: bytes) -> str:
+    def _create_empty_vertical_image(self) -> bytes:
+        """Create an empty white vertical image (9:16 aspect ratio) for stories/reels."""
+        try:
+            import io
+            from PIL import Image
+
+            # Create 9:16 aspect ratio image (1080x1920 for good quality)
+            width, height = 1080, 1920
+
+            # Create white image
+            image = Image.new('RGB', (width, height), color='white')
+
+            # Convert to bytes
+            buffer = io.BytesIO()
+            image.save(buffer, format='PNG')
+            return buffer.getvalue()
+
+        except ImportError:
+            # If PIL not available, create minimal white image data
+            # This is a minimal 1x1 white PNG in base64
+            import base64
+            white_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+            return base64.b64decode(white_png_b64)
+        except Exception:
+            # Fallback to minimal white image
+            import base64
+            white_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+            return base64.b64decode(white_png_b64)
+
+    def _compress_image_data(self, image_data: bytes, post_data: dict) -> str:
         """Compress image data to reduce size for database storage."""
         try:
             import base64
@@ -204,7 +241,11 @@ Format as: "A professional marketing image showing [detailed description]"
                 image = image.convert('RGB')
 
             # Resize image to a higher resolution for better quality (max 800x800)
-            max_size = (800, 800)
+            if post_data and post_data.get('type') in ['story', 'reel']:
+                # For stories/reels, maintain 9:16 aspect ratio
+                max_size = (1080, 1920)
+            else:
+                max_size = (1080, 1080)
             image.thumbnail(max_size, Image.Resampling.LANCZOS)
 
             # Save as JPEG with high quality for better visual appeal
@@ -224,7 +265,10 @@ Format as: "A professional marketing image showing [detailed description]"
                 if image.mode in ('RGBA', 'LA', 'P'):
                     image = image.convert('RGB')
 
-                image.thumbnail((600, 600), Image.Resampling.LANCZOS)
+                if post_data and post_data.get('type') in ['story', 'reel']:
+                    image.thumbnail((720, 1280), Image.Resampling.LANCZOS)
+                else:
+                    image.thumbnail((600, 600), Image.Resampling.LANCZOS)
                 buffer = io.BytesIO()
                 image.save(buffer, format='JPEG', quality=75, optimize=True)
                 compressed_data = buffer.getvalue()

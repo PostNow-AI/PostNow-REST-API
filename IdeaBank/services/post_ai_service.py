@@ -298,8 +298,8 @@ class PostAIService(BaseAIService):
         if further_details and further_details.strip():
             sections.append(further_details.strip())
 
-        # Get creator profile data for target audience and voice tone
-        if hasattr(self, 'user') and self.user:
+        # # Get creator profile data for target audience and voice tone
+        # if hasattr(self, 'user') and self.user:
             from CreatorProfile.models import CreatorProfile
             profile = CreatorProfile.objects.filter(user=self.user).first()
             if profile:
@@ -478,30 +478,35 @@ Sua missão é gerar copies curtas, envolventes e interativas para Stories em re
 
 ### REGRAS PARA A COPY:
 
-1. Estruture a copy em **2 ou 3 telas curtas de até 15 segundos cada**, com mensagens simples, claras e fáceis de ler.
+1. Estruture a copy em 1 tela, com mensagens simples, claras e fáceis de ler.  
 
-2. Cada tela deve conter **uma frase curta e impactante**, que mantenha a atenção e conduza o público até a CTA final.
+2. Cada tela deve conter **uma frase curta e impactante**, que mantenha a atenção e conduza o público até a CTA final.  
 
-3. O tom de voz deve seguir exatamente o definido nos detalhes do formulário (ex.: inspirador, educativo, acolhedor, motivacional).
+3. O tom de voz deve seguir exatamente o definido nos detalhes do formulário (ex.: inspirador, educativo, acolhedor, motivacional).  
 
-4. Use **emojis moderados e estratégicos** para dar proximidade, mas sem exageros.
+4. Use **emojis moderados e estratégicos** para dar proximidade, mas sem exageros.  
 
-5. A primeira tela deve ser um **gancho forte** que capture a atenção imediatamente.
+5. A primeira tela deve ser um **gancho forte** que capture a atenção imediatamente.  
 
-6. A última tela deve sempre conter **uma única CTA clara e direta**, coerente com o objetivo do post (ex.: “Arraste pra cima 🚀”, “Clique no link da bio 👉”, “Responda essa enquete ✨”).
+6. A última tela deve sempre conter **uma única CTA clara e direta**, coerente com o objetivo do post (ex.: “Arraste pra cima 🚀”, “Clique no link da bio 👉”, “Responda essa enquete ✨”).  
 
-7. Frases devem ser curtas, de leitura rápida, evitando blocos longos de texto.
+7. Frases devem ser curtas, de leitura rápida, evitando blocos longos de texto.  
 
-8. A copy deve ser positiva, inclusiva e motivadora, nunca sensacionalista ou proibida pelas diretrizes do Meta/Google Ads.
+8. A copy deve ser positiva, inclusiva e motivadora, nunca sensacionalista ou proibida pelas diretrizes do Meta/Google Ads.  
+
 
 ---
 
+
+
 ### SAÍDA ESPERADA:
-- Copy finalizada para Story, dividida em 2 ou 3 telas curtas.
-- Texto pronto para copiar e colar.
-- Frases curtas, impactantes e fáceis de ler.
-- Emojis usados de forma leve e natural.
-- Apenas **uma CTA final** integrada ao último Story.
+- Copy finalizada para Story, 1 tela.  
+- Texto pronto para copiar e colar.  
+- Frases curtas, impactantes e fáceis de ler.  
+- Emojis usados de forma leve e natural.  
+- Apenas **uma CTA final** integrada ao último Story.  
+
+
 
 
 """
@@ -749,6 +754,7 @@ A capa deve ser clara, objetiva e reforçar a ideia central do conteúdo, sem ex
 
 7. Comunicação sempre ética e positiva, sem sensacionalismo ou exageros.  
 
+8. Utilize a imagem anexada como um canvas para a geração de todas as imagens que eu te pedir. Elas devem ser criadas no formato 9:16 para serem postadas no instagram
 ---
 
 ### SAÍDA ESPERADA:
@@ -770,44 +776,71 @@ A capa deve ser clara, objetiva e reforçar a ideia central do conteúdo, sem ex
 
         # TODO: Replace with your specific story image prompt
         prompt = f"""
-Você é um especialista em design para marketing digital e redes sociais.  
-Sua missão é gerar artes visuais modernas, profissionais e impactantes para Stories, otimizadas para captar a atenção imediata e conduzir o público até a ação final.  
+Você é um especialista em design digital e marketing visual.  
+Sua missão é gerar uma arte de Story altamente criativa, moderna e impactante, que vá além do simples.  
+O resultado deve ser um design sofisticado, envolvente e visualmente atrativo, pronto para ser publicado como Story.  
 
 ### DADOS DE ENTRADA (serão fornecidos pelo sistema):
-- Assunto do post: {name}
-- Objetivo do post: {objective}
-- Tipo do post: Story
-- Mais detalhes: {details}
+- Assunto do post: {name}  
+- Objetivo do post: {objective}  
+- Tipo do post: Story  
+- Mais detalhes: {details}  
 
 ---
 
 ### REGRAS PARA A IMAGEM:
 
-1. O Story deve estar em **formato vertical 1080x1920 px**, próprio para Instagram/Facebook Stories.  
+1. Gere **apenas 1 imagem final** no formato vertical **1080x1920 px (proporção 9:16)**, otimizada para Instagram Stories.  
 
-2. Cada tela deve ter **uma chamada curta e impactante**, correspondente à copy gerada (sem blocos longos de texto).  
+2. Utilize a **imagem anexada como canvas base** para a geração da arte.  
+   - As alterações devem ser feitas sobre essa base, preservando estilo, layout e identidade, a menos que outra mudança seja explicitamente pedida.  
 
-3. O design deve ser **limpo, moderno e profissional**, sempre com hierarquia visual clara: título curto em destaque + elementos visuais de apoio.  
+3. O design deve ser **premium**, com estética moderna, criativa e elegante — nada básico ou simples.  
+   - Utilize composição visual refinada.  
+   - Crie profundidade com sombras suaves, gradientes bem trabalhados ou elementos 3D quando apropriado.  
+   - Busque um acabamento que se assemelhe a um material de agência de alto nível.  
 
-4. Usar **cores, tipografia e estilo compatíveis com a identidade da marca** (quando fornecida).  
+4. A imagem deve conter **um título curto e impactante** em destaque, integrado ao design de forma harmoniosa.  
 
-5. Elementos visuais devem reforçar o tema do post (ex.: gotas d’água para soroterapia, coração para saúde, ícones de energia, etc.), mas sem poluição visual.  
+5. **Hierarquia visual clara**:  
+   - Título principal chamando a atenção.  
+   - Espaço de respiro para facilitar a leitura.  
+   - Elementos gráficos ou ilustrações de apoio que reforcem o tema (mas sem poluição visual).  
 
-6. Emojis podem ser usados como parte do design, de forma leve e moderada.  
+6. O design deve estar **alinhado à identidade da marca** (cores, estilo, tipografia).  
 
-7. A última tela deve conter **uma CTA destacada**, coerente com o objetivo do post (ex.: “Arraste pra cima 🚀”, “Clique no link da bio 👉”, “Responda aqui ✨”).  
+7. **LOGOMARCA**:  
+   - Se o cliente anexar a logomarca, **use obrigatoriamente a logo original** no design.  
+   - Se não houver logomarca anexada, **não crie logomarca fictícia em hipótese alguma**.  
 
-8. Comunicação sempre positiva e ética, sem sensacionalismo, exageros ou imagens que causem desconforto.  
+8. **Imagens de pessoas reais** podem ser usadas no design para transmitir mais **profissionalismo, proximidade e autenticidade**, desde que respeitem a proposta visual da marca.  
+
+9. Utilize elementos visuais criativos para transmitir sofisticação:  
+   - Ícones minimalistas, ilustrações modernas, imagens realistas ou vetoriais de alta qualidade.  
+   - Background criativo: degradês, paisagens estilizadas, mockups elegantes.  
+
+10. **Área de segurança (safe zone):** mantenha pelo menos 10% de margem sem textos próximos às bordas, para evitar cortes em diferentes telas.  
+
+11. Toda a comunicação visual deve ser **positiva, ética e inspiradora**, sem sensacionalismo ou exageros.  
+
+12. **Regras de texto em PT-BR (blindagem contra erros)**:  
+   - A própria IA deve criar a copy curta e impactante em **Português do Brasil (pt-BR)**, de acordo com os dados de entrada.  
+   - O texto deve sair **sem erros de ortografia, gramática ou acentuação**, já revisado automaticamente antes de ser aplicado na imagem.  
+   - Nunca inventar ou deformar palavras: não usar letras duplicadas (“econôômico”), trocas incorretas (“cuima” em vez de “cima”) ou omitir acentos.  
+   - Renderizar os textos como **camadas de texto editável (live text)** usando tipografia que suporte totalmente os caracteres pt-BR (ex.: Inter, Montserrat, Poppins, Nunito, Roboto).  
+   - Garantir alta legibilidade: contraste adequado, sem distorção, sem warp, espaçamento e acentuação preservados.  
+   - Antes de gerar a versão final, a IA deve validar internamente que todas as palavras estão corretas em pt-BR.  
 
 ---
 
 ### SAÍDA ESPERADA:
-- **Imagens finais no formato de Story (1080x1920 px)**, correspondentes à copy gerada.  
-- Cada tela deve conter apenas uma chamada curta e impactante.  
-- O design deve estar pronto para publicação, com uma **CTA clara na última tela**.  
-
-
-
+- **Uma única imagem final premium em formato 1080x1920 px (9:16)**.  
+- Arte com acabamento visual sofisticado, criativo e impactante, pronta para Story.  
+- Design moderno, com chamada curta em destaque e alinhado ao tema do post.  
+- Estética de alto nível, como um material produzido em agência de design profissional.  
+- Logomarca usada apenas se fornecida, nunca criada artificialmente.  
+- Possibilidade de incluir **pessoas reais** no design para transmitir mais profissionalismo e autenticidade.  
+- Texto criado pela IA em **pt-BR perfeito**, sem erros de português, pronto para publicação.
 """
         return prompt.strip()
 
