@@ -286,14 +286,120 @@ class CreateStripeCheckoutSessionView(APIView):
                 'message': 'Este plano está temporariamente indisponível. Entre em contato com o suporte.'
             }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-        # Check if user already has an active subscription
+        # Check for existing active subscription and support upgrade flow
         existing_sub = UserSubscription.objects.filter(
-            user=user, status='active').first()
+            user=user, status='active').select_related('plan').first()
         if existing_sub:
-            return Response({
-                'success': False,
-                'message': 'Você já possui uma assinatura ativa'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            # If same plan requested, just short‑circuit
+            if existing_sub.plan_id == plan.id:
+                return Response({
+                    'success': True,
+                    'message': 'Você já está neste plano',
+                    'already_on_plan': True,
+                    'plan': existing_sub.plan.name
+                }, status=status.HTTP_200_OK)
+
+            # If lifetime already, prevent upgrading/downgrading
+            if existing_sub.plan.interval == 'lifetime':
+                return Response({
+                    'success': False,
+                    'message': 'Você já possui um plano vitalício ativo. Não é possível mudar de plano.',
+                    'lifetime_active': True
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # If target plan is lifetime but user has a recurring plan, instruct separate lifetime purchase flow
+            if plan.interval == 'lifetime':
+                return Response({
+                    'success': False,
+                    'message': 'Para migrar para o plano vitalício cancele a assinatura atual primeiro.',
+                    'requires_manual_action': True
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            upgrade_requested = str(request.data.get('upgrade', 'false')).lower() in [
+                '1', 'true', 'yes']
+            if not upgrade_requested:
+                return Response({
+                    'success': False,
+                    'message': 'Você já possui uma assinatura ativa. Envie "upgrade": true para alterar o plano.',
+                    'upgrade_available': True,
+                    'current_plan': existing_sub.plan.name,
+                    'requested_plan': plan.name
+                }, status=status.HTTP_409_CONFLICT)
+
+            # Perform in-place upgrade via Stripe if subscription has a Stripe ID
+            if existing_sub.stripe_subscription_id:
+                try:
+                    stripe_sub = stripe.Subscription.retrieve(
+                        existing_sub.stripe_subscription_id)
+                    # Locate the subscription item that matches current plan price (fallback to first item)
+                    items = stripe_sub.get('items', {}).get('data', [])
+                    sub_item_id = None
+                    for it in items:
+                        if it.get('price', {}).get('id') == existing_sub.plan.stripe_price_id:
+                            sub_item_id = it.get('id')
+                            break
+                    if not sub_item_id and items:
+                        sub_item_id = items[0].get('id')
+
+                    if not sub_item_id:
+                        return Response({
+                            'success': False,
+                            'message': 'Não foi possível localizar o item da assinatura para upgrade.'
+                        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+                    updated_sub = stripe.Subscription.modify(
+                        existing_sub.stripe_subscription_id,
+                        cancel_at_period_end=False,
+                        proration_behavior='create_prorations',
+                        items=[{
+                            'id': sub_item_id,
+                            'price': plan.stripe_price_id,
+                            'quantity': 1
+                        }],
+                        metadata={
+                            'user_id': str(user.id),
+                            'upgraded_from_plan': existing_sub.plan.interval,
+                            'upgraded_to_plan': plan.interval
+                        }
+                    )
+
+                    previous_plan = existing_sub.plan
+                    # Update local subscription to new plan
+                    existing_sub.plan = plan
+                    existing_sub.save(update_fields=['plan'])
+
+                    # Optionally trigger credit recalculation/reset immediately
+                    try:
+                        CreditService.check_and_reset_monthly_credits(user)
+                    except Exception:
+                        pass
+
+                    return Response({
+                        'success': True,
+                        'message': 'Upgrade de assinatura realizado com sucesso.',
+                        'upgraded': True,
+                        'previous_plan': previous_plan.name,
+                        'new_plan': plan.name,
+                        'proration_invoice_id': updated_sub.get('latest_invoice'),
+                        'subscription_id': existing_sub.id
+                    }, status=status.HTTP_200_OK)
+                except stripe.error.StripeError as e:
+                    return Response({
+                        'success': False,
+                        'message': f'Erro no Stripe ao realizar upgrade: {str(e)}'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                except Exception as e:
+                    return Response({
+                        'success': False,
+                        'message': f'Erro interno ao realizar upgrade: {str(e)}'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            else:
+                # Local-only subscription (edge case) – require manual cancellation then new checkout
+                return Response({
+                    'success': False,
+                    'message': 'Assinatura local ativa. Cancele antes de criar um novo checkout.',
+                    'requires_cancellation': True
+                }, status=status.HTTP_409_CONFLICT)
 
         try:
             # Check if this is a test price ID
