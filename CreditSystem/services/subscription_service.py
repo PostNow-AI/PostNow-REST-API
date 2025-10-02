@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from ..models import SubscriptionPlan, UserSubscription
+from .credit_service import CreditService
 
 
 class SubscriptionService:
@@ -155,6 +156,15 @@ class SubscriptionService:
                 stripe_subscription_id=stripe_subscription_id
             )
 
+            # Trigger credit reset for new subscription
+            try:
+                CreditService.check_and_reset_monthly_credits(user)
+                print(
+                    f"[WEBHOOK DEBUG] Credits reset triggered for user {user.id} with new subscription")
+            except Exception as e:
+                print(
+                    f"[WEBHOOK DEBUG] Error resetting credits for user {user.id}: {str(e)}")
+
             return {
                 'status': 'success',
                 'message': 'Assinatura criada com sucesso',
@@ -227,6 +237,7 @@ class SubscriptionService:
 
             if user_subscription:
                 # Mapear status do Stripe para nosso modelo
+                previous_status = user_subscription.status
                 if stripe_status in ['trialing', 'active']:
                     user_subscription.status = 'active'
                 elif stripe_status in ['canceled', 'incomplete_expired', 'past_due', 'unpaid']:
@@ -235,6 +246,17 @@ class SubscriptionService:
                         user_subscription.end_date = timezone.now()
 
                 user_subscription.save()
+
+                # Trigger credit reset if subscription became active
+                if previous_status != 'active' and user_subscription.status == 'active':
+                    try:
+                        CreditService.check_and_reset_monthly_credits(
+                            user_subscription.user)
+                        print(
+                            f"[WEBHOOK DEBUG] Credits reset triggered for user {user_subscription.user.id} - subscription reactivated")
+                    except Exception as e:
+                        print(
+                            f"[WEBHOOK DEBUG] Error resetting credits for user {user_subscription.user.id}: {str(e)}")
 
                 return {
                     'status': 'success',
@@ -264,6 +286,22 @@ class SubscriptionService:
         # Para assinaturas recorrentes, pode ser útil registrar pagamentos bem-sucedidos
         subscription_id = invoice.get('subscription')
         if subscription_id:
+            # Trigger credit reset for subscription renewal
+            try:
+                user_subscription = UserSubscription.objects.filter(
+                    stripe_subscription_id=subscription_id,
+                    status='active'
+                ).first()
+
+                if user_subscription:
+                    CreditService.check_and_reset_monthly_credits(
+                        user_subscription.user)
+                    print(
+                        f"[WEBHOOK DEBUG] Credits reset triggered for user {user_subscription.user.id} - subscription payment succeeded")
+            except Exception as e:
+                print(
+                    f"[WEBHOOK DEBUG] Error resetting credits for subscription {subscription_id}: {str(e)}")
+
             return {
                 'status': 'success',
                 'message': 'Pagamento de assinatura processado',
@@ -471,6 +509,15 @@ class SubscriptionService:
                 status='active',
                 stripe_subscription_id=None  # Lifetime não tem subscription_id
             )
+
+            # Trigger credit reset for new lifetime subscription
+            try:
+                CreditService.check_and_reset_monthly_credits(user)
+                print(
+                    f"[WEBHOOK DEBUG] Credits reset triggered for user {user.id} with new lifetime subscription")
+            except Exception as e:
+                print(
+                    f"[WEBHOOK DEBUG] Error resetting credits for lifetime user {user.id}: {str(e)}")
 
             return {
                 'status': 'success',
