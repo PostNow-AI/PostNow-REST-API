@@ -488,7 +488,7 @@ class CreditUsageView(APIView):
 
 class CreditUsageSummaryView(APIView):
     """
-    Obtém um resumo do uso de créditos do usuário
+    Obtém um resumo do uso de créditos do usuário (includes monthly status)
     """
     permission_classes = [IsAuthenticated]
 
@@ -502,10 +502,80 @@ class CreditUsageSummaryView(APIView):
                 'data': summary
             }, status=status.HTTP_200_OK)
 
-        except Exception:
+        except Exception as e:
             return Response({
                 'success': False,
-                'message': 'Erro interno do servidor'
+                'message': 'Erro interno do servidor',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class MonthlyCreditsView(APIView):
+    """
+    Obtém o status dos créditos mensais do usuário
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Retorna status dos créditos mensais"""
+        try:
+            # Get monthly credit status
+            monthly_status = CreditService.get_monthly_credit_status(
+                request.user)
+
+            # Get current subscription info
+            subscription = UserSubscription.objects.filter(
+                user=request.user,
+                status='active'
+            ).select_related('plan').first()
+
+            # Get subscription validation status
+            has_active_subscription = CreditService.validate_user_subscription(
+                request.user)
+
+            # Get fixed pricing info
+            fixed_prices = {
+                'text_generation': float(CreditTransaction.get_fixed_price('text_generation')),
+                'image_generation': float(CreditTransaction.get_fixed_price('image_generation'))
+            }
+
+            # Calculate what user can do with remaining credits
+            remaining_credits = monthly_status['monthly_remaining']
+            capabilities = {
+                'text_generations_possible': int(remaining_credits / fixed_prices['text_generation']) if fixed_prices['text_generation'] > 0 else 0,
+                'image_generations_possible': int(remaining_credits / fixed_prices['image_generation']) if fixed_prices['image_generation'] > 0 else 0
+            }
+
+            response_data = {
+                'monthly_status': monthly_status,
+                'subscription_info': {
+                    'has_active_subscription': has_active_subscription,
+                    'plan_name': subscription.plan.name if subscription else None,
+                    'plan_interval': subscription.plan.interval if subscription else None,
+                    'monthly_credits_allocation': float(subscription.plan.monthly_credits) if subscription else 0.0,
+                    'allows_extra_purchase': subscription.plan.allow_credit_purchase if subscription else False
+                },
+                'pricing_info': {
+                    'fixed_prices': fixed_prices,
+                    'capabilities': capabilities
+                },
+                'usage_tips': {
+                    'efficient_usage': f"Com {remaining_credits:.2f} créditos restantes, você pode fazer:",
+                    'text_operations': f"{capabilities['text_generations_possible']} gerações de texto",
+                    'image_operations': f"{capabilities['image_generations_possible']} gerações de imagem"
+                }
+            }
+
+            return Response({
+                'success': True,
+                'data': response_data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Erro interno do servidor',
+                'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

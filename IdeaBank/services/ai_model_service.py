@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from django.contrib.auth.models import User
 
 try:
-    from CreditSystem.models import AIModel, AIModelPreferences
+    from CreditSystem.models import AIModel, AIModelPreferences, CreditTransaction
     from CreditSystem.services.credit_service import CreditService
     CREDIT_SYSTEM_AVAILABLE = True
 except ImportError:
@@ -12,6 +12,7 @@ except ImportError:
     CreditService = None
     AIModel = None
     AIModelPreferences = None
+    CreditTransaction = None
 
 
 class AIModelService:
@@ -52,95 +53,96 @@ class AIModelService:
 
     @classmethod
     def calculate_cost(cls, model_name: str, estimated_tokens: int) -> float:
-        """Calculate estimated cost for using a specific AI model."""
-        model_config = cls.get_model_config(model_name)
-        if not model_config:
-            return 0.0
+        """Calculate estimated cost for using a specific AI model using FIXED PRICING."""
+        if CREDIT_SYSTEM_AVAILABLE and CreditTransaction:
+            # Use fixed pricing for text generation
+            return float(CreditTransaction.get_fixed_price('text_generation'))
 
-        cost_per_token = model_config['cost_per_token']
-        total_cost = cost_per_token * estimated_tokens
-
-        return float(total_cost)
+        # Fallback to fixed price if credit system not available
+        return 0.02  # Fixed price for text generation
 
     @classmethod
     def calculate_image_cost(cls, model_name: str, num_images: int = 1) -> float:
-        """Calculate estimated cost for image generation using a specific AI model."""
-        if CREDIT_SYSTEM_AVAILABLE:
-            try:
-                from CreditSystem.models import AIModel
-                ai_model = AIModel.objects.get(name=model_name, is_active=True)
-                if ai_model.supports_image_generation:
-                    return float(ai_model.cost_per_image * num_images)
-                else:
-                    raise ValueError(
-                        f"Model {model_name} does not support image generation")
-            except Exception:
-                # Fallback to default image costs
-                pass
+        """Calculate estimated cost for image generation using FIXED PRICING."""
+        if CREDIT_SYSTEM_AVAILABLE and CreditTransaction:
+            # Use fixed pricing for image generation
+            return float(CreditTransaction.get_fixed_price('image_generation')) * num_images
 
-        # Fallback to default image costs
-        default_image_costs = {
-            'gemini-2.5-flash': 2.7,  # Only supported model for image generation
-        }
-
-        # Default cost per image (only for gemini-2.5-flash)
-        return default_image_costs.get(model_name, 2.7) * num_images
+        # Fallback to fixed price if credit system not available
+        return 0.23 * num_images  # Fixed price for image generation
 
     @classmethod
     def validate_user_credits(cls, user: User, model_name: str, estimated_tokens: int) -> bool:
-        """Validate if user has sufficient credits for the operation."""
+        """Validate if user has sufficient credits and active subscription for text generation."""
         if not CREDIT_SYSTEM_AVAILABLE:
             return True  # Skip validation if credit system not available
 
         try:
-            estimated_cost = cls.calculate_cost(model_name, estimated_tokens)
-            return CreditService.has_sufficient_credits(user, estimated_cost)
+            return CreditService.validate_operation(user, 'text_generation')
         except Exception:
             return False
 
     @classmethod
     def deduct_credits(cls, user: User, model_name: str, actual_tokens: int, description: str = "") -> bool:
-        """Deduct credits after successful AI operation."""
+        """Deduct credits after successful AI text generation using fixed pricing."""
         if not CREDIT_SYSTEM_AVAILABLE:
             return True  # Skip deduction if credit system not available
 
         try:
-            actual_cost = cls.calculate_cost(model_name, actual_tokens)
-            return CreditService.deduct_credits(
+            return CreditService.deduct_credits_for_operation(
                 user=user,
-                amount=actual_cost,
+                operation_type='text_generation',
                 ai_model=model_name,
-                description=description
+                description=description or f"Text generation with {model_name}"
             )
         except Exception:
             return False
 
     @classmethod
     def validate_image_credits(cls, user: User, model_name: str, num_images: int = 1) -> bool:
-        """Validate if user has sufficient credits for image generation."""
+        """Validate if user has sufficient credits and active subscription for image generation."""
         if not CREDIT_SYSTEM_AVAILABLE:
             return True  # Skip validation if credit system not available
 
         try:
-            estimated_cost = cls.calculate_image_cost(model_name, num_images)
-            return CreditService.has_sufficient_credits(user, estimated_cost)
+            # For multiple images, check if user has enough credits for all
+            if num_images > 1:
+                if not CREDIT_SYSTEM_AVAILABLE or not CreditTransaction:
+                    return True
+
+                total_cost = CreditTransaction.get_fixed_price(
+                    'image_generation') * num_images
+                return CreditService.has_sufficient_credits(user, total_cost)
+            else:
+                return CreditService.validate_operation(user, 'image_generation')
         except Exception:
             return False
 
     @classmethod
     def deduct_image_credits(cls, user: User, model_name: str, num_images: int = 1, description: str = "") -> bool:
-        """Deduct credits after successful image generation."""
+        """Deduct credits after successful image generation using fixed pricing."""
         if not CREDIT_SYSTEM_AVAILABLE:
             return True  # Skip deduction if credit system not available
 
         try:
-            actual_cost = cls.calculate_image_cost(model_name, num_images)
-            return CreditService.deduct_credits(
-                user=user,
-                amount=actual_cost,
-                ai_model=model_name,
-                description=f"Geração de imagem - {description}" if description else "Geração de imagem"
-            )
+            # For single image, use the operation method
+            if num_images == 1:
+                return CreditService.deduct_credits_for_operation(
+                    user=user,
+                    operation_type='image_generation',
+                    ai_model=model_name,
+                    description=description or f"Image generation with {model_name}"
+                )
+            else:
+                # For multiple images, deduct the total amount
+                total_cost = CreditTransaction.get_fixed_price(
+                    'image_generation') * num_images
+                return CreditService.deduct_credits(
+                    user=user,
+                    amount=total_cost,
+                    ai_model=model_name,
+                    description=f"Image generation ({num_images} images) with {model_name} - {description}" if description else f"Image generation ({num_images} images) with {model_name}"
+                )
         except Exception:
             return False
 

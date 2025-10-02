@@ -11,6 +11,7 @@ urlpatterns = [
     # Créditos do usuário
     path('balance/', views.UserCreditsView.as_view(), name='user-credits'),
     path('summary/', views.CreditUsageSummaryView.as_view(), name='usage-summary'),
+    path('monthly/', views.MonthlyCreditsView.as_view(), name='monthly-credits'),
 
     # Transações
     path('transactions/', views.CreditTransactionListView.as_view(),

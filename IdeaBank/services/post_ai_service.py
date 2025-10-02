@@ -92,6 +92,12 @@ class PostAIService(BaseAIService):
         # Build the prompt for content generation
         prompt = self._build_content_prompt(post_data)
 
+        # Validate credits before generating (skip for unauthenticated users)
+        if user and user.is_authenticated:
+            estimated_tokens = self._estimate_tokens(prompt, model)
+            if not self._validate_credits(user, estimated_tokens, model):
+                raise Exception("Créditos insuficientes para gerar conteúdo")
+
         # Create AI service
         ai_service = AIServiceFactory.create_service('google', model)
         if not ai_service:
@@ -102,6 +108,12 @@ class PostAIService(BaseAIService):
         try:
             # Use the AI service's direct method
             content = self._generate_content_with_ai(ai_service, prompt)
+
+            # Deduct credits after successful generation (skip for unauthenticated users)
+            if user and user.is_authenticated:
+                actual_tokens = self._estimate_tokens(prompt + content, model)
+                self._deduct_credits(
+                    user, actual_tokens, model, f"Geração de conteúdo - {post_data.get('name', 'Post')}")
 
             return {
                 'content': content,
@@ -132,7 +144,16 @@ class PostAIService(BaseAIService):
         Returns:
             URL or base64 data of the generated image
         """
+        model_name = 'gemini-2.5-flash'  # Only supported model
+
         current_image = None
+        if user and user.is_authenticated:
+            try:
+                from .ai_model_service import AIModelService
+                if not AIModelService.validate_image_credits(user, model_name, 1):
+                    raise Exception("Créditos insuficientes para gerar imagem")
+            except ImportError:
+                pass
 
         # Use Google for image generation by default
         ai_service = AIServiceFactory.create_service(
@@ -221,6 +242,13 @@ class PostAIService(BaseAIService):
         else:
             prompt = self._build_variation_prompt(current_content)
 
+        # Validate credits before regenerating (skip for unauthenticated users)
+        if user and user.is_authenticated:
+            estimated_tokens = self._estimate_tokens(prompt, model)
+            if not self._validate_credits(user, estimated_tokens, model):
+                raise Exception(
+                    "Créditos insuficientes para regenerar conteúdo")
+
         # Create AI service
         ai_service = AIServiceFactory.create_service(provider, model)
         if not ai_service:
@@ -230,6 +258,11 @@ class PostAIService(BaseAIService):
         try:
             content = self._generate_content_with_ai(ai_service, prompt)
 
+            # Deduct credits after successful regeneration (skip for unauthenticated users)
+            if user and user.is_authenticated:
+                actual_tokens = self._estimate_tokens(prompt + content, model)
+                self._deduct_credits(
+                    user, actual_tokens, model, f"Regeneração de conteúdo - {post_data.get('name', 'Post')}")
             return {
                 'content': content,
                 'ai_provider': provider,

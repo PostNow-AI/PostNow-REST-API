@@ -3,16 +3,182 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
-from ..models import AIModel, CreditTransaction, UserCredits
+from ..models import (
+    CreditTransaction,
+    UserCredits,
+    UserSubscription,
+    UserSubscriptionStatus,
+)
 
 User = get_user_model()
 
 
 class CreditService:
     """
-    Service para gerenciar operações de créditos dos usuários
+    Service para gerenciar operações de créditos dos usuários com sistema misto de assinatura + créditos
     """
+
+    @staticmethod
+    def validate_user_subscription(user) -> bool:
+        """
+        Valida se o usuário possui uma assinatura ativa
+
+        Args:
+            user: Usuário a ser validado
+
+        Returns:
+            bool: True se possui assinatura ativa, False caso contrário
+        """
+        try:
+            # Verifica se há assinatura ativa
+            active_subscription = UserSubscription.objects.filter(
+                user=user,
+                status='active'
+            ).first()
+
+            if not active_subscription:
+                return False
+
+            # Para assinaturas com data de fim (não lifetime), verifica se não expirou
+            if active_subscription.end_date and active_subscription.end_date < timezone.now():
+                # Marca como expirada
+                active_subscription.status = 'expired'
+                active_subscription.save()
+                return False
+
+            # Atualiza o status do usuário
+            status, created = UserSubscriptionStatus.objects.get_or_create(
+                user=user,
+                defaults={
+                    'has_active_subscription': True,
+                    'current_subscription': active_subscription
+                }
+            )
+
+            if not created:
+                status.has_active_subscription = True
+                status.current_subscription = active_subscription
+                status.save()
+
+            return True
+
+        except Exception:
+            return False
+
+    @staticmethod
+    def check_and_reset_monthly_credits(user):
+        """
+        Verifica e redefine os créditos baseado no ciclo do plano de assinatura
+
+        Args:
+            user: Usuário a ter os créditos verificados
+
+        Note:
+            - Monthly/Lifetime: Reset todo mês
+            - Quarterly: Reset a cada 3 meses  
+            - Semester: Reset a cada 6 meses
+            - Yearly: Reset a cada 12 meses
+        """
+        try:
+            # Avoid recursion by getting the credits directly
+            credits, created = UserCredits.objects.get_or_create(
+                user=user,
+                defaults={'balance': Decimal('0.00')}
+            )
+
+            # Obtém a assinatura ativa
+            active_subscription = UserSubscription.objects.filter(
+                user=user,
+                status='active'
+            ).first()
+
+            if not active_subscription:
+                return  # Sem assinatura, não há créditos mensais
+
+            current_time = timezone.now()
+
+            # Verifica se precisa resetar (primeiro do mês ou nunca resetou)
+            should_reset = False
+
+            if not credits.last_credit_reset:
+                should_reset = True
+            else:
+                # Verifica se precisa resetar baseado no intervalo do plano
+                last_reset = credits.last_credit_reset
+                should_reset = CreditService._should_reset_based_on_plan_interval(
+                    active_subscription.plan.interval,
+                    last_reset,
+                    current_time
+                )
+
+            if should_reset:
+                # Reset dos créditos mensais
+                monthly_credits = active_subscription.plan.monthly_credits
+
+                # Remove créditos mensais não utilizados do mês anterior
+                unused_monthly = credits.monthly_credits_allocated - credits.monthly_credits_used
+                if unused_monthly > 0:
+                    credits.balance -= unused_monthly
+
+                # Adiciona novos créditos mensais
+                credits.balance += monthly_credits
+                credits.monthly_credits_allocated = monthly_credits
+                credits.monthly_credits_used = Decimal('0.00')
+                credits.last_credit_reset = current_time
+                credits.save()
+
+                # Registra a transação de alocação mensal
+                CreditTransaction.objects.create(
+                    user=user,
+                    amount=monthly_credits,
+                    transaction_type='monthly_allocation',
+                    description=f"Alocação mensal de créditos - {active_subscription.plan.name}"
+                )
+
+        except Exception as e:
+            print(f"Erro ao resetar créditos mensais: {str(e)}")
+
+    @staticmethod
+    def _should_reset_based_on_plan_interval(plan_interval, last_reset, current_time):
+        """
+        Determina se os créditos devem ser resetados baseado no intervalo do plano
+
+        Args:
+            plan_interval: Intervalo do plano ('monthly', 'quarterly', 'semester', 'yearly', 'lifetime')
+            last_reset: Data do último reset
+            current_time: Tempo atual
+
+        Returns:
+            bool: True se deve resetar, False caso contrário
+        """
+        if plan_interval == 'monthly' or plan_interval == 'lifetime':
+            # Reset mensal
+            return (current_time.year != last_reset.year or
+                    current_time.month != last_reset.month)
+
+        elif plan_interval == 'quarterly':
+            # Reset a cada 3 meses
+            months_diff = (current_time.year - last_reset.year) * \
+                12 + (current_time.month - last_reset.month)
+            return months_diff >= 3
+
+        elif plan_interval == 'semester':
+            # Reset a cada 6 meses
+            months_diff = (current_time.year - last_reset.year) * \
+                12 + (current_time.month - last_reset.month)
+            return months_diff >= 6
+
+        elif plan_interval == 'yearly':
+            # Reset anual - verifica se passou um ano completo
+            months_diff = (current_time.year - last_reset.year) * \
+                12 + (current_time.month - last_reset.month)
+            return months_diff >= 12
+
+        # Default: reset mensal para casos não cobertos
+        return (current_time.year != last_reset.year or
+                current_time.month != last_reset.month)
 
     @staticmethod
     def get_or_create_user_credits(user):
@@ -23,6 +189,7 @@ class CreditService:
             user=user,
             defaults={'balance': Decimal('0.00')}
         )
+
         return credits
 
     @staticmethod
@@ -36,8 +203,15 @@ class CreditService:
     @staticmethod
     def has_sufficient_credits(user, required_amount):
         """
-        Verifica se o usuário possui créditos suficientes
+        Verifica se o usuário possui créditos suficientes E assinatura ativa
         """
+        # Primeiro valida se tem assinatura ativa
+        if not CreditService.validate_user_subscription(user):
+            return False
+
+        # Check and reset monthly credits if needed
+        CreditService.check_and_reset_monthly_credits(user)
+
         balance = CreditService.get_user_balance(user)
         return balance >= Decimal(str(required_amount))
 
@@ -81,8 +255,60 @@ class CreditService:
 
     @staticmethod
     @transaction.atomic
+    def deduct_credits_for_operation(user, operation_type: str, ai_model='', description=''):
+        """
+        Deduz créditos do usuário para uma operação específica usando preços fixos
+
+        Args:
+            user: Usuário que terá os créditos deduzidos
+            operation_type: Tipo da operação ('text_generation' ou 'image_generation')
+            ai_model: Modelo de IA utilizado (opcional)
+            description: Descrição do uso
+
+        Returns:
+            bool: True se a dedução foi bem-sucedida, False caso contrário
+        """
+        # Valida a operação primeiro
+        if not CreditService.validate_operation(user, operation_type):
+            return False
+
+        # Obtém o custo fixo
+        amount = CreditService.get_operation_cost(operation_type)
+
+        # Obtém o registro de créditos
+        user_credits = CreditService.get_or_create_user_credits(user)
+
+        # Deduz os créditos
+        user_credits.balance -= amount
+
+        # Atualiza uso mensal se for crédito mensal
+        if user_credits.monthly_credits_allocated > 0:
+            remaining_monthly = user_credits.monthly_credits_allocated - \
+                user_credits.monthly_credits_used
+            if remaining_monthly >= amount:
+                user_credits.monthly_credits_used += amount
+
+        user_credits.save()
+
+        # Registra a transação
+        CreditTransaction.objects.create(
+            user=user,
+            amount=-amount,  # Valor negativo para indicar dedução
+            transaction_type='usage',
+            operation_type=operation_type,
+            ai_model=ai_model,
+            description=description or f"Uso de {operation_type.replace('_', ' ')}"
+        )
+
+        return True
+
+    @staticmethod
+    @transaction.atomic
     def deduct_credits(user, amount, ai_model, description=''):
         """
+        DEPRECATED: Use deduct_credits_for_operation() com tipos fixos.
+        Mantido para compatibilidade com código existente.
+
         Deduz créditos do usuário de forma atômica
 
         Args:
@@ -94,35 +320,57 @@ class CreditService:
         Returns:
             bool: True se a dedução foi bem-sucedida, False caso contrário
         """
-        if amount <= 0:
+        # Tenta determinar o tipo de operação baseado no modelo ou descrição
+        operation_type = 'text_generation'  # Default
+        if ('image' in ai_model.lower() or 'imagen' in ai_model.lower() or
+                'image' in description.lower()):
+            operation_type = 'image_generation'
+
+        return CreditService.deduct_credits_for_operation(user, operation_type, ai_model, description)
+
+    @staticmethod
+    def validate_operation(user, operation_type: str) -> bool:
+        """
+        Valida se o usuário pode realizar uma operação específica
+
+        Args:
+            user: Usuário
+            operation_type: Tipo da operação ('text_generation' ou 'image_generation')
+
+        Returns:
+            bool: True se pode realizar a operação, False caso contrário
+        """
+        # Primeiro valida assinatura
+        if not CreditService.validate_user_subscription(user):
+            raise ValidationError("Usuário não possui assinatura ativa")
+
+        # Obtém o custo fixo da operação
+        cost = CreditTransaction.get_fixed_price(operation_type)
+        if cost == Decimal('0.00'):
             raise ValidationError(
-                "A quantidade de créditos deve ser maior que zero")
+                f"Tipo de operação '{operation_type}' não suportado")
 
-        # Verifica se há créditos suficientes
-        if not CreditService.has_sufficient_credits(user, amount):
-            return False
+        # Verifica se tem créditos suficientes
+        return CreditService.has_sufficient_credits(user, cost)
 
-        # Obtém o registro de créditos
-        user_credits = CreditService.get_or_create_user_credits(user)
+    @staticmethod
+    def get_operation_cost(operation_type: str) -> Decimal:
+        """
+        Retorna o custo fixo de uma operação
 
-        # Deduz os créditos
-        user_credits.balance -= Decimal(str(amount))
-        user_credits.save()
+        Args:
+            operation_type: Tipo da operação
 
-        # Registra a transação
-        CreditTransaction.objects.create(
-            user=user,
-            amount=-amount,  # Valor negativo para indicar dedução
-            transaction_type='usage',
-            ai_model=ai_model,
-            description=description
-        )
-
-        return True
+        Returns:
+            Decimal: Custo em créditos
+        """
+        return CreditTransaction.get_fixed_price(operation_type)
 
     @staticmethod
     def calculate_usage_cost(ai_model_name, estimated_tokens):
         """
+        DEPRECATED: Mantido para compatibilidade. Use get_operation_cost() com tipos fixos.
+
         Calcula o custo estimado de uso de um modelo de IA
 
         Args:
@@ -132,14 +380,11 @@ class CreditService:
         Returns:
             Decimal: Custo estimado em créditos
         """
-        try:
-            ai_model = AIModel.objects.get(name=ai_model_name, is_active=True)
-            cost = ai_model.cost_per_token * Decimal(str(estimated_tokens))
-            # Arredonda para 6 casas decimais e converte para float
-            return float(cost.quantize(Decimal('0.000001')))
-        except AIModel.DoesNotExist:
-            raise ValidationError(
-                f"Modelo de IA '{ai_model_name}' não encontrado")
+        # Para compatibilidade, retorna preços fixos baseados no tipo de modelo
+        if 'image' in ai_model_name.lower() or 'imagen' in ai_model_name.lower():
+            return float(CreditTransaction.get_fixed_price('image_generation'))
+        else:
+            return float(CreditTransaction.get_fixed_price('text_generation'))
 
     @staticmethod
     def get_user_transactions(user, limit=None):
@@ -159,6 +404,38 @@ class CreditService:
         return transactions
 
     @staticmethod
+    def get_monthly_credit_status(user):
+        """
+        Obtém status dos créditos mensais do usuário
+
+        Args:
+            user: Usuário
+
+        Returns:
+            dict: Status dos créditos mensais
+        """
+        # Check and reset monthly credits first
+        CreditService.check_and_reset_monthly_credits(user)
+
+        # Then get the credits (avoiding recursion)
+        credits, created = UserCredits.objects.get_or_create(
+            user=user,
+            defaults={'balance': Decimal('0.00')}
+        )
+
+        return {
+            'monthly_allocated': float(credits.monthly_credits_allocated),
+            'monthly_used': float(credits.monthly_credits_used),
+            'monthly_remaining': float(credits.monthly_credits_allocated - credits.monthly_credits_used),
+            'last_reset': credits.last_credit_reset.isoformat() if credits.last_credit_reset else None,
+            'usage_percentage': float(
+                (credits.monthly_credits_used /
+                 credits.monthly_credits_allocated * 100)
+                if credits.monthly_credits_allocated > 0 else 0
+            )
+        }
+
+    @staticmethod
     def get_credit_usage_summary(user):
         """
         Obtém um resumo do uso de créditos do usuário
@@ -173,7 +450,7 @@ class CreditService:
 
         total_purchased = sum(
             t.amount for t in transactions
-            if t.transaction_type == 'purchase' and t.amount > 0
+            if t.transaction_type in ['purchase', 'monthly_allocation'] and t.amount > 0
         )
 
         total_used = abs(sum(
@@ -182,10 +459,18 @@ class CreditService:
         ))
 
         current_balance = CreditService.get_user_balance(user)
+        monthly_status = CreditService.get_monthly_credit_status(user)
+        has_subscription = CreditService.validate_user_subscription(user)
 
         return {
             'total_purchased': float(total_purchased),
             'total_used': float(total_used),
             'current_balance': float(current_balance),
-            'usage_percentage': float((total_used / total_purchased * 100) if total_purchased > 0 else 0)
+            'usage_percentage': float((total_used / total_purchased * 100) if total_purchased > 0 else 0),
+            'has_active_subscription': has_subscription,
+            'monthly_status': monthly_status,
+            'fixed_prices': {
+                'image_generation': float(CreditTransaction.get_fixed_price('image_generation')),
+                'text_generation': float(CreditTransaction.get_fixed_price('text_generation'))
+            }
         }

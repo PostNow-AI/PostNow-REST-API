@@ -9,6 +9,7 @@ except ImportError:
 
 import base64
 import re
+import time
 
 from django.contrib.auth.models import User
 
@@ -32,7 +33,7 @@ def extract_base64_image(data_url: str) -> bytes:
 class GeminiService(BaseAIService):
     def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using Gemini's image generation API and return a data URL (base64)."""
-
+        compressed_data = ""
         if not GEMINI_AVAILABLE:
             return ""
 
@@ -43,34 +44,34 @@ class GeminiService(BaseAIService):
         # Enhance prompt with post data and idea content
         enhanced_prompt = self._enhance_image_prompt(
             prompt, post_data, idea_content)
-
-        # # Validate credits before generation
-        # if user and user.is_authenticated:
-        #     from .ai_model_service import AIModelService
-        #     model_name = 'gemini-imagen'
-        #     if not AIModelService.validate_image_credits(user, model_name, 1):
-        #         raise ValueError("Créditos insuficientes para gerar imagem")
+        # Validate credits before generation
+        if user and user.is_authenticated:
+            from .ai_model_service import AIModelService
+            model_name = 'gemini-imagen'
+            if not AIModelService.validate_image_credits(user, model_name, 1):
+                raise ValueError("Créditos insuficientes para gerar imagem")
 
         # Flag to track if we should deduct credits
         should_deduct_credits = user and user.is_authenticated
 
-        print(enhanced_prompt)
-        genai.configure(api_key=api_key)
-
         # Helper function to deduct credits after successful generation
-        # def deduct_credits_for_image(description_suffix=""):
-        #     if should_deduct_credits:
-        #         try:
-        #             from .ai_model_service import AIModelService
-        #             AIModelService.deduct_image_credits(
-        #                 user, 'gemini-imagen', 1, f"Gemini image generation{description_suffix} - {prompt[:50]}...")
-        #         except ImportError:
-        #             print("⚠️ Could not deduct credits - AIModelService not available")
+        def deduct_credits_for_image(description_suffix=""):
+            if should_deduct_credits:
+                try:
+                    from .ai_model_service import AIModelService
+                    AIModelService.deduct_image_credits(
+                        user, 'gemini-imagen', 1, f"Gemini image generation{description_suffix} - {prompt[:50]}...")
+                except ImportError:
+                    print("⚠️ Could not deduct credits - AIModelService not available")
 
         try:
-            # Try different model names for image generation
+            # Try different model names for image generation with fallbacks
             model_names = [
                 'gemini-2.5-flash-image-preview',
+                # 'gemini-2.0-flash-exp',           # Latest experimental model
+                # 'gemini-1.5-flash',               # Stable fallback
+                # 'gemini-2.5-flash-image',         # Original model
+                # 'gemini-1.5-pro',                 # Pro model fallback
             ]
 
             for model_name in model_names:
@@ -101,81 +102,495 @@ class GeminiService(BaseAIService):
                     else:
                         response = model.generate_content([enhanced_prompt])
                     # Check if response has image data
-                    if response.candidates and len(response.candidates) > 0:
-                        candidate = response.candidates[0]
-                        if hasattr(candidate, 'content') and candidate.content:
-                            for part in candidate.content.parts:
-                                if hasattr(part, 'inline_data') and part.inline_data:
-                                    # Compress and optimize image data
-                                    compressed_data = self._compress_image_data(
-                                        part.inline_data.data, post_data)
-                                    if compressed_data:
-                                        # Deduct credits for successful image generation
-                                        # deduct_credits_for_image(
-                                        #     " (inline data)")
+                    compressed_data = self._handle_compression(
+                        response, model_name, post_data)
 
-                                        return compressed_data
-                                    else:
-                                        print(
-                                            f"⚠️ Failed to compress image data from model: {model_name}")
+                    # Final safety check
+                    if compressed_data:
+                        # compressed_data_bytes = self._generate_text(
+                        #     post_data, compressed_data, user)
+                        # compressed_data = self._compress_image_data(
+                        #     compressed_data_bytes, post_data)
+                        # if not compressed_data:
+                        #     print(
+                        #         f"❌ Failed to compress image after adding text for model: {model_name}")
+                        #     continue
 
-                                # Also check for text that might contain image references
-                                if hasattr(part, 'text') and part.text:
-                                    print(
-                                        f"📝 Model {model_name} returned text: {part.text[:100]}...")
+                        # Deduct credits for successful image generation
+                        deduct_credits_for_image(
+                            " (inline data)")
+                        return compressed_data
+                    else:
+                        print(
+                            f"❌ Final compressed_data is empty for model: {model_name}")
 
+                except Exception as e:
+                    error_str = str(e)
+                    print(f"❌ Exception in model {model_name}: {error_str}")
+
+                    # Check for specific quota exhaustion errors
+                    if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+                        print(
+                            f"⚠️ Quota exhausted for model {model_name}, waiting before trying next model...")
+                        # Wait 2 seconds before trying next model
+                        time.sleep(2)
+                    elif 'not found' in error_str.lower() or 'invalid' in error_str.lower():
+                        print(
+                            f"⚠️ Model {model_name} not available, trying next model...")
+
+                    continue
+
+            # If we reach here, no models worked
+            print("❌ All models failed to generate image")
+            return ""
+
+        except Exception as e:
+            print(f"❌ General exception in generate_image: {str(e)}")
+            return ""
+
+    def _generate_text(self, post_data: dict, image: str, user: User = None) -> bytes:
+        """Inserts text from post data into the image using Pillow and returns the modified image as bytes.
+
+        Args:
+            post_data (dict): Post data containing name, objective, and further_details.
+            image (str): Base64 image data URL.
+            user (User): User object to get color palette from creator profile.
+
+        Returns:
+            bytes: The modified image as bytes.
+        """
+        try:
+            import io
+
+            from PIL import Image
+
+            # Extract text from post data
+            overlay_text = self._extract_text_from_post_data(post_data)
+
+            if not overlay_text:
+                print("⚠️ No text found in post data")
+                # Return original image as bytes
+                return extract_base64_image(image)
+
+            print(f"📝 Extracted text: {overlay_text}")
+
+            # Get user's color palette
+            text_color = self._get_user_text_color(user)
+            print(f"🎨 Using text color: {text_color}")
+
+            # Convert image from data URL to PIL Image
+            image_bytes = extract_base64_image(image)
+            pil_image = Image.open(io.BytesIO(image_bytes))
+
+            # Add text to image
+            modified_image = self._add_text_to_image(
+                pil_image, overlay_text, text_color)
+
+            # Convert back to bytes
+            buffer = io.BytesIO()
+            modified_image.save(buffer, format='PNG')
+            return buffer.getvalue()
+
+        except Exception as e:
+            print(f"❌ Error in _generate_text: {str(e)}")
+            # Return original image as fallback
+            try:
+                return extract_base64_image(image)
+            except Exception:
+                return b""
+
+    def _extract_text_from_post_data(self, post_data: dict) -> str:
+        """Extract text from post data (name, objective, further_details).
+
+        Args:
+            post_data (dict): Post data containing text fields.
+
+        Returns:
+            str: Combined text or empty string if none found.
+        """
+        if not post_data:
+            return ""
+
+        text_parts = []
+
+        # Get name (title/heading)
+        if post_data.get('name'):
+            text_parts.append(post_data['name'].strip())
+
+        # Get objective (main message)
+        if post_data.get('objective'):
+            text_parts.append(post_data['objective'].strip())
+
+        # Get further details (additional info)
+        if post_data.get('further_details'):
+            text_parts.append(post_data['further_details'].strip())
+
+        if not text_parts:
+            return ""
+
+        # Combine text parts with line breaks
+        combined_text = '\n'.join(text_parts)
+
+        # Clean up the text
+        # Normalize whitespace but keep line breaks
+        combined_text = re.sub(
+            r'\s+', ' ', combined_text.replace('\n', ' \n '))
+
+        print(f"📝 Text parts found: {len(text_parts)}")
+        return combined_text
+
+    def _get_user_text_color(self, user: User = None) -> tuple:
+        """Get text color from user's creator profile color palette.
+
+        Args:
+            user (User): User object to get color palette from.
+
+        Returns:
+            tuple: RGB color tuple (r, g, b, a) for text.
+        """
+        if not user:
+            return (255, 255, 255, 255)  # Default white
+
+        try:
+            # Try to import and get color palette from CreatorProfile
+            from CreatorProfile.models import CreatorProfile
+
+            profile = CreatorProfile.objects.filter(user=user).first()
+            if not profile:
+                print("⚠️ No creator profile found, using default white")
+                return (255, 255, 255, 255)
+
+            # Check for color palette fields (using current field names)
+            color_1 = getattr(profile, 'color_1', None)
+            color_2 = getattr(profile, 'color_2', None)
+            color_3 = getattr(profile, 'color_3', None)
+            color_4 = getattr(profile, 'color_4', None)
+            color_5 = getattr(profile, 'color_5', None)
+
+            # Use colors in priority order (color_1 is primary)
+            if color_1:
+                return self._parse_color(color_1)
+
+            # Use color_2 as fallback
+            if color_2:
+                return self._parse_color(color_2)
+
+            # Use color_3 as fallback
+            if color_3:
+                return self._parse_color(color_3)
+
+            # Use color_4 as fallback
+            if color_4:
+                return self._parse_color(color_4)
+
+            # Use color_5 as final fallback
+            if color_5:
+                return self._parse_color(color_5)
+
+            print("⚠️ No colors found in creator profile, using default white")
+            return (255, 255, 255, 255)
+
+        except ImportError:
+            print("⚠️ CreatorProfile model not available, using default white")
+            return (255, 255, 255, 255)
+        except Exception as e:
+            print(
+                f"⚠️ Error getting user color: {str(e)}, using default white")
+            return (255, 255, 255, 255)
+
+    def _parse_color(self, color_value) -> tuple:
+        """Parse color value to RGB tuple.
+
+        Args:
+            color_value: Color value (hex string, rgb string, etc.)
+
+        Returns:
+            tuple: RGB color tuple (r, g, b, a).
+        """
+        if not color_value:
+            return (255, 255, 255, 255)
+
+        try:
+            color_str = str(color_value).strip()
+
+            # Handle hex colors (#RRGGBB or #RGB)
+            if color_str.startswith('#'):
+                color_str = color_str[1:]
+                if len(color_str) == 3:
+                    # Convert #RGB to #RRGGBB
+                    color_str = ''.join([c*2 for c in color_str])
+                if len(color_str) == 6:
+                    r = int(color_str[0:2], 16)
+                    g = int(color_str[2:4], 16)
+                    b = int(color_str[4:6], 16)
+                    return (r, g, b, 255)
+
+            # Handle rgb(r,g,b) format
+            if color_str.startswith('rgb(') and color_str.endswith(')'):
+                rgb_values = color_str[4:-1].split(',')
+                if len(rgb_values) == 3:
+                    r = int(rgb_values[0].strip())
+                    g = int(rgb_values[1].strip())
+                    b = int(rgb_values[2].strip())
+                    return (r, g, b, 255)
+
+            # Handle named colors (basic ones)
+            color_names = {
+                'black': (0, 0, 0, 255),
+                'white': (255, 255, 255, 255),
+                'red': (255, 0, 0, 255),
+                'green': (0, 255, 0, 255),
+                'blue': (0, 0, 255, 255),
+                'yellow': (255, 255, 0, 255),
+                'cyan': (0, 255, 255, 255),
+                'magenta': (255, 0, 255, 255),
+            }
+
+            if color_str.lower() in color_names:
+                return color_names[color_str.lower()]
+
+        except Exception as e:
+            print(f"⚠️ Error parsing color '{color_value}': {str(e)}")
+
+        # Default to white if parsing fails
+        return (255, 255, 255, 255)
+
+    def _parse_color_palette(self, palette) -> tuple:
+        """Parse color palette to get a suitable text color.
+
+        Args:
+            palette: Color palette data (JSON, dict, or string).
+
+        Returns:
+            tuple: RGB color tuple (r, g, b, a).
+        """
+        try:
+            import json
+
+            if isinstance(palette, str):
+                palette = json.loads(palette)
+
+            if isinstance(palette, dict):
+                # Look for common palette keys
+                for key in ['primary', 'secondary', 'accent', 'text', 'foreground']:
+                    if key in palette:
+                        return self._parse_color(palette[key])
+
+                # If palette has colors array
+                if 'colors' in palette and isinstance(palette['colors'], list) and palette['colors']:
+                    return self._parse_color(palette['colors'][0])
+
+        except Exception as e:
+            print(f"⚠️ Error parsing color palette: {str(e)}")
+
+        return (255, 255, 255, 255)
+
+    def _add_text_to_image(self, image, text: str, text_color: tuple = (255, 255, 255, 255)):
+        """Add text to image using Pillow with non-serif font and no background.
+
+        Args:
+            image: PIL Image object.
+            text (str): Text to add to the image.
+            text_color (tuple): RGBA color tuple for text.
+
+        Returns:
+            PIL Image: Modified image with text overlay.
+        """
+        try:
+            from PIL import ImageDraw
+
+            # Create a copy to avoid modifying original
+            img_copy = image.copy()
+            draw = ImageDraw.Draw(img_copy)
+
+            # Get image dimensions
+            width, height = img_copy.size
+
+            # Try to load non-serif fonts, fallback to system fonts
+            font = self._load_font(width)
+
+            # Split text into lines for multi-line support
+            lines = text.split('\n')
+
+            # Calculate total text dimensions
+            line_heights = []
+            line_widths = []
+
+            for line in lines:
+                if font:
+                    bbox = draw.textbbox((0, 0), line.strip(), font=font)
+                    line_width = bbox[2] - bbox[0]
+                    line_height = bbox[3] - bbox[1]
+                else:
+                    # Estimate text size without font
+                    line_width = len(line.strip()) * 8
+                    line_height = 16
+
+                line_widths.append(line_width)
+                line_heights.append(line_height)
+
+            # Get total height
+            total_height = sum(line_heights) + \
+                (len(lines) - 1) * 5  # 5px line spacing
+
+            # Position text at bottom center with padding
+            # Increased padding for cleaner look
+            padding = max(30, height // 30)
+            start_y = height - total_height - padding
+
+            # Draw each line
+            current_y = start_y
+            for i, line in enumerate(lines):
+                line_text = line.strip()
+                if not line_text:
+                    continue
+
+                # Center each line individually
+                line_width = line_widths[i]
+                line_x = (width - line_width) // 2
+
+                # Draw text without background (clean look)
+                if font:
+                    draw.text((line_x, current_y), line_text,
+                              font=font, fill=text_color)
+                else:
+                    draw.text((line_x, current_y), line_text, fill=text_color)
+
+                # Move to next line
+                current_y += line_heights[i] + 5  # 5px line spacing
+
+            return img_copy
+
+        except ImportError:
+            print("⚠️ PIL ImageDraw/ImageFont not available, returning original image")
+            return image
+        except Exception as e:
+            print(f"❌ Error adding text to image: {str(e)}")
+            return image
+
+    def _load_font(self, image_width: int):
+        """Load a non-serif font with dynamic sizing.
+
+        Args:
+            image_width (int): Width of the image for font sizing.
+
+        Returns:
+            PIL.ImageFont: Font object or None if not available.
+        """
+        try:
+            from PIL import ImageFont
+
+            # Dynamic font size based on image width
+            # Larger base size for better readability
+            font_size = max(28, image_width // 20)
+
+            # Try different non-serif fonts in order of preference
+            font_paths = [
+                # Modern non-serif fonts
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Clean non-serif
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/ubuntu/Ubuntu-Regular.ttf",
+
+                # System fonts
+                "/System/Library/Fonts/Helvetica.ttc",  # macOS
+                "/Windows/Fonts/arial.ttf",  # Windows
+                "/usr/share/fonts/truetype/fonts-go/Go-Regular.ttf",  # Go font
+
+                # Fallback system fonts
+                "/usr/share/fonts/TTF/arial.ttf",
+                "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+            ]
+
+            for font_path in font_paths:
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    print(f"✅ Loaded font: {font_path} (size: {font_size})")
+                    return font
                 except Exception:
                     continue
 
-            # If no models worked, try using Imagen (Google's dedicated image model) via different approach
+            # Try to use default font as last resort
             try:
-                # Note: This may require different API setup
-                model = genai.GenerativeModel('gemini-1.5-pro')
-                imagen_prompt = f"Please generate an image for: {prompt}. Return the image as base64 data."
-                response = model.generate_content(imagen_prompt)
+                font = ImageFont.load_default()
+                print("⚠️ Using default PIL font")
+                return font
+            except Exception:
+                print("❌ No fonts available")
+                return None
 
-                if response.text and 'base64' in response.text.lower():
-                    # Deduct credits for successful image generation
-                    # deduct_credits_for_image(" (Imagen API)")
+        except ImportError:
+            print("⚠️ PIL ImageFont not available")
+            return None
+        except Exception as e:
+            print(f"❌ Error loading font: {str(e)}")
+            return None
 
-                    return response.text
+#     def _build_analisys_and_improvement_prompt(self) -> str:
+#         prompt = """Você é um especialista em revisão ortográfica e design digital.
+# Sua missão é analisar a IMAGEM_BASE fornecida, identificar todos os textos presentes nela e corrigir automaticamente qualquer erro de ortografia, gramática ou acentuação em *Português do Brasil (pt-BR)*.
+# Depois da correção, o texto revisado deve ser aplicado na mesma imagem, sem alterar design, estilo ou layout.
 
-            except Exception as imagen_error:
-                print(f"❌ Imagen approach failed: {imagen_error}")
+# ### REGRAS DE EXECUÇÃO:
 
-            # Final fallback: Generate a detailed text description for image generation
-            try:
-                model = genai.GenerativeModel('gemini-1.5-pro')
-                fallback_prompt = f"""Based on this request: "{prompt}"
-                
-Generate a detailed image description that could be used by an AI image generator. Include:
-- Visual style and composition
-- Colors and mood
-- Key elements and their arrangement
-- Professional marketing appeal
+# 1. *Análise OCR*: identifique todos os textos contidos na imagem fornecida.
 
-Format as: "A professional marketing image showing [detailed description]"
-"""
-                response = model.generate_content(fallback_prompt)
-                if response.text:
-                    # Deduct credits for generating enhanced prompt (still an AI service call)
-                    # deduct_credits_for_image(" (enhanced prompt)")
-                    # Return empty to trigger OpenAI with enhanced prompt
-                    # Store enhanced prompt for potential use
-                    setattr(self, '_enhanced_prompt', response.text)
+# 2. *Correção de texto*:
+#    - Corrija automaticamente todos os erros de ortografia, acentuação e gramática segundo as normas do *Português do Brasil (Acordo Ortográfico)*.
+#    - Nunca inventar palavras, nunca traduzir para outro idioma.
+#    - Manter o texto simples, claro e natural, respeitando a ideia original.
 
-            except Exception as fallback_error:
-                print(f"❌ Fallback prompt generation failed: {fallback_error}")
+# 3. *Aplicação no design*:
+#    - Substitua apenas o texto incorreto pelos textos corrigidos.
+#    - Não mude posição, tipografia, tamanho, cor ou estilo.
+#    - Preserve 100% do layout e da identidade visual da imagem original.
 
-            return ""
+# 4. *Idioma: todo texto final deve estar obrigatoriamente em **Português do Brasil (pt-BR)*, revisado e sem erros.
 
-        except Exception:
-            return ""
+# 5. *Formato de saída*:
+#    - Retorne *apenas 1 imagem final*, no mesmo formato da original (ex.: 1080x1920 px se for Story).
+#    - A única diferença em relação à imagem original deve ser o texto corrigido.
+
+# ---
+
+# ### ENTRADA:
+# - IMAGEM_BASE: [imagem gerada anteriormente]
+
+# ---
+
+# ### SAÍDA ESPERADA:
+# - Uma única imagem final, idêntica à original em design, mas com todos os textos revisados e corrigidos para pt-BR perfeito.
+# - Nenhum outro elemento deve ser alterado."""
+#         return prompt
+
+    def _handle_compression(self, response, model_name: str, post_data: dict):
+        print(
+            f"🖼️ Model {model_name} returned {len(response.candidates)} candidates")
+        if response.candidates and len(response.candidates) > 0:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and candidate.content:
+                for part in candidate.content.parts:
+                    if hasattr(part, 'inline_data') and part.inline_data:
+                        # Compress and optimize image data
+                        compressed_data = self._compress_image_data(
+                            part.inline_data.data, post_data)
+                        if compressed_data:
+                            return compressed_data
+                        else:
+                            print(
+                                f"⚠️ Failed to compress image data from model: {model_name}")
+                    # Also check for text that might contain image references
+                    if hasattr(part, 'text') and part.text:
+                        print(
+                            f"📝 Model {model_name} returned text: {part.text[:100]}...")
+
+        # Return empty string if no image data found
+        print(f"❌ No image data found in response from model: {model_name}")
+        return ""
 
     def _enhance_image_prompt(self, base_prompt: str, post_data: dict = None, idea_content: str = None) -> str:
         """Enhance the image generation prompt with post data and idea content."""
         enhanced_parts = [
-            f"Gere uma imagem de alta qualidade com base nesta descrição: {base_prompt}"]
+            f"Gere uma imagem de alta qualidade com base nesta descrição: {base_prompt}. Nao ADICIONE NENHUM TEXTO NA IMAGEM."]
 
         if post_data:
             if post_data.get('objective'):
@@ -200,6 +615,7 @@ Format as: "A professional marketing image showing [detailed description]"
         """Create an empty white vertical image (9:16 aspect ratio) for stories/reels."""
         try:
             import io
+
             from PIL import Image
 
             # Create 9:16 aspect ratio image (1080x1920 for good quality)

@@ -23,6 +23,21 @@ class SubscriptionPlan(models.Model):
     stripe_price_id = models.CharField(max_length=100, blank=True, null=True)
     is_active = models.BooleanField(default=True)
 
+    # Credit system integration
+    monthly_credits = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('30.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name="Créditos Mensais",
+        help_text="Quantidade de créditos renovados a cada mês"
+    )
+    allow_credit_purchase = models.BooleanField(
+        default=False,
+        verbose_name="Permitir Compra de Créditos Extras",
+        help_text="Se o usuário pode comprar créditos adicionais além do limite mensal"
+    )
+
     def __str__(self):
         return f"{self.name} ({self.get_interval_display()})"
 
@@ -109,6 +124,31 @@ class UserCredits(models.Model):
         validators=[MinValueValidator(Decimal('0.00'))],
         verbose_name="Saldo de Créditos"
     )
+
+    # Monthly credit allocation tracking
+    monthly_credits_allocated = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name="Créditos Mensais Alocados",
+        help_text="Créditos alocados no ciclo mensal atual"
+    )
+    monthly_credits_used = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name="Créditos Mensais Utilizados",
+        help_text="Créditos utilizados no ciclo mensal atual"
+    )
+    last_credit_reset = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Último Reset de Créditos",
+        help_text="Data do último reset dos créditos mensais"
+    )
+
     last_updated = models.DateTimeField(
         auto_now=True, verbose_name="Última Atualização")
 
@@ -135,7 +175,21 @@ class CreditTransaction(models.Model):
         ('refund', 'Reembolso'),
         ('bonus', 'Bônus'),
         ('adjustment', 'Ajuste'),
+        ('monthly_allocation', 'Alocação Mensal'),
+        ('monthly_reset', 'Reset Mensal'),
     ]
+
+    OPERATION_TYPES = [
+        ('text_generation', 'Geração de Texto'),
+        ('image_generation', 'Geração de Imagem'),
+        ('other', 'Outro'),
+    ]
+
+    # Fixed pricing constants
+    FIXED_PRICES = {
+        'image_generation': Decimal('0.23'),
+        'text_generation': Decimal('0.02'),
+    }
 
     user = models.ForeignKey(
         User,
@@ -152,6 +206,14 @@ class CreditTransaction(models.Model):
         max_length=20,
         choices=TRANSACTION_TYPES,
         verbose_name="Tipo de Transação"
+    )
+    operation_type = models.CharField(
+        max_length=20,
+        choices=OPERATION_TYPES,
+        null=True,
+        blank=True,
+        verbose_name="Tipo de Operação",
+        help_text="Tipo específico da operação (geração de texto/imagem)"
     )
     ai_model = models.CharField(
         max_length=50,
@@ -182,13 +244,19 @@ class CreditTransaction(models.Model):
         return f"{self.user.username} - {self.get_transaction_type_display()} - {self.amount} créditos"
 
     @classmethod
+    def get_fixed_price(cls, operation_type: str) -> Decimal:
+        """Retorna o preço fixo para um tipo de operação"""
+        return cls.FIXED_PRICES.get(operation_type, Decimal('0.00'))
+
+    @classmethod
     def get_user_balance(cls, user):
         """Calcula o saldo atual de créditos do usuário"""
         from django.db.models import Sum
 
         purchases = cls.objects.filter(
             user=user,
-            transaction_type__in=['purchase', 'bonus', 'refund', 'adjustment']
+            transaction_type__in=['purchase', 'bonus',
+                                  'refund', 'adjustment', 'monthly_allocation']
         ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
         usage = cls.objects.filter(
@@ -289,6 +357,40 @@ class AIModelPreferences(models.Model):
             return 'claude-3-haiku' if self.budget_preference == 'economy' else 'claude-3-sonnet'
         else:  # auto
             return 'gemini-1.5-flash'  # Default mais econômico
+
+
+class UserSubscriptionStatus(models.Model):
+    """
+    Modelo para rastrear o status atual da assinatura e créditos do usuário
+    """
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='subscription_status',
+        verbose_name="Usuário"
+    )
+    has_active_subscription = models.BooleanField(
+        default=False,
+        verbose_name="Possui Assinatura Ativa"
+    )
+    current_subscription = models.ForeignKey(
+        UserSubscription,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Assinatura Atual"
+    )
+    last_subscription_check = models.DateTimeField(
+        auto_now=True,
+        verbose_name="Última Verificação de Assinatura"
+    )
+
+    class Meta:
+        verbose_name = "Status de Assinatura do Usuário"
+        verbose_name_plural = "Status de Assinaturas dos Usuários"
+
+    def __str__(self):
+        return f"{self.user.username} - {'Ativo' if self.has_active_subscription else 'Inativo'}"
 
 
 class AIModel(models.Model):
