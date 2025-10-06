@@ -33,7 +33,7 @@ db.sqlite3
 db.sqlite3-journal
 media/
 staticfiles/
-static/
+
 
 # IDE
 .vscode/
@@ -126,7 +126,6 @@ logs/
 *.ogg
 
 # Fonts
-*.ttf
 *.otf
 *.woff
 *.woff2
@@ -161,7 +160,6 @@ coverage.xml
 # Django specific
 staticfiles/
 staticfiles_build/
-static/
 media/
 uploads/
 
