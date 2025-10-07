@@ -323,6 +323,63 @@ class PostAIService(BaseAIService):
 
         return creator_profile_section
 
+    def _get_creator_profile_data(self) -> dict:
+        """Get creator profile data for prompt personalization."""
+        profile_data = {
+            'professional_name': 'Não informado',
+            'profession': 'Não informado',
+            'whatsapp_number': 'Não informado',
+            'business_name': 'Não informado',
+            'specialization': 'Não informado',
+            'business_description': 'Não informado',
+            'target_gender': 'Não informado',
+            'target_age_range': 'Não informado',
+            'target_interests': 'Não informado',
+            'target_location': 'Não informado',
+            'logo': 'Não fornecido',
+            'color_palette': 'Não definida',
+            'voice_tone': 'Profissional'
+        }
+
+        if hasattr(self, 'user') and self.user:
+            from CreatorProfile.models import CreatorProfile
+            profile = CreatorProfile.objects.filter(user=self.user).first()
+            if profile:
+                if profile.professional_name:
+                    profile_data['professional_name'] = profile.professional_name
+                if profile.profession:
+                    profile_data['profession'] = profile.profession
+                if profile.whatsapp_number:
+                    profile_data['whatsapp_number'] = profile.whatsapp_number
+                if profile.business_name:
+                    profile_data['business_name'] = profile.business_name
+                if profile.specialization:
+                    profile_data['specialization'] = profile.specialization
+                if profile.business_description:
+                    profile_data['business_description'] = profile.business_description
+                if profile.target_gender:
+                    profile_data['target_gender'] = profile.target_gender
+                if profile.target_age_range:
+                    profile_data['target_age_range'] = profile.target_age_range
+                if profile.target_interests:
+                    profile_data['target_interests'] = profile.target_interests
+                if profile.target_location:
+                    profile_data['target_location'] = profile.target_location
+                if profile.logo:
+                    profile_data['logo'] = 'Logo disponível'
+                if profile.voice_tone:
+                    profile_data['voice_tone'] = profile.voice_tone
+
+                # Color palette
+                colors = [profile.color_1, profile.color_2,
+                          profile.color_3, profile.color_4, profile.color_5]
+                valid_colors = [
+                    color for color in colors if color and color.strip()]
+                if valid_colors:
+                    profile_data['color_palette'] = ', '.join(valid_colors)
+
+        return profile_data
+
     def _build_all_details(self, further_details: str) -> str:
         """Build the audience and tone section combining further details with creator profile data."""
         sections = []
@@ -390,47 +447,115 @@ class PostAIService(BaseAIService):
 
         details = self._build_all_details(further_details)
 
+        # Get dynamic data from creator profile and post
+        creator_profile_data = self._get_creator_profile_data()
+
         prompt = f"""
-Você é um especialista em copywriting estratégico, criativo e persuasivo.
-Sua missão é gerar copies otimizadas para posts de Feed em redes sociais, com foco em clareza, engajamento e relevância, respeitando sempre as boas práticas do Meta e Google Ads.
+Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em posts de Feed para redes sociais (Instagram, Facebook, LinkedIn, etc.).
+Sua missão é gerar copies otimizadas e prompts de imagem complementares, com base nas informações do negócio do cliente e nos dados específicos do post.
 
-### DADOS DE ENTRADA
-- Assunto do post: {name}
-- Objetivo do post: {objective}
-- Tipo do post: Feed
-- Mais detalhes: {details}
+Siga todas as instruções abaixo com atenção e precisão:
 
----
+🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
-### REGRAS PARA A COPY:
+Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
 
-1. Estruture internamente no método AIDA (Atenção, Interesse, Desejo, Ação), mas entregue a copy final **sem rótulos ou divisões visíveis**.
+Profissão: {creator_profile_data.get('profession', 'Não informado')}
 
-2. O texto deve ser fluido, natural e pronto para publicação no Feed.
+Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
 
-3. Utilize **parágrafos curtos e bem separados**, que facilitem a leitura rápida e escaneável nas redes sociais.
+Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
 
-4. Insira **emojis de forma moderada e estratégica**, para dar leveza e proximidade, mas nunca em excesso.
+Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
 
-5. Respeite sempre o **tom de voz e estilo definidos nos detalhes** pelo profissional (ex.: técnico, acolhedor, inspirador, educativo, motivacional, etc.).
+Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
 
-6. Não use linguagem sensacionalista, promessas exageradas ou afirmações que violem políticas do Meta e Google Ads.
-   - Não fazer comparações negativas diretas.
-   - Não prometer resultados absolutos.
-   - Não atacar autoestima ou expor dados sensíveis de forma invasiva.
-   - Priorizar comunicação positiva, inclusiva e motivadora.
+Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
 
-7. Se possível, traga expressões ou referências atuais que estejam em tendência no tema do post.
+Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
 
-8. Sempre finalize com **uma única CTA natural e clara**, coerente com o objetivo definido do post.
+Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
 
----
+Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
 
-### SAÍDA ESPERADA:
-- Uma copy pronta para Feed, já formatada com parágrafos curtos e emojis leves.
-- Texto direto para copiar e colar no post.
-- Apenas **uma CTA final**, integrada de forma natural ao texto.
-- Copy envolvente, relevante e alinhada ao objetivo da campanha e ao tom da marca.
+Logo: {creator_profile_data.get('logo', 'Não fornecido')}
+
+Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
+
+Tom de voz: {creator_profile_data.get('voice_tone', 'Profissional')}
+
+🧠 DADOS DO POST:
+
+Assunto: {name}
+
+Objetivo: {objective}
+
+Mais detalhes: {details}
+
+🪶 REGRAS PARA A COPY:
+
+Siga o método AIDA (Atenção, Interesse, Desejo, Ação):
+
+Comece com uma frase ou pergunta envolvente que capture a atenção.
+
+Desenvolva o tema de forma fluida e relevante, despertando curiosidade e identificação.
+
+Crie conexão emocional e mostre benefícios reais.
+
+Finalize com uma única CTA natural e coerente com o objetivo do post.
+
+Estilo e tom:
+
+Use parágrafos curtos e bem espaçados, facilitando a leitura rápida e escaneável.
+
+Respeite o tom de voz informado ({creator_profile_data.get('voice_tone', 'Profissional')}).
+
+Evite sensacionalismo, exageros ou promessas irreais.
+
+Adapte o vocabulário ao público-alvo, nicho e faixa etária.
+
+Traga expressões, temas ou referências atuais que estejam em alta no contexto do post.
+
+Uso de emojis:
+
+Utilize em média 5 emojis por copy principal, aplicados de forma natural, coerente e distribuída ao longo do texto.
+
+Os emojis devem reforçar o tom e o sentimento do conteúdo, nunca poluir visualmente.
+
+Não use emojis no título, subtítulo ou CTA da imagem.
+
+Personalização obrigatória:
+
+Considere o nicho, público, localização e interesses para contextualizar a linguagem e o estilo.
+
+Faça alusões sutis ao negócio do cliente ({creator_profile_data.get('business_name', 'seu negócio')}) quando fizer sentido, sem autopromoção direta.
+
+📦 FORMATO DE SAÍDA:
+
+Gere a resposta exatamente neste formato:
+
+[TEXTO COMPLETO DA COPY — fluido, natural e pronto para publicação no Feed, com média de 5 emojis inseridos de forma estratégica.]
+
+Como sugestão para escrever na imagem:
+
+Título: [Frase curta e chamativa (até 8 palavras)]
+
+Subtítulo: [Frase complementar breve, despertando curiosidade ou contexto]
+
+CTA: [Uma chamada clara e coerente com o objetivo do post]
+
+Descrição para gerar a imagem (sem texto):
+Crie uma descrição detalhada da imagem ideal para acompanhar o post, considerando:
+
+Identidade visual (use a paleta de cores {creator_profile_data.get('color_palette')})
+
+Nicho e público-alvo ({creator_profile_data.get('specialization')}, {creator_profile_data.get('target_gender')}, {creator_profile_data.get('target_age_range')}, {creator_profile_data.get('target_location')})
+
+Tom de voz e emoção transmitida pela copy ({creator_profile_data.get('voice_tone')})
+
+Cores, estilo, iluminação e ambientação condizentes com o negócio ({creator_profile_data.get('business_name')})
+
+Elementos visuais que comuniquem a mensagem principal da copy sem incluir textos.
 """
         return prompt.strip()
 
