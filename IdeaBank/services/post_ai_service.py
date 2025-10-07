@@ -146,6 +146,10 @@ class PostAIService(BaseAIService):
         """
         model_name = 'gemini-2.5-flash'  # Only supported model
 
+        # Store user and post_data for profile access
+        self.user = user
+        self._current_post_data = post_data
+
         current_image = None
         if user and user.is_authenticated:
             try:
@@ -195,10 +199,72 @@ class PostAIService(BaseAIService):
         try:
             if current_image is not None:
                 image_url = ai_service.generate_image(
-                    prompt, current_image, user, post_data, content)
+                    prompt, current_image, user, post_data, content, {
+                        "titulo": {
+                            "title-content": "Special Offer!",
+                            "font-family": "Poppins",
+                            "font-size": "98px",
+                            "font-weight": "bold",
+                            "color": "#000000",
+                            "drop-shadow": "2px 2px 4px rgba(0,0,0,0.8)",
+                            "text-stroke": "",
+                            "location": "top-center"
+                        },
+                        "sub-titulo": {
+                            "subtitle-content": "Save up to 50% today",
+                            "font-family": "Poppins",
+                            "font-size": "98px",
+                            "font-weight": "bold",
+                            "color": "#FFD700",
+                            "drop-shadow": "1px 1px 2px rgba(0,0,0,0.6)",
+                            "text-stroke": "",
+                            "location": "center-center"
+                        },
+                        "cta": {
+                            "cta-content": "Shop Now →",
+                            "font-family": "Poppins",
+                            "font-size": "92px",
+                            "font-weight": "bold",
+                            "color": "#FF4444",
+                            "drop-shadow": "",
+                            "text-stroke": "2px #000000",
+                            "location": "bottom-center"
+                        }
+                    })
             else:
                 image_url = ai_service.generate_image(
-                    prompt, '', user, post_data, content)
+                    prompt, '', user, post_data, content, {
+                        "titulo": {
+                            "title-content": "Special Offer!",
+                            "font-family": "Montserrat",
+                            "font-size": "48px",
+                            "font-weight": "bold",
+                            "color": "#FFFFFF",
+                            "drop-shadow": "2px 2px 4px rgba(0,0,0,0.8)",
+                            "text-stroke": "",
+                            "location": "top-center"
+                        },
+                        "sub-titulo": {
+                            "subtitle-content": "Save up to 50% today",
+                            "font-family": "Montserrat",
+                            "font-size": "28px",
+                            "font-weight": "normal",
+                            "color": "#FFD700",
+                            "drop-shadow": "1px 1px 2px rgba(0,0,0,0.6)",
+                            "text-stroke": "",
+                            "location": "center-center"
+                        },
+                        "cta": {
+                            "cta-content": "Shop Now →",
+                            "font-family": "Montserrat",
+                            "font-size": "32px",
+                            "font-weight": "bold",
+                            "color": "#FF4444",
+                            "drop-shadow": "",
+                            "text-stroke": "2px #000000",
+                            "location": "bottom-center"
+                        }
+                    })
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
 
@@ -234,6 +300,10 @@ class PostAIService(BaseAIService):
         """
         provider = ai_provider or self.default_provider
         model = ai_model or self.default_model
+
+        # Store user and post_data for profile access
+        self.user = user
+        self._current_post_data = post_data
 
         # Build the regeneration prompt
         if user_prompt:
@@ -809,149 +879,49 @@ A capa deve ser clara, objetiva e reforçar a ideia central do conteúdo, sem ex
 
         # TODO: Replace with your specific story image prompt
         prompt = f"""
-Você é um especialista em design digital e marketing visual.
+Você é um designer digital profissional, especialista em criar artes comerciais, modernas e limpas para redes sociais.
+Sua missão é gerar uma arte no formato Story (1080x1920 px), sofisticada, atual e que realmente ajude a vender.
 
+--REGRA OBRIGATORIA--
+Caso uma imagem branca seja anexada, utilize-a como base para a criação da arte, respeitando o formato 9:16 e integrando-a harmoniosamente ao design final.
 
+📥 Entradas do Cliente:
 
-Sua missão é gerar uma arte de Story altamente criativa, moderna e impactante, que vá além do simples.
+Assunto: {name}
 
-O resultado deve ser um design sofisticado, envolvente e visualmente atrativo, pronto para ser publicado como Story.
+Objetivo da arte: {objective}
 
+Mais detalhes: {details}
 
+⚠️ Regras obrigatórias:
 
-### DADOS DE ENTRADA (serão fornecidos pelo sistema):
+Respeitar área segura obrigatória:
 
-- Assunto do post: {name}
+Margem mínima de 250 px no topo e na base.
 
-- Objetivo do post: {objective}
+Margem mínima de 60 px nas laterais.
 
-- Tipo do post: Story
+Nenhum texto deve ser adicionado.
 
-- Mais detalhes: {details}
+Imagens de pessoas variadas e brasileiras (brancas e negras, diversidade autêntica, sempre realistas e naturais).
 
+Nunca repetir selos/ícones/textos.
 
+📋 Hierarquia visual obrigatória:
 
----
+Imagem principal: produto em destaque OU pessoa brasileira que represente o tema.
 
+🎨 Estilo esperado:
 
+Clean e premium (sem excesso de elementos).
 
-### REGRAS PARA A IMAGEM:
+Fundo moderno: cor sólida, gradiente suave ou textura leve.
 
+Ícones apenas se forem sutis e agregarem valor.
 
+Estética de campanha publicitária profissional.
 
-1. Gere **apenas 1 imagem final** no formato vertical **1080x1920 px (proporção 9:16)**, otimizada para Instagram Stories.
-
-
-
-2. Utilize a **imagem anexada como canvas base** para a geração da arte.
-
-- As alterações devem ser feitas sobre essa base, preservando estilo, layout e identidade, a menos que outra mudança seja explicitamente pedida.
-
-
-
-3. **Estética PREMIUM e de Vanguarda:** O design deve ter uma estética moderna, minimalista e elegante. **Implemente o 'Princípio do Espaço Negativo' (Less is More)**, utilizando hierarquia de forma sofisticada e focando na qualidade dos assets, não na quantidade. Crie profundidade com sombras suaves, gradientes bem trabalhados ou elementos 3D quando apropriado. Busque um acabamento que se assemelhe a um material de agência de alto nível (ex: FutureBrand, Pentagram).
-
-
-
-4. **Título como ÂNCORA Visual:** Crie um título **extremamente curto** (máx. 5 palavras) e impactante, integrado ao design de forma harmoniosa, com tipografia que reflita a identidade da marca e garanta impacto imediato (tamanho e peso contrastantes).
-
-
-
-5. **Hierarquia visual clara**:
-
-- Título principal chamando a atenção.
-
-- Espaço de respiro para facilitar a leitura.
-
-- Elementos gráficos ou ilustrações de apoio que reforcem o tema (mas sem poluição visual).
-
-
-
-6. **Coerência de Marca (Brand Guidelines):** O design deve seguir diretrizes de marca imaginárias, incluindo a paleta de cores primária e secundária, e tipografia, para garantir coesão em todas as peças. **O resultado não pode parecer genérico.**
-
-
-
-7. **LOGOMARCA**:
-
-- Se o cliente anexar a logomarca, **use obrigatoriamente a logo original** no design.
-
-- Se não houver logomarca anexada, **não crie logomarca fictícia em hipótese alguma**.
-
-
-
-8. **Imagens de pessoas reais** podem ser usadas no design para transmitir mais **profissionalismo, proximidade e autenticidade**, desde que respeitem a proposta visual da marca.
-
-
-
-9. **Elementos Visuais de Alto Nível:** Utilize apenas **ativos visuais de alta resolução e qualidade inquestionável**. Priorize renderizações 3D abstratas, fotografia com tratamento cinematográfico, ou ilustrações vetoriais minimalistas e originais. **Evite fotos de banco de imagens genéricas.**
-
-
-
-10. **Área de segurança (safe zone):** mantenha pelo menos 10% de margem sem textos próximos às bordas, para evitar cortes em diferentes telas.
-
-
-
-11. Toda a comunicação visual deve ser **positiva, ética e inspiradora**, sem sensacionalismo ou exageros.
-
-
-
-12. **Regras de texto em PT-BR (Blindagem Total Contra Erros):**
-
-
-
-12.1. Criação e Validação por Redundância:
-
-- A IA deve criar a copy curta e impactante **exclusivamente em Português do Brasil (pt-BR)**.
-
-- **PROTOCOLO DE REVISÃO DUPLA:** 1º - Rascunho: Gere a copy inicial. 2º - Validação Rigorosa: Submeta esta copy a uma revisão gramatical e ortográfica automática de nível avançado. O resultado **FINAL** deve ser zero erros de ortografia, acentuação ou concordância.
-
-
-
-12.2. Lista de Checagem (Checklist) Ortográfica e Gramatical Essencial:
-
-- A IA deve confirmar o seguinte com **extremo rigor** antes de finalizar a imagem:
-
-- **100% de Correção Ortográfica:** Cada palavra individualmente deve ser verificada para garantir sua grafia exata e correta em PT-BR. **Nenhum erro de digitação (typo), troca de letras, inversão, omissão ou adição de letras é permitido em hipótese alguma** (ex: "Garanitad" é proibido, deve ser "Garantida").
-
-- **Acentos:** Todas as palavras essenciais (ex: saúde, médico, física) e de regra geral estão acentuadas corretamente.
-
-- **Crase:** O uso de crase foi validado.
-
-- **Concordância:** A concordância nominal e verbal está perfeita.
-
-- **Validação Lexical:** Cada palavra utilizada deve ser **validada ativamente por sua existência e grafia correta em um dicionário de Português do Brasil padrão**, assegurando que não há palavras inventadas ou corrompidas.
-
-
-
-12.3. Aplicação Técnica:
-
-- Renderizar os textos como camadas de texto editável (live text) usando tipografia que suporte totalmente os caracteres pt-BR (ex.: Inter, Montserrat, Poppins, Nunito, Roboto).
-
-- Garantir alta legibilidade: contraste adequado, sem distorção, sem warp, espaçamento e acentuação preservados.
-
-- Validação Final: A IA deve validar internamente que todas as palavras estão corretas em pt-BR antes da renderização final.
-
-
-
----
-
-
-
-### SAÍDA ESPERADA:
-
-- **Uma única imagem final premium em formato 1080x1920 px (9:16)**.
-
-- Arte com acabamento visual sofisticado, criativo e impactante, pronta para Story.
-
-- Design moderno, com chamada curta em destaque e alinhado ao tema do post.
-
-- Estética de alto nível, como um material produzido em agência de design profissional.
-
-- Logomarca usada apenas se fornecida, nunca criada artificialmente.
-
-- Possibilidade de incluir **pessoas reais** no design para transmitir mais profissionalismo e autenticidade.
-
-- Texto criado pela IA em **pt-BR perfeito**, sem erros de português, pronto para publicação.
+Design que transmita confiança, clareza e desejo de compra.
 """
         return prompt.strip()
 
