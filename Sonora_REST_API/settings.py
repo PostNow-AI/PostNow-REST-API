@@ -314,3 +314,28 @@ STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 # Credit System Configuration
 CREDIT_SYSTEM_ENABLED = True
 DEFAULT_CREDIT_BALANCE = 0.00
+
+CRON_SECRET = os.environ.get('CRON_SECRET', 'dev-secret-change-in-production')
+
+# Async processing settings
+MAX_CONCURRENT_USERS = int(os.environ.get('MAX_CONCURRENT_USERS', '10'))
+CONTENT_GENERATION_TIMEOUT = int(
+    os.environ.get('CONTENT_GENERATION_TIMEOUT', '300'))
+
+# Logging configuration for better debugging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'IdeaBank.services.daily_content_service': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+}

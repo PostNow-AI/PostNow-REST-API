@@ -2,6 +2,13 @@
 New Post-based views for IdeaBank app.
 """
 
+import asyncio
+import logging
+
+from django.conf import settings
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -17,10 +24,14 @@ from .serializers import (
     PostSerializer,
     PostWithIdeasSerializer,
 )
+from .services.daily_content_service import DailyContentService
 from .services.post_ai_service import PostAIService
 
+logger = logging.getLogger(__name__)
 
 # Post management views
+
+
 class PostListView(generics.ListCreateAPIView):
     """List and create posts."""
     permission_classes = [permissions.IsAuthenticated]
@@ -430,3 +441,75 @@ def get_post_stats(request):
             {'error': f'Erro ao buscar estatísticas: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def vercel_cron_daily_content_generation(request):
+    """
+    Vercel Cron endpoint for daily content generation
+    Called automatically by Vercel at scheduled time
+    """
+    # Verify it's from Vercel (security check)
+    auth_header = request.headers.get('Authorization', '')
+    expected_auth = f"Bearer {settings.CRON_SECRET}"
+
+    if auth_header != expected_auth:
+        return JsonResponse({
+            'error': 'Unauthorized'
+        }, status=401)
+
+    try:
+        # Run async processing
+        service = DailyContentService()
+
+        # Use asyncio to run the async function
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            result = loop.run_until_complete(
+                service.process_all_users_async()
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse(result, status=200)
+
+    except Exception as e:
+        logger.error(f"Vercel cron job failed: {str(e)}")
+        return JsonResponse({
+            'error': 'Internal server error',
+            'details': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def manual_trigger_daily_generation(request):
+    """
+    Manual trigger for daily content generation (for testing)
+    """
+    try:
+        service = DailyContentService()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            result = loop.run_until_complete(
+                service.process_all_users_async()
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse({
+            'message': 'Daily content generation completed',
+            'result': result
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({
+            'error': 'Failed to generate daily content',
+            'details': str(e)
+        }, status=500)

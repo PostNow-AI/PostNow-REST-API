@@ -84,7 +84,8 @@ class PostAIService(BaseAIService):
         """
         provider = 'google'
         model = 'gemini-2.5-flash'
-
+        print(
+            f"Gerando conteúdo com {provider} - {model} para usuário {user.id if user and user.is_authenticated else 'Anônimo'}")
         # Store user and post_data for profile access
         self.user = user
         self._current_post_data = post_data
@@ -115,6 +116,9 @@ class PostAIService(BaseAIService):
                 self._deduct_credits(
                     user, actual_tokens, model, f"Geração de conteúdo - {post_data.get('name', 'Post')}")
 
+            print(
+                f"Conteúdo de tipo {post_data.get('type', 'desconhecido')} gerado com sucesso para usuário {user.id} - {user.first_name}"
+            )
             return {
                 'content': content,
                 'ai_provider': provider,
