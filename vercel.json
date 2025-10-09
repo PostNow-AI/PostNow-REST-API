@@ -19,6 +19,12 @@
       "dest": "/Sonora_REST_API/wsgi.py"
     }
   ],
+  "crons": [
+    {
+      "path": "/api/v1/ideabank/cron/daily-content-generation/",
+      "schedule": "0 9 * * *"
+    }
+  ],
   "env": {
     "PYTHONPATH": ".",
     "DJANGO_SETTINGS_MODULE": "Sonora_REST_API.settings"
