@@ -40,3 +40,6 @@ pydantic==2.11.7
 
 # Vercel deployment
 whitenoise==6.6.0
+
+# Mailing API
+mailjet-rest==1.5.1
