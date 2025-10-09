@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 from IdeaBank.models import Post, PostIdea, PostObjective
+from IdeaBank.services.mail_service import MailService
 
 from .post_ai_service import PostAIService
 
@@ -114,11 +115,18 @@ class DailyContentService:
     async def _process_single_user_async(self, user_id: int) -> Dict[str, Any]:
         """Processa geração de conteúdo para um único usuário."""
         try:
+            mailjet = MailService()
+            subject = "Seu conteúdo diário foi gerado!"
             user_data = await self._get_user_data(user_id)
+
             if not user_data:
                 return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
 
             user, creator_profile = user_data
+            html_content = f"""<p>Olá {user.first_name},</p>
+            <p>Seu conteúdo diário foi gerado com sucesso. Aqui estão os detalhes:</p>
+            <ul>
+            """
 
             validation_result = await self._validate_user_eligibility(user)
             logger.info(
@@ -129,10 +137,24 @@ class DailyContentService:
                         'reason': validation_result['reason']}
 
             all_content_results = []
-            for post_type in ['feed', 'reels', 'story']:
+            for post_type in ['feed']:
                 result = await self._generate_content_for_user(user, creator_profile, post_type)
                 if result:
                     all_content_results.append(result)
+                    html_content += f"<li><strong>Post ID:</strong> {result['post_id']}<br><strong>Conteúdo:</strong> {result['content']}</li>"
+                    logger.info(
+                        f"Conteúdo gerado para usuário {user.id} - {user.username}: Post ID {result['post_id']}")
+                else:
+                    logger.warning(
+                        f"Nenhum conteúdo gerado para o usuário {user.id} - {user.username} para o tipo {post_type}")
+
+            html_content += """
+            </ul>
+            <p>Obrigado por usar nosso serviço!</p>
+            """
+
+            print(html_content)
+            mailjet.send_email(user.email, subject, html_content)
 
             return {'user_id': user_id, 'user': user.first_name, 'status': 'success', 'content': all_content_results}
 
