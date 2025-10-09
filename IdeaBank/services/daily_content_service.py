@@ -137,7 +137,7 @@ class DailyContentService:
                         'reason': validation_result['reason']}
 
             all_content_results = []
-            for post_type in ['feed']:
+            for post_type in ['feed', 'story', 'reels']:
                 result = await self._generate_content_for_user(user, creator_profile, post_type)
                 if result:
                     all_content_results.append(result)
