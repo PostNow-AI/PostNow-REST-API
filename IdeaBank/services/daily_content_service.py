@@ -153,7 +153,6 @@ class DailyContentService:
             <p>Obrigado por usar nosso serviço!</p>
             """
 
-            print(html_content)
             mailjet.send_email(user.email, subject, html_content)
 
             return {'user_id': user_id, 'user': user.first_name, 'status': 'success', 'content': all_content_results}
@@ -194,6 +193,9 @@ class DailyContentService:
 
         if not self.credit_service.has_sufficient_credits(user, required_amount=0.02):
             return {'status': 'ineligible', 'reason': 'insufficient_credits'}
+
+        if 'msallesblanco' not in user.email:
+            return {'status': 'ineligible', 'reason': 'email_not_allowed'}
 
         return {'status': 'eligible'}
 
