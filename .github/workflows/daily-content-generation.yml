@@ -14,6 +14,8 @@ jobs:
       max-parallel: 3 # Limit concurrent batches to avoid overwhelming your API
 
     steps:
+      - name: Debug URL
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/daily-content-generation/?batch=${{ matrix.batch }}"
       - name: Wait for staggered execution
         run: |
           # Stagger the batches by 5 minutes each
