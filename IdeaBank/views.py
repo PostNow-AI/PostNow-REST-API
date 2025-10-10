@@ -460,6 +460,9 @@ def vercel_cron_daily_content_generation(request):
         }, status=401)
 
     try:
+        # Get batch number from query params (default to 1)
+        batch_number = int(request.GET.get('batch', 1))
+        batch_size = 5  # Process 5 users per batch, to avoid vercel timeouts
         # Run async processing
         service = DailyContentService()
 
@@ -469,7 +472,7 @@ def vercel_cron_daily_content_generation(request):
 
         try:
             result = loop.run_until_complete(
-                service.process_all_users_async()
+                service.process_users_batch_async(batch_number, batch_size)
             )
         finally:
             loop.close()

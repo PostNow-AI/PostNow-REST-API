@@ -194,9 +194,6 @@ class DailyContentService:
         if not self.credit_service.has_sufficient_credits(user, required_amount=0.02):
             return {'status': 'ineligible', 'reason': 'insufficient_credits'}
 
-        if 'msallesblanco' not in user.email:
-            return {'status': 'ineligible', 'reason': 'email_not_allowed'}
-
         return {'status': 'eligible'}
 
     @sync_to_async
@@ -241,3 +238,76 @@ class DailyContentService:
             logger.error(
                 f"Erro ao gerar conteúdo para o usuário {user.id}: {str(e)}")
             return {'status': 'error', 'error': str(e)}
+
+    async def process_users_batch_async(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
+        """Process a specific batch of users for daily content generation."""
+        start_time = timezone.now()
+        logger.info(f"Processing batch {batch_number} with size {batch_size}")
+
+        try:
+            # Calculate offset based on batch number
+            offset = (batch_number - 1) * batch_size
+
+            eligible_users = await self._get_eligible_users_batch(offset, batch_size)
+            total_users = len(eligible_users)
+
+            logger.info(
+                f"Batch {batch_number}: Processing {total_users} users")
+
+            if total_users == 0:
+                return {
+                    'status': 'completed',
+                    'batch': batch_number,
+                    'total_users': 0,
+                    'processed': 0,
+                    'message': 'No users in this batch',
+                }
+
+            results = await self._process_users_concurrently(eligible_users)
+
+            processed_count = sum(
+                1 for r in results if r.get('status') == 'success')
+            failed_count = sum(
+                1 for r in results if r.get('status') == 'failed')
+            skipped_count = sum(
+                1 for r in results if r.get('status') == 'skipped')
+
+            end_time = timezone.now()
+            duration = (end_time - start_time).total_seconds()
+
+            result = {
+                'status': 'completed',
+                'batch': batch_number,
+                'total_users': total_users,
+                'processed': processed_count,
+                'failed': failed_count,
+                'skipped': skipped_count,
+                'duration_seconds': duration,
+                'details': results,
+            }
+
+            logger.info(
+                f"Batch {batch_number} completed: {processed_count} processed in {duration:.2f} seconds")
+            return result
+
+        except Exception as e:
+            end_time = timezone.now()
+            duration = (end_time - start_time).total_seconds()
+
+            logger.error(f"Error processing batch {batch_number}: {str(e)}")
+            return {
+                'status': 'error',
+                'batch': batch_number,
+                'error': str(e),
+                'duration_seconds': duration,
+            }
+
+    @sync_to_async
+    def _get_eligible_users_batch(self, offset: int, limit: int):
+        """Get a batch of users eligible for daily content generation"""
+        return list(
+            User.objects.filter(
+                usersubscription__status='active',
+                is_active=True
+            ).distinct().values('id', 'email', 'username')[offset:offset + limit]
+        )
