@@ -444,7 +444,7 @@ def get_post_stats(request):
 
 
 @csrf_exempt
-@require_http_methods(["POST"])
+@require_http_methods(["GET"])
 def vercel_cron_daily_content_generation(request):
     """
     Vercel Cron endpoint for daily content generation
@@ -485,7 +485,7 @@ def vercel_cron_daily_content_generation(request):
 
 
 @csrf_exempt
-@require_http_methods(["POST"])
+@require_http_methods(["GET"])
 def manual_trigger_daily_generation(request):
     """
     Manual trigger for daily content generation (for testing)
