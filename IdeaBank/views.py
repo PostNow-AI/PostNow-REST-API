@@ -516,3 +516,32 @@ def manual_trigger_daily_generation(request):
             'error': 'Failed to generate daily content',
             'details': str(e)
         }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def mail_all_generated_content(request):
+    """Fetch all user automatically generated content and email it to them."""
+    try:
+        service = DailyContentService()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            result = loop.run_until_complete(
+                service.mail_all_generated_content()
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse({
+            'message': 'Emailing of generated content completed',
+            'result': result
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({
+            'error': 'Failed to email generated content',
+            'details': str(e)
+        }, status=500)

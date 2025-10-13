@@ -37,9 +37,11 @@ urlpatterns = [
          name='all-posts-with-ideas'),
     path('stats/', views.get_post_stats, name='post-stats'),
 
-    # Vercel Cron endpoints
+    # Cron endpoints
     path('cron/daily-content-generation/', views.vercel_cron_daily_content_generation,
          name='vercel_cron_daily_generation'),
     path('admin/manual-daily-generation/', views.manual_trigger_daily_generation,
          name='manual_daily_generation'),
+    path('cron/mail-automatic-posts/',
+         views.mail_all_generated_content, name='mail_automatic_posts'),
 ]

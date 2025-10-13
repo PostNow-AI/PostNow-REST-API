@@ -25,6 +25,82 @@ class DailyContentService:
         self.credit_service = CreditService()
         self.max_concurrent_users = os.getenv('MAX_CONCURRENT_USERS', 50)
 
+    async def mail_all_generated_content(self) -> Dict[str, Any]:
+        """Send one email per user with all their generated posts, then activate posts."""
+        posts = await self.fetch_users_automatic_posts()
+        if not posts:
+            return {
+                'status': 'completed',
+                'total_users': 0,
+                'processed': 0,
+                'message': 'No posts to process',
+            }
+
+        # Group posts by user
+        from collections import defaultdict
+        user_posts = defaultdict(list)
+        for post in posts:
+            user_id = post['user__id']
+            user_posts[user_id].append(post)
+
+        processed = 0
+        failed = 0
+        for user_id, posts_list in user_posts.items():
+            try:
+                # Fetch user instance
+                user = await sync_to_async(User.objects.get)(id=user_id)
+                await self.send_email_to_user(user, posts_list)
+                processed += 1
+                # Update posts to is_active=True
+                post_ids = [p['id'] for p in posts_list]
+                await sync_to_async(Post.objects.filter(id__in=post_ids).update)(is_active=True)
+            except Exception as e:
+                logger.error(f"Failed to process user {user_id}: {str(e)}")
+                failed += 1
+
+        return {
+            'status': 'completed',
+            'total_users': len(user_posts),
+            'processed': processed,
+            'failed': failed,
+        }
+
+    async def send_email_to_user(self, user, posts):
+        """Send email to a single user with their generated posts."""
+        try:
+            mailjet = MailService()
+            subject = "Seu conteúdo diário foi gerado!"
+            html_content = f"""<p>Olá {user.first_name},</p>
+            <p>Seu conteúdo diário foi gerado com sucesso. Aqui estão os detalhes:</p>
+            <ul>
+            """
+
+            for post in posts:
+                html_content += f"<li><strong>Post ID:</strong> {post['id']}<br><strong>Conteúdo:</strong> {post['ideas__content']}</li>"
+
+            html_content += """
+            </ul>
+            <p>Obrigado por usar nosso serviço!</p>
+            """
+
+            mailjet.send_email(user.email, subject, html_content)
+            logger.info(
+                f"E-mail enviado para o usuário {user.id} - {user.username}")
+        except Exception as e:
+            logger.error(
+                f"Erro ao enviar e-mail para o usuário {user.id}: {str(e)}")
+
+    async def fetch_users_automatic_posts(self) -> List[Dict[str, Any]]:
+        """Recupera todos os posts automáticos gerados para usuários."""
+        return await sync_to_async(list)(
+            Post.objects.filter(
+                is_automatically_generated=True,
+                is_active=False
+            ).select_related('user').values(
+                'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content'
+            )
+        )
+
     async def process_all_users_async(self) -> Dict[str, Any]:
         """Processa geração de conteúdo para todos os usuários com limite de concorrência."""
         start_time = timezone.now()
@@ -115,18 +191,18 @@ class DailyContentService:
     async def _process_single_user_async(self, user_id: int) -> Dict[str, Any]:
         """Processa geração de conteúdo para um único usuário."""
         try:
-            mailjet = MailService()
-            subject = "Seu conteúdo diário foi gerado!"
+            # mailjet = MailService()
+            # subject = "Seu conteúdo diário foi gerado!"
             user_data = await self._get_user_data(user_id)
 
             if not user_data:
                 return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
 
             user, creator_profile = user_data
-            html_content = f"""<p>Olá {user.first_name},</p>
-            <p>Seu conteúdo diário foi gerado com sucesso. Aqui estão os detalhes:</p>
-            <ul>
-            """
+            # html_content = f"""<p>Olá {user.first_name},</p>
+            # <p>Seu conteúdo diário foi gerado com sucesso. Aqui estão os detalhes:</p>
+            # <ul>
+            # """
 
             validation_result = await self._validate_user_eligibility(user)
             logger.info(
@@ -141,19 +217,19 @@ class DailyContentService:
                 result = await self._generate_content_for_user(user, creator_profile, post_type)
                 if result:
                     all_content_results.append(result)
-                    html_content += f"<li><strong>Post ID:</strong> {result['post_id']}<br><strong>Conteúdo:</strong> {result['content']}</li>"
-                    logger.info(
-                        f"Conteúdo gerado para usuário {user.id} - {user.username}: Post ID {result['post_id']}")
+                    # html_content += f"<li><strong>Post ID:</strong> {result['post_id']}<br><strong>Conteúdo:</strong> {result['content']}</li>"
+                    # logger.info(
+                    #     f"Conteúdo gerado para usuário {user.id} - {user.username}: Post ID {result['post_id']}")
                 else:
                     logger.warning(
                         f"Nenhum conteúdo gerado para o usuário {user.id} - {user.username} para o tipo {post_type}")
 
-            html_content += """
-            </ul>
-            <p>Obrigado por usar nosso serviço!</p>
-            """
+            # html_content += """
+            # </ul>
+            # <p>Obrigado por usar nosso serviço!</p>
+            # """
 
-            mailjet.send_email(user.email, subject, html_content)
+            # mailjet.send_email(user.email, subject, html_content)
 
             return {'user_id': user_id, 'user': user.first_name, 'status': 'success', 'content': all_content_results}
 
@@ -218,7 +294,9 @@ class DailyContentService:
                     objective=post_data['objective'],
                     type=post_data['type'],
                     further_details=post_data['further_details'],
-                    include_image=post_data['include_image']
+                    include_image=post_data['include_image'],
+                    is_automatically_generated=True,
+                    is_active=False
                 )
 
                 generated_content = self.ai_service.generate_post_content(

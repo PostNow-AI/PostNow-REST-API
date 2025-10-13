@@ -52,6 +52,12 @@ class Post(models.Model):
     include_image = models.BooleanField(
         default=False, help_text="Incluir imagem gerada pela IA"
     )
+    is_automatically_generated = models.BooleanField(
+        default=False, help_text="Indica se o post foi gerado automaticamente"
+    )
+    is_active = models.BooleanField(
+        default=True, help_text="Indica se o post está ativo"
+    )
 
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
