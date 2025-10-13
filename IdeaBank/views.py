@@ -106,10 +106,6 @@ def generate_post_idea(request):
     try:
         # Create the post first
         post_data = serializer.validated_data
-
-        # Extract AI preferences
-        ai_provider = post_data.pop('preferred_provider', 'google')
-        ai_model = post_data.pop('preferred_model', 'gemini-2.5-flash')
         include_image = post_data.get('include_image', False)
 
         # Create the post
@@ -120,8 +116,6 @@ def generate_post_idea(request):
         result = post_ai_service.generate_post_content(
             user=request.user,
             post_data=post_data,
-            ai_provider=ai_provider,
-            ai_model=ai_model
         )
 
         # Create the post idea with generated content

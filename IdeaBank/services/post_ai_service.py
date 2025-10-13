@@ -67,8 +67,6 @@ class PostAIService(BaseAIService):
         self,
         user: User,
         post_data: Dict,
-        ai_provider: str = None,
-        ai_model: str = None
     ) -> Dict:
         """
         Generate AI content for a post based on the provided data.
@@ -84,11 +82,13 @@ class PostAIService(BaseAIService):
         """
         provider = 'google'
         model = 'gemini-2.5-flash'
-        print(
-            f"Gerando conteúdo com {provider} - {model} para usuário {user.id if user and user.is_authenticated else 'Anônimo'}")
         # Store user and post_data for profile access
         self.user = user
         self._current_post_data = post_data
+
+        # Special handling for campaign type - generate 3 posts
+        if post_data.get('type', '').lower() == 'campaign':
+            return self._generate_campaign_content(user, post_data, provider, model)
 
         # Build the prompt for content generation
         prompt = self._build_content_prompt(post_data)
@@ -116,9 +116,6 @@ class PostAIService(BaseAIService):
                 self._deduct_credits(
                     user, actual_tokens, model, f"Geração de conteúdo - {post_data.get('name', 'Post')}")
 
-            print(
-                f"Conteúdo de tipo {post_data.get('type', 'desconhecido')} gerado com sucesso para usuário {user.id} - {user.first_name}"
-            )
             return {
                 'content': content,
                 'ai_provider': provider,
@@ -127,6 +124,160 @@ class PostAIService(BaseAIService):
             }
         except Exception as e:
             raise Exception(f"Failed to generate content: {str(e)}")
+
+    def _generate_campaign_content(self, user: User, post_data: Dict, provider: str, model: str) -> Dict:
+        """
+        Special handler for campaign type - generates 3 posts (feed, reels, stories) from single AI response.
+        """
+        from django.db import transaction
+        from IdeaBank.models import Post, PostIdea
+
+        # Build the prompt for campaign generation
+        prompt = self._build_content_prompt(post_data)
+
+        # Validate credits before generating (skip for unauthenticated users)
+        if user and user.is_authenticated:
+            estimated_tokens = self._estimate_tokens(prompt, model)
+            if not self._validate_credits(user, estimated_tokens, model):
+                raise Exception("Créditos insuficientes para gerar conteúdo")
+
+        # Create AI service
+        ai_service = AIServiceFactory.create_service('google', model)
+        if not ai_service:
+            raise Exception(
+                f"AI service not available for provider: {provider}")
+
+        try:
+            # Generate content using the AI service
+            full_content = self._generate_content_with_ai(ai_service, prompt)
+
+            # Deduct credits after successful generation (skip for unauthenticated users)
+            if user and user.is_authenticated:
+                actual_tokens = self._estimate_tokens(
+                    prompt + full_content, model)
+                self._deduct_credits(
+                    user, actual_tokens, model, f"Geração de campanha - {post_data.get('name', 'Campaign')}")
+
+            # Parse the AI response into 3 separate contents
+            parsed_content = self._parse_campaign_response(full_content)
+
+            # Create 3 Post objects with their respective PostIdea objects
+            created_posts = []
+            with transaction.atomic():
+                for post_type, content in parsed_content.items():
+                    # Create Post object
+                    post = Post.objects.create(
+                        user=user,
+                        name=f"{post_data.get('name', 'Campaign')} - {post_type.title()}",
+                        objective=post_data.get('objective', ''),
+                        type=post_type,
+                        further_details=post_data.get('further_details', ''),
+                        include_image=post_data.get('include_image', False),
+                        is_automatically_generated=post_data.get(
+                            'is_automatically_generated', False),
+                        is_active=post_data.get('is_active', True)
+                    )
+
+                    # Create PostIdea object
+                    post_idea = PostIdea.objects.create(
+                        post=post,
+                        content=content
+                    )
+
+                    created_posts.append({
+                        'post_id': post.id,
+                        'post_idea_id': post_idea.id,
+                        'type': post_type,
+                        'content': content
+                    })
+
+            return {
+                'posts': created_posts,
+                'ai_provider': provider,
+                'ai_model': model,
+                'status': 'success',
+                'campaign_mode': True
+            }
+
+        except Exception as e:
+            raise Exception(f"Failed to generate campaign content: {str(e)}")
+
+    def _parse_campaign_response(self, full_content: str) -> Dict[str, str]:
+        """
+        Parse the AI response into separate contents for feed, reels, and stories.
+        """
+        parsed = {'feed': '', 'reels': '', 'story': ''}
+
+        try:
+            # Split content by sections
+            content = full_content.strip()
+
+            # Look for Feed content (section 1)
+            feed_start = content.find('🧩 1. Conteúdo de Feed')
+            stories_start = content.find('🎥 2. Ideias de Stories')
+            reels_start = content.find('🎬 3. Ideia de Roteiro para Reels')
+
+            if feed_start != -1:
+                feed_end = stories_start if stories_start != - \
+                    1 else len(content)
+                parsed['feed'] = content[feed_start:feed_end].strip()
+
+            # Look for Stories content (section 2)
+            if stories_start != -1:
+                stories_end = reels_start if reels_start != - \
+                    1 else len(content)
+                parsed['story'] = content[stories_start:stories_end].strip()
+
+            # Look for Reels content (section 3)
+            if reels_start != -1:
+                parsed['reels'] = content[reels_start:].strip()
+
+            # Fallback: if sections not found, try to split by numbered sections
+            if not any(parsed.values()):
+                lines = content.split('\n')
+                current_section = None
+                current_content = []
+
+                for line in lines:
+                    line = line.strip()
+                    if '1.' in line and 'feed' in line.lower():
+                        current_section = 'feed'
+                        current_content = [line]
+                    elif '2.' in line and ('stories' in line.lower() or 'story' in line.lower()):
+                        if current_section == 'feed':
+                            parsed['feed'] = '\n'.join(current_content)
+                        current_section = 'story'
+                        current_content = [line]
+                    elif '3.' in line and 'reel' in line.lower():
+                        if current_section == 'story':
+                            parsed['story'] = '\n'.join(current_content)
+                        current_section = 'reels'
+                        current_content = [line]
+                    elif current_section:
+                        current_content.append(line)
+
+                # Add the last section
+                if current_section == 'reels' and current_content:
+                    parsed['reels'] = '\n'.join(current_content)
+                elif current_section == 'story' and current_content:
+                    parsed['story'] = '\n'.join(current_content)
+                elif current_section == 'feed' and current_content:
+                    parsed['feed'] = '\n'.join(current_content)
+
+            # Ensure all sections have content, use full content as fallback
+            for key in parsed:
+                if not parsed[key].strip():
+                    parsed[key] = full_content
+
+        except Exception:
+            # If parsing fails, return the full content for all types
+            parsed = {
+                'feed': full_content,
+                'reels': full_content,
+                'story': full_content
+            }
+
+        return parsed
 
     def generate_image_for_post(
         self,
@@ -287,6 +438,10 @@ class PostAIService(BaseAIService):
             return self._build_reel_prompt(post_data)
         elif post_type == 'story':
             return self._build_story_prompt(post_data)
+        elif post_type == 'campaign':
+            # Campaign uses full content prompt
+            creator_profile_data = self._get_creator_profile_data()
+            return self._build_automatic_post_prompt(post_data, creator_profile_data)
         else:
             # Default fallback for other types (carousel, live, etc.)
             return self._build_default_prompt(post_data)
@@ -1261,3 +1416,217 @@ Sua missão é editar a imagem já criada, mantendo **100% da identidade visual,
 Texto: Este é um conteúdo gerado automaticamente. Por favor, personalize conforme necessário.
 
 Chamada para ação no post/carrossel: Saiba mais!"""
+
+    def _build_automatic_post_prompt(self, post_data: Dict, creator_profile_data: Dict) -> str:
+        """Build prompt for automatic post creation based on creator profile."""
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+        details = self._build_all_details(further_details)
+
+        prompt = f"""
+        GERAÇÃO DE CAMPANHA COMPLETA (Feed + Stories + Reels + Imagem)
+Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em conteúdos para redes sociais (Instagram, Facebook, LinkedIn, etc.).
+ Sua missão é gerar campanhas completas de conteúdo diário, baseadas nas informações do cliente e do post, incluindo:
+1 post de Feed principal (com copy + sugestão de texto para imagem + prompt de imagem)
+
+
+5 ideias de Stories complementares
+
+
+1 ideia de roteiro de Reels, criativo e coerente com o mesmo tema.
+
+
+
+🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
+Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
+
+
+Profissão: {creator_profile_data.get('profession', 'Não informado')}
+
+
+Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
+
+
+Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
+
+
+Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
+
+
+Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
+
+
+Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
+
+
+Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
+
+
+Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
+
+
+Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
+
+
+Logo: {creator_profile_data.get('logo', 'Não fornecido')}
+
+
+Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
+
+
+Tom de voz: {creator_profile_data.get('voice_tone', 'Profissional')}
+
+
+
+🧠 DADOS DO POST:
+Assunto: {name}
+
+
+Objetivo: {objective}
+
+
+Mais detalhes: {details}
+
+
+
+🎯 OBJETIVO GERAL:
+Gerar uma campanha diária completa e integrada, sempre com base no mesmo tema ({name}), voltada para o objetivo definido ({objective}), conectando Feed, Stories e Reels de forma coesa, estratégica e criativa.
+Essa campanha será parte de uma sequência diária de publicações (uma por dia), portanto, o conteúdo deve ser atemporal, relevante e reaproveitável.
+
+🪶 REGRAS PARA A COPY PRINCIPAL (Feed):
+Estrutura AIDA (Atenção, Interesse, Desejo, Ação):
+
+
+Frase de abertura envolvente e contextualizada.
+
+
+Desenvolvimento com linguagem fluida, empática e natural.
+
+
+Valor ou benefício claro para o leitor.
+
+
+Uma única CTA natural no final.
+
+
+Estilo e tom:
+
+
+Use parágrafos curtos e bem espaçados.
+
+
+Adapte o texto ao tom de voz do cliente ({creator_profile_data.get('voice_tone', 'Profissional')}).
+
+
+Linguagem adequada ao público-alvo, faixa etária e localização.
+
+
+Use em média 5 emojis ao longo da copy, distribuídos de forma natural.
+
+
+Traga expressões e referências atuais relacionadas ao tema.
+
+
+Personalização:
+
+
+Conecte o tema à realidade e valores do negócio ({creator_profile_data.get('business_name', 'seu negócio')}).
+
+
+Adapte exemplos, situações e vocabulário conforme o nicho e público-alvo.
+
+
+O texto deve ser fluido e pronto para publicação.
+
+
+
+📦 FORMATO DE SAÍDA:
+Retorne o conteúdo neste formato exato:
+
+🧩 1. Conteúdo de Feed (Copy Principal):
+[Texto completo e pronto para o Feed, com média de 5 emojis bem posicionados e linguagem natural.]
+Como sugestão para escrever na imagem:
+Título: [Curto e chamativo — até 8 palavras]
+
+
+Subtítulo: [Frase complementar que gere curiosidade]
+
+
+CTA: [Ação breve e coerente com o objetivo]
+
+
+Descrição para gerar a imagem (sem texto):
+ Descreva a imagem ideal para o post, levando em conta:
+Paleta de cores ({creator_profile_data.get('color_palette', 'Não definida')})
+
+
+Público-alvo ({creator_profile_data.get('target_gender', 'Não informado')}, {creator_profile_data.get('target_age_range', 'Não informado')}, {creator_profile_data.get('target_location', 'Não informado')})
+
+
+Nicho ({creator_profile_data.get('specialization', 'Não informado')})
+
+
+Emoção e tom do texto ({creator_profile_data.get('voice_tone', 'Profissional')})
+
+
+Cores, iluminação e ambientação condizentes com o negócio ({creator_profile_data.get('business_name', 'seu negócio')})
+
+
+A imagem não deve conter texto, apenas elementos visuais que reforcem a mensagem principal.
+
+
+
+🎥 2. Ideias de Stories (5 sugestões):
+Gere 5 ideias de Stories práticos e complementares ao tema do post, que o cliente possa gravar ou publicar ao longo do dia.
+ As ideias devem:
+Manter coerência com o conteúdo do Feed.
+
+
+Alternar entre bastidores, enquetes, perguntas, bastidores, reflexões e provas sociais.
+
+
+Ser simples de executar (sem precisar de edição complexa).
+
+
+Estimular interação e engajamento rápido.
+
+
+Exemplo de formato de saída:
+[Ideia 1]
+
+
+[Ideia 2]
+
+
+[Ideia 3]
+
+
+[Ideia 4]
+
+
+[Ideia 5]
+
+
+
+🎬 3. Ideia de Roteiro para Reels:
+Crie 1 roteiro curto de Reels (duração entre 20 e 40 segundos), coerente com o mesmo tema do post e que amplifique a mensagem.
+Estrutura recomendada:
+Abertura (gancho em 3s): Comece com algo que prenda a atenção de forma natural.
+
+
+Desenvolvimento: Entregue um insight, dica ou reflexão central.
+
+
+Fechamento (CTA): Convide o público para agir (curtir, comentar, salvar, compartilhar, seguir).
+
+
+O roteiro deve estar alinhado ao tom de voz e estilo do cliente, e pode sugerir ambientação, tipo de cena ou fala.
+
+📅 CONTEXTO DE USO:
+Esse prompt será utilizado diariamente para gerar uma nova campanha de conteúdo por dia, com base no assunto informado pelo cliente.
+ As campanhas devem ser originais, criativas e complementares, mantendo coerência com o histórico do negócio e as tendências atuais do nicho.
+
+
+        """
+        return prompt.strip()

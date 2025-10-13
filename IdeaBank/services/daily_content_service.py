@@ -191,18 +191,12 @@ class DailyContentService:
     async def _process_single_user_async(self, user_id: int) -> Dict[str, Any]:
         """Processa geração de conteúdo para um único usuário."""
         try:
-            # mailjet = MailService()
-            # subject = "Seu conteúdo diário foi gerado!"
             user_data = await self._get_user_data(user_id)
 
             if not user_data:
                 return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
 
             user, creator_profile = user_data
-            # html_content = f"""<p>Olá {user.first_name},</p>
-            # <p>Seu conteúdo diário foi gerado com sucesso. Aqui estão os detalhes:</p>
-            # <ul>
-            # """
 
             validation_result = await self._validate_user_eligibility(user)
             logger.info(
@@ -212,26 +206,39 @@ class DailyContentService:
                         'status': 'skipped',
                         'reason': validation_result['reason']}
 
-            all_content_results = []
-            for post_type in ['feed', 'story', 'reels']:
-                result = await self._generate_content_for_user(user, creator_profile, post_type)
-                if result:
-                    all_content_results.append(result)
-                    # html_content += f"<li><strong>Post ID:</strong> {result['post_id']}<br><strong>Conteúdo:</strong> {result['content']}</li>"
-                    # logger.info(
-                    #     f"Conteúdo gerado para usuário {user.id} - {user.username}: Post ID {result['post_id']}")
+            # Generate campaign content (creates feed, reels, and story posts)
+            post_objective = random.choice(PostObjective.choices)
+            result = await self._generate_content_for_user(user, creator_profile, 'campaign', post_objective)
+
+            if result:
+                # Handle campaign mode result
+                if result.get('campaign_mode', False):
+                    posts_created = result.get('posts', [])
+                    logger.info(
+                        f"Campanha gerada para usuário {user.id} - {user.username}: {len(posts_created)} posts criados")
+                    return {
+                        'user_id': user_id,
+                        'user': user.first_name,
+                        'status': 'success',
+                        'content': posts_created,
+                        'campaign_mode': True
+                    }
                 else:
-                    logger.warning(
-                        f"Nenhum conteúdo gerado para o usuário {user.id} - {user.username} para o tipo {post_type}")
-
-            # html_content += """
-            # </ul>
-            # <p>Obrigado por usar nosso serviço!</p>
-            # """
-
-            # mailjet.send_email(user.email, subject, html_content)
-
-            return {'user_id': user_id, 'user': user.first_name, 'status': 'success', 'content': all_content_results}
+                    # Regular single post mode
+                    return {
+                        'user_id': user_id,
+                        'user': user.first_name,
+                        'status': 'success',
+                        'content': [result]
+                    }
+            else:
+                logger.warning(
+                    f"Nenhum conteúdo gerado para o usuário {user.id} - {user.username}")
+                return {
+                    'user_id': user_id,
+                    'status': 'failed',
+                    'reason': 'no_content_generated'
+                }
 
         except Exception as e:
             logger.error(f"Erro ao processar usuário {user_id}: {str(e)}")
@@ -273,12 +280,12 @@ class DailyContentService:
         return {'status': 'eligible'}
 
     @sync_to_async
-    def _generate_content_for_user(self, user, creator_profile, post_type) -> Dict[str, Any]:
+    def _generate_content_for_user(self, user, creator_profile, post_type, post_objective) -> Dict[str, Any]:
         """Generate content for a single user."""
         try:
             post_data = {
                 'name': f"Conteúdo diário para {user.username}",
-                'objective': random.choice(PostObjective.choices),
+                'objective': post_objective,
                 'type': post_type,
                 'further_details': f"Conteúdo personalizado para {creator_profile.profession}, {creator_profile.specialization}",
                 'include_image': False,
@@ -288,30 +295,47 @@ class DailyContentService:
                 f"Gerando conteúdo para usuário {user.id} - {user.username}"
             )
             with transaction.atomic():
-                post = Post.objects.create(
-                    user=user,
-                    name=post_data['name'],
-                    objective=post_data['objective'],
-                    type=post_data['type'],
-                    further_details=post_data['further_details'],
-                    include_image=post_data['include_image'],
-                    is_automatically_generated=True,
-                    is_active=False
-                )
+                # Add campaign-specific data to post_data
+                post_data.update({
+                    'is_automatically_generated': True,
+                    'is_active': False
+                })
 
                 generated_content = self.ai_service.generate_post_content(
                     user, post_data=post_data)
-                post_idea = PostIdea.objects.create(
-                    post=post,
-                    content=generated_content['content']
-                )
 
-                return {
-                    'post_id': post.id,
-                    'post_idea_id': post_idea.id,
-                    'content': generated_content['content'],
-                    'generated_at': timezone.now().isoformat()
-                }
+                # Handle campaign mode (creates multiple posts) vs regular mode
+                if generated_content.get('campaign_mode', False):
+                    # Campaign mode - posts were already created by PostAIService
+                    return {
+                        'posts': generated_content['posts'],
+                        'campaign_mode': True,
+                        'generated_at': timezone.now().isoformat()
+                    }
+                else:
+                    # Regular mode - create Post and PostIdea manually
+                    post = Post.objects.create(
+                        user=user,
+                        name=post_data['name'],
+                        objective=post_data['objective'],
+                        type=post_data['type'],
+                        further_details=post_data['further_details'],
+                        include_image=post_data['include_image'],
+                        is_automatically_generated=True,
+                        is_active=False
+                    )
+
+                    post_idea = PostIdea.objects.create(
+                        post=post,
+                        content=generated_content['content']
+                    )
+
+                    return {
+                        'post_id': post.id,
+                        'post_idea_id': post_idea.id,
+                        'content': generated_content['content'],
+                        'generated_at': timezone.now().isoformat()
+                    }
         except Exception as e:
             logger.error(
                 f"Erro ao gerar conteúdo para o usuário {user.id}: {str(e)}")
