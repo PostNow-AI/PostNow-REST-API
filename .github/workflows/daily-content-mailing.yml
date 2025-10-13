@@ -11,13 +11,13 @@ jobs:
     environment: Production
     steps:
       - name: Debug Url
-        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/cron/mail-automatic-posts/"
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/mail-automatic-posts/"
 
       - name: Call api for mailing
         run: |
           echo "Mailing automatically generated content"
           curl -X GET \
-            "${{ secrets.VERCEL_API_URL}}/api/v1/ideabank/cron/cron/mail-automatic-posts/" \
+            "${{ secrets.VERCEL_API_URL}}/api/v1/ideabank/cron/mail-automatic-posts/" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             -w "HTTP Status: %{http_code}\n" \
