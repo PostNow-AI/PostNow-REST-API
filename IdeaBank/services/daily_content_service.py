@@ -94,7 +94,6 @@ class DailyContentService:
         """Recupera todos os posts automáticos gerados para usuários."""
         return await sync_to_async(list)(
             Post.objects.filter(
-                is_automatically_generated=True,
                 is_active=False
             ).select_related('user').values(
                 'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content'
