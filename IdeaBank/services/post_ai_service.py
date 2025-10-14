@@ -132,6 +132,9 @@ class PostAIService(BaseAIService):
                     try:
                         image_url = self._generate_image_from_description(
                             ai_service, image_description, user, post_data, content)
+                        # Remove image description from content after successful generation
+                        content = self._remove_image_description_from_content(
+                            content, image_description)
                     except Exception as e:
                         # Log image generation error but don't fail the entire request
                         print(
@@ -192,6 +195,8 @@ class PostAIService(BaseAIService):
             created_posts = []
             with transaction.atomic():
                 for post_type, content in parsed_content.items():
+                    # Clean and validate HTML for each content section
+                    content = self._clean_and_validate_html(content)
                     # Create Post object
                     post = Post.objects.create(
                         user=user,
@@ -214,6 +219,9 @@ class PostAIService(BaseAIService):
                             try:
                                 image_url = self._generate_image_from_description(
                                     ai_service, image_description, user, post_data, content)
+                                # Remove image description from content after successful generation
+                                content = self._remove_image_description_from_content(
+                                    content, image_description)
                             except Exception as e:
                                 # Log image generation error but don't fail the entire request
                                 print(
@@ -315,13 +323,17 @@ class PostAIService(BaseAIService):
             for key in parsed:
                 if not parsed[key].strip():
                     parsed[key] = full_content
+                else:
+                    # Clean and validate HTML for each section
+                    parsed[key] = self._clean_and_validate_html(parsed[key])
 
         except Exception:
             # If parsing fails, return the full content for all types
+            cleaned_full_content = self._clean_and_validate_html(full_content)
             parsed = {
-                'feed': full_content,
-                'reels': full_content,
-                'story': full_content
+                'feed': cleaned_full_content,
+                'reels': cleaned_full_content,
+                'story': cleaned_full_content
             }
 
         return parsed
@@ -467,6 +479,9 @@ class PostAIService(BaseAIService):
         try:
             content = self._generate_content_with_ai(ai_service, prompt)
 
+            # Clean and validate HTML content
+            content = self._clean_and_validate_html(content)
+
             # Deduct credits after successful regeneration (skip for unauthenticated users)
             if user and user.is_authenticated:
                 actual_tokens = self._estimate_tokens(prompt + content, model)
@@ -481,6 +496,92 @@ class PostAIService(BaseAIService):
         except Exception as e:
             raise Exception(f"Failed to regenerate content: {str(e)}")
 
+    def _clean_and_validate_html(self, content: str) -> str:
+        """
+        Clean and validate HTML content to ensure it's browser-compatible.
+        """
+        import re
+
+        try:
+            # Check if content contains HTML
+            if not re.search(r'<[^>]+>', content):
+                return content  # Return as-is if no HTML tags found
+
+            # Fix common HTML issues
+            cleaned_content = content
+
+            # 1. Ensure proper HTML structure - wrap content if it doesn't have a root element
+            if not re.search(r'^\s*<(html|body|div|article|section)', cleaned_content, re.IGNORECASE):
+                # Check if we have block-level elements that need wrapping
+                if re.search(r'<(h[1-6]|p|div|ul|ol|li|blockquote)', cleaned_content, re.IGNORECASE):
+                    cleaned_content = f'<div>{cleaned_content}</div>'
+
+            # 2. Fix unclosed tags for common HTML elements
+            # Match opening tags that might not be properly closed
+            opening_tags = re.findall(
+                r'<(\w+)(?:\s[^>]*)?>(?![^<]*</\1>)', cleaned_content, re.IGNORECASE)
+            self_closing_tags = {'br', 'hr', 'img', 'input', 'meta', 'link',
+                                 'area', 'base', 'col', 'embed', 'source', 'track', 'wbr'}
+
+            for tag in opening_tags:
+                if tag.lower() not in self_closing_tags:
+                    # Check if the tag is actually unclosed by counting occurrences
+                    open_count = len(re.findall(
+                        rf'<{tag}(?:\s[^>]*)?>(?!</)', cleaned_content, re.IGNORECASE))
+                    close_count = len(re.findall(
+                        rf'</{tag}>', cleaned_content, re.IGNORECASE))
+
+                    if open_count > close_count:
+                        # Add missing closing tags at the end
+                        for _ in range(open_count - close_count):
+                            cleaned_content += f'</{tag}>'
+
+            # 3. Fix malformed attributes (remove quotes inside attribute values)
+            cleaned_content = re.sub(
+                r'(\w+="[^"]*)"([^"]*")', r'\1\2', cleaned_content)
+
+            # 4. Ensure proper nesting - fix common nesting issues
+            # Fix p tags containing block elements (browsers auto-close p tags before block elements)
+            cleaned_content = re.sub(r'<p([^>]*)>([^<]*)<(div|h[1-6]|ul|ol|blockquote)',
+                                     r'<p\1>\2</p><\3', cleaned_content, flags=re.IGNORECASE)
+
+            # 5. Remove or escape potentially problematic characters
+            # Replace smart quotes with regular quotes
+            cleaned_content = cleaned_content.replace(
+                '"', '"').replace('"', '"')
+            cleaned_content = cleaned_content.replace(
+                ''', "'").replace(''', "'")
+
+            # 6. Validate and fix common HTML entities
+            common_entities = {
+                '&amp;': '&',
+                '&lt;': '<',
+                '&gt;': '>',
+                '&quot;': '"',
+                '&apos;': "'"
+            }
+
+            # First decode entities, then re-encode only the necessary ones
+            for entity, char in common_entities.items():
+                cleaned_content = cleaned_content.replace(entity, char)
+
+            # Don't over-encode HTML content - browsers handle this well
+            # Just ensure dangerous characters in text content are properly handled
+            # Remove any double-encoded entities first
+            cleaned_content = re.sub(r'&amp;(\w+);', r'&\1;', cleaned_content)
+            cleaned_content = re.sub(
+                r'&lt;(\w+)&gt;', r'<\1>', cleaned_content)
+
+            # 7. Ensure proper line breaks for readability
+            cleaned_content = re.sub(r'>\s*\n\s*<', '>\n<', cleaned_content)
+
+            return cleaned_content.strip()
+
+        except Exception as e:
+            print(f"HTML cleaning error: {str(e)}")
+            # If cleaning fails, return original content
+            return content
+
     def _generate_content_with_ai(self, ai_service, prompt: str) -> str:
         """Generate content using the AI service with direct API request."""
         try:
@@ -489,7 +590,9 @@ class PostAIService(BaseAIService):
                 prompt, ai_service.model_name)
 
             if response_text and response_text.strip():
-                return response_text.strip()
+                cleaned_content = self._clean_and_validate_html(
+                    response_text.strip())
+                return cleaned_content
             else:
                 raise Exception("Empty response from AI service")
 
@@ -555,6 +658,86 @@ Chamada para ação no post/carrossel: Saiba mais!"""
 
         except Exception:
             return ""
+
+    def _remove_image_description_from_content(self, content: str, image_description: str) -> str:
+        """
+        Remove the image description section from the content after successful image generation.
+        """
+        try:
+            if not image_description or not image_description.strip():
+                return content
+
+            content_lower = content.lower()
+            image_desc_lower = image_description.lower()
+
+            # Look for common patterns that precede the image description
+            patterns = [
+                "descrição para gerar a imagem",
+                "descrição da imagem",
+                "imagem:",
+                "visual:",
+                "arte:"
+            ]
+
+            for pattern in patterns:
+                pattern_start = content_lower.find(pattern)
+                if pattern_start != -1:
+                    # Find where the image description starts in the original content
+                    desc_section_start = content.find(":", pattern_start)
+                    if desc_section_start != -1:
+                        # Find the end of the description section
+                        remaining_content = content[desc_section_start + 1:]
+
+                        # Look for section endings
+                        end_markers = ["\n\n", "###", "##", "---", "***"]
+                        end_pos = len(remaining_content)
+
+                        for marker in end_markers:
+                            marker_pos = remaining_content.find(marker)
+                            if marker_pos != -1 and marker_pos < end_pos:
+                                end_pos = marker_pos
+
+                        # Extract the description section
+                        extracted_description = remaining_content[:end_pos].strip(
+                        )
+
+                        # Check if this matches our image description (fuzzy match)
+                        if (extracted_description.lower() in image_desc_lower or
+                            image_desc_lower in extracted_description.lower() or
+                                len(set(extracted_description.lower().split()) & set(image_desc_lower.split())) > 3):
+
+                            # Remove the entire section from pattern to end
+                            section_end = desc_section_start + 1 + end_pos
+                            # Also remove the pattern label
+                            pattern_actual_start = content.find(
+                                pattern, pattern_start - 20, pattern_start + 20)
+                            if pattern_actual_start == -1:
+                                pattern_actual_start = pattern_start
+
+                            # Remove from pattern start to section end, including trailing whitespace
+                            cleaned_content = (content[:pattern_actual_start] +
+                                               content[section_end:]).strip()
+
+                            # Clean up any double line breaks
+                            cleaned_content = cleaned_content.replace(
+                                '\n\n\n', '\n\n')
+
+                            return cleaned_content
+
+            # Fallback: try to remove the exact description text
+            if image_description in content:
+                cleaned_content = content.replace(
+                    image_description, "").strip()
+                # Clean up any remaining artifacts
+                cleaned_content = cleaned_content.replace('\n\n\n', '\n\n')
+                return cleaned_content
+
+            # If no pattern matches, return original content
+            return content
+
+        except Exception as e:
+            print(f"Error removing image description: {str(e)}")
+            return content
 
     def _generate_image_from_description(self, ai_service, image_description: str, user, post_data: Dict, content: str) -> str:
         """

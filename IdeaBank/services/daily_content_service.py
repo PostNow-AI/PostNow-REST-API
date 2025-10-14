@@ -70,25 +70,251 @@ class DailyContentService:
         try:
             mailjet = MailService()
             subject = "Seu conteúdo diário foi gerado!"
-            html_content = f"""<p>Olá {user.first_name},</p>
-            <p>Seu conteúdo diário foi gerado com sucesso. Aqui estão os detalhes:</p>
-            <ul>
+            
+            # Collect images for attachment and generate content IDs
+            attachments = []
+            image_mappings = {}  # Map post_id to content_id for inline images
+            
+            logger.info(f"Processing {len(posts)} posts for user {user.id}")
+            
+            for post in posts:
+                logger.info(f"Post {post['id']}: type={post['type']}, has_image={bool(post.get('ideas__image_url'))}")
+                if post['type'].lower() == 'feed' and post.get('ideas__image_url'):
+                    image_url = post['ideas__image_url']
+                    logger.info(f"Adding image attachment for post {post['id']}: {image_url}")
+                    
+                    # Generate unique content ID for this image
+                    content_id = f"image_post_{post['id']}"
+                    image_mappings[post['id']] = content_id
+                    
+                    # Determine content type and extension from image URL
+                    if image_url.startswith('data:image/'):
+                        # Extract content type from data URL
+                        content_type = image_url.split(';')[0].replace('data:', '')
+                        extension = 'png' if 'png' in content_type else 'jpg'
+                    else:
+                        # Default for regular URLs
+                        content_type = 'image/jpeg'
+                        extension = 'jpg'
+                    
+                    # Add to attachments list
+                    attachments.append({
+                        'url': image_url,
+                        'filename': f"post_image_{post['id']}.{extension}",
+                        'content_type': content_type
+                    })
+            
+            logger.info(f"Total attachments to process: {len(attachments)}")
+            
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Seu Conteúdo Diário - PostNow</title>
+                <style>
+                    body {{
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                        line-height: 1.6;
+                        color: #333;
+                        max-width: 800px;
+                        margin: 0 auto;
+                        padding: 20px;
+                        background-color: #f8f9fa;
+                    }}
+                    .container {{
+                        background-color: white;
+                        border-radius: 12px;
+                        padding: 30px;
+                        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                    }}
+                    .header {{
+                        text-align: center;
+                        margin-bottom: 30px;
+                        padding-bottom: 20px;
+                        border-bottom: 2px solid #e9ecef;
+                    }}
+                    .header h1 {{
+                        color: #2c3e50;
+                        font-size: 28px;
+                        margin: 0;
+                        font-weight: 600;
+                    }}
+                    .greeting {{
+                        font-size: 18px;
+                        color: #495057;
+                        margin-bottom: 20px;
+                    }}
+                    .post-item {{
+                        margin-bottom: 30px;
+                        border: 1px solid #e0e0e0;
+                        border-radius: 12px;
+                        padding: 25px;
+                        background-color: #f8f9fa;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                    }}
+                    .post-header {{
+                        font-size: 20px;
+                        font-weight: 600;
+                        color: #2c3e50;
+                        margin-bottom: 15px;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    }}
+                    .post-objective {{
+                        font-size: 14px;
+                        color: #6c757d;
+                        margin-bottom: 15px;
+                        font-style: italic;
+                    }}
+                    .post-content {{
+                        margin: 15px 0;
+                        padding: 20px;
+                        background-color: white;
+                        border-left: 4px solid #007bff;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        line-height: 1.7;
+                    }}
+                    .post-image {{
+                        margin: 20px 0;
+                        text-align: center;
+                        background-color: white;
+                        padding: 20px;
+                        border-radius: 8px;
+                    }}
+                    .post-image h4 {{
+                        margin-top: 0;
+                        margin-bottom: 15px;
+                        color: #2c3e50;
+                        font-size: 16px;
+                    }}
+                    .post-image img {{
+                        max-width: 100%;
+                        max-height: 400px;
+                        height: auto;
+                        border-radius: 8px;
+                        border: 2px solid #e9ecef;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+                        display: block;
+                        margin: 0 auto;
+                    }}
+                    .no-image {{
+                        padding: 15px;
+                        background-color: #f1f3f4;
+                        border-radius: 8px;
+                        color: #6c757d;
+                        font-style: italic;
+                        text-align: center;
+                    }}
+                    .footer {{
+                        background-color: #f8f9fa;
+                        padding: 25px;
+                        text-align: center;
+                        border-top: 2px solid #e9ecef;
+                        margin-top: 30px;
+                        border-radius: 8px;
+                    }}
+                    .footer p {{
+                        margin: 10px 0;
+                        color: #6c757d;
+                    }}
+                    @media (max-width: 600px) {{
+                        body {{ padding: 10px; }}
+                        .container {{ padding: 20px; }}
+                        .header h1 {{ font-size: 24px; }}
+                        .post-header {{ font-size: 18px; }}
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>� PostNow</h1>
+                    </div>
+                    
+                    <div class="greeting">
+                        Olá <strong>{user.first_name}</strong>! 👋
+                    </div>
+                    
+                    <p>Seu conteúdo diário foi gerado com sucesso! Aqui estão os posts criados para você:</p>
             """
 
             for post in posts:
-                html_content += f"<li><strong>Post ID:</strong> {post['id']}<br><strong>Conteúdo:</strong> {post['ideas__content']}</li>"
+                # Get post type emoji
+                type_emoji = {
+                    'feed': '📝',
+                    'reels': '🎬',
+                    'story': '📱'
+                }.get(post['type'].lower(), '📄')
+
+                html_content += f"""
+                    <div class="post-item">
+                        <div class="post-header">
+                            <span>{type_emoji}</span>
+                            <span>{post['type'].title()} - Post #{post['id']}</span>
+                        </div>
+                        <div class="post-objective">
+                            <strong>Objetivo:</strong> {post.get('objective', 'Não especificado')}
+                        </div>
+                        
+                        <div class="post-content">
+                            {post['ideas__content']}
+                        </div>
+                """
+
+                # Add embedded image for feed posts only
+                if post['type'].lower() == 'feed' and post.get('ideas__image_url'):
+                    content_id = image_mappings.get(post['id'])
+                    if content_id:
+                        html_content += f"""
+                        <div class="post-image">
+                            <h4>🖼️ Imagem Gerada:</h4>
+                            <img src="cid:{content_id}" 
+                                 alt="Imagem do post {post['id']}" 
+                                 style="max-width: 100%; height: auto;">
+                        </div>
+                        """
+                elif post['type'].lower() == 'feed':
+                    html_content += """
+                        <div class="no-image">
+                            📷 Imagem não foi gerada para este post
+                        </div>
+                    """
+
+                html_content += "</div>"
 
             html_content += """
-            </ul>
-            <p>Obrigado por usar nosso serviço!</p>
+                    <div class="footer">
+                        <p>🚀 <strong>Obrigado por usar PostNow!</strong></p>
+                        <p><small>Este é um e-mail automático. Para dúvidas, entre em contato conosco.</small></p>
+                    </div>
+                </div>
+            </body>
+            </html>
             """
 
-            mailjet.send_email(user.email, subject, html_content)
-            logger.info(
-                f"E-mail enviado para o usuário {user.id} - {user.username}")
+            # Send email with attachments
+            status_code, response = mailjet.send_email(user.email, subject, html_content, attachments if attachments else None)
+            
+            if status_code and status_code == 200:
+                logger.info(f"E-mail enviado com sucesso para o usuário {user.id} - {user.username} com {len(attachments)} imagens anexadas")
+            else:
+                logger.error(f"Falha ao enviar e-mail para o usuário {user.id}: Status {status_code}, Response: {response}")
+                # Try sending without attachments as fallback
+                if attachments:
+                    logger.info(f"Tentando reenviar e-mail sem anexos para o usuário {user.id}")
+                    fallback_html = html_content.replace('src="cid:', 'src="#broken-image" data-original-cid="')
+                    fallback_status, fallback_response = mailjet.send_email(user.email, subject, fallback_html, None)
+                    if fallback_status == 200:
+                        logger.info(f"E-mail de fallback enviado com sucesso para o usuário {user.id}")
+                    else:
+                        logger.error(f"Falha no envio de fallback para o usuário {user.id}: {fallback_response}")
+            
         except Exception as e:
-            logger.error(
-                f"Erro ao enviar e-mail para o usuário {user.id}: {str(e)}")
+            logger.error(f"Erro ao enviar e-mail para o usuário {user.id}: {str(e)}")
 
     async def fetch_users_automatic_posts(self) -> List[Dict[str, Any]]:
         """Recupera todos os posts automáticos gerados para usuários."""
@@ -96,7 +322,7 @@ class DailyContentService:
             Post.objects.filter(
                 is_active=False
             ).select_related('user').values(
-                'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content'
+                'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content', 'ideas__image_url'
             )
         )
 
@@ -219,7 +445,6 @@ class DailyContentService:
                         'user_id': user_id,
                         'user': user.first_name,
                         'status': 'success',
-                        'content': posts_created,
                         'campaign_mode': True
                     }
                 else:
@@ -228,7 +453,6 @@ class DailyContentService:
                         'user_id': user_id,
                         'user': user.first_name,
                         'status': 'success',
-                        'content': [result]
                     }
             else:
                 logger.warning(
@@ -412,5 +636,6 @@ class DailyContentService:
             User.objects.filter(
                 usersubscription__status='active',
                 is_active=True,
+                email='msallesblanco@gmail.com'
             ).distinct().values('id', 'email', 'username')[offset:offset + limit]
         )
