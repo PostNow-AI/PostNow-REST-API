@@ -73,7 +73,7 @@ class DailyContentService:
             subject = "Seu conteúdo diário foi gerado!"
 
             # Extract user name
-            user_name = user.first_name or user.username
+            user_name = user.first_name
 
             # Initialize variables for different post types
             feed_image = None
@@ -432,6 +432,5 @@ class DailyContentService:
             User.objects.filter(
                 usersubscription__status='active',
                 is_active=True,
-                email='msallesblanco@gmail.com'
             ).distinct().values('id', 'email', 'username')[offset:offset + limit]
         )
