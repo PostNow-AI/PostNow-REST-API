@@ -577,8 +577,7 @@ class PostAIService(BaseAIService):
 
             return cleaned_content.strip()
 
-        except Exception as e:
-            print(f"HTML cleaning error: {str(e)}")
+        except Exception:
             # If cleaning fails, return original content
             return content
 
@@ -735,8 +734,7 @@ Chamada para ação no post/carrossel: Saiba mais!"""
             # If no pattern matches, return original content
             return content
 
-        except Exception as e:
-            print(f"Error removing image description: {str(e)}")
+        except Exception:
             return content
 
     def _generate_image_from_description(self, ai_service, image_description: str, user, post_data: Dict, content: str) -> str:

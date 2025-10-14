@@ -168,15 +168,11 @@ class GeminiService(BaseAIService):
             overlay_text = self._extract_text_from_post_data(post_data)
 
             if not overlay_text:
-                print("⚠️ No text found in post data")
                 # Return original image as bytes
                 return extract_base64_image(image)
 
-            print(f"📝 Extracted text: {overlay_text}")
-
             # Get user's color palette
             text_color = self._get_user_text_color(user)
-            print(f"🎨 Using text color: {text_color}")
 
             # Convert image from data URL to PIL Image
             image_bytes = extract_base64_image(image)
@@ -191,8 +187,7 @@ class GeminiService(BaseAIService):
             modified_image.save(buffer, format='PNG')
             return buffer.getvalue()
 
-        except Exception as e:
-            print(f"❌ Error in _generate_text: {str(e)}")
+        except Exception:
             # Return original image as fallback
             try:
                 return extract_base64_image(image)
@@ -590,7 +585,7 @@ class GeminiService(BaseAIService):
     def _enhance_image_prompt(self, base_prompt: str, post_data: dict = None, idea_content: str = None) -> str:
         """Enhance the image generation prompt with post data and idea content."""
         enhanced_parts = [
-            f"Gere uma imagem de alta qualidade com base nesta descrição: {base_prompt}. Nao ADICIONE NENHUM TEXTO NA IMAGEM."]
+            f"Gere uma imagem de alta qualidade com base nesta descrição: {base_prompt}. NÃO ADICIONE NENHUM TEXTO NA IMAGEM."]
 
         if post_data:
             if post_data.get('objective'):

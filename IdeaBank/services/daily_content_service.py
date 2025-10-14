@@ -12,6 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 from IdeaBank.models import Post, PostIdea, PostObjective
 from IdeaBank.services.mail_service import MailService
+from IdeaBank.utils.mail_templates.daily_content import daily_content_template
 
 from .post_ai_service import PostAIService
 
@@ -70,251 +71,78 @@ class DailyContentService:
         try:
             mailjet = MailService()
             subject = "Seu conteúdo diário foi gerado!"
-            
-            # Collect images for attachment and generate content IDs
+
+            # Extract user name
+            user_name = user.first_name or user.username
+
+            # Initialize variables for different post types
+            feed_image = None
+            feed_text = None
+            reels_text = None
+            story_text = None
+
+            # Extract content by post type
+            for post in posts:
+                post_type = post['type'].lower()
+                post_content = post.get('ideas__content', '')
+
+                if post_type == 'feed':
+                    feed_text = post_content
+                    if post.get('ideas__image_url'):
+                        feed_image = post['ideas__image_url']
+                elif post_type == 'reels':
+                    reels_text = post_content
+                elif post_type == 'story':
+                    story_text = post_content
+
+            # Prepare attachments for inline images
             attachments = []
-            image_mappings = {}  # Map post_id to content_id for inline images
-            
-            logger.info(f"Processing {len(posts)} posts for user {user.id}")
-            
-            for post in posts:
-                logger.info(f"Post {post['id']}: type={post['type']}, has_image={bool(post.get('ideas__image_url'))}")
-                if post['type'].lower() == 'feed' and post.get('ideas__image_url'):
-                    image_url = post['ideas__image_url']
-                    logger.info(f"Adding image attachment for post {post['id']}: {image_url}")
-                    
-                    # Generate unique content ID for this image
-                    content_id = f"image_post_{post['id']}"
-                    image_mappings[post['id']] = content_id
-                    
-                    # Determine content type and extension from image URL
-                    if image_url.startswith('data:image/'):
-                        # Extract content type from data URL
-                        content_type = image_url.split(';')[0].replace('data:', '')
-                        extension = 'png' if 'png' in content_type else 'jpg'
-                    else:
-                        # Default for regular URLs
-                        content_type = 'image/jpeg'
-                        extension = 'jpg'
-                    
-                    # Add to attachments list
+
+            # Add feed image attachment if available
+            if feed_image:
+                if feed_image.startswith('data:image/'):
+                    # Handle base64 images
+                    content_type = feed_image.split(
+                        ';')[0].replace('data:', '')
+                    extension = 'png' if 'png' in content_type else 'jpg'
                     attachments.append({
-                        'url': image_url,
-                        'filename': f"post_image_{post['id']}.{extension}",
-                        'content_type': content_type
+                        'url': feed_image,
+                        'filename': f'feed_image.{extension}',
+                        'content_type': content_type,
+                        'content_id': 'feed_image'
                     })
-            
-            logger.info(f"Total attachments to process: {len(attachments)}")
-            
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Seu Conteúdo Diário - PostNow</title>
-                <style>
-                    body {{
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-                        line-height: 1.6;
-                        color: #333;
-                        max-width: 800px;
-                        margin: 0 auto;
-                        padding: 20px;
-                        background-color: #f8f9fa;
-                    }}
-                    .container {{
-                        background-color: white;
-                        border-radius: 12px;
-                        padding: 30px;
-                        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                    }}
-                    .header {{
-                        text-align: center;
-                        margin-bottom: 30px;
-                        padding-bottom: 20px;
-                        border-bottom: 2px solid #e9ecef;
-                    }}
-                    .header h1 {{
-                        color: #2c3e50;
-                        font-size: 28px;
-                        margin: 0;
-                        font-weight: 600;
-                    }}
-                    .greeting {{
-                        font-size: 18px;
-                        color: #495057;
-                        margin-bottom: 20px;
-                    }}
-                    .post-item {{
-                        margin-bottom: 30px;
-                        border: 1px solid #e0e0e0;
-                        border-radius: 12px;
-                        padding: 25px;
-                        background-color: #f8f9fa;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-                    }}
-                    .post-header {{
-                        font-size: 20px;
-                        font-weight: 600;
-                        color: #2c3e50;
-                        margin-bottom: 15px;
-                        display: flex;
-                        align-items: center;
-                        gap: 10px;
-                    }}
-                    .post-objective {{
-                        font-size: 14px;
-                        color: #6c757d;
-                        margin-bottom: 15px;
-                        font-style: italic;
-                    }}
-                    .post-content {{
-                        margin: 15px 0;
-                        padding: 20px;
-                        background-color: white;
-                        border-left: 4px solid #007bff;
-                        border-radius: 8px;
-                        font-size: 16px;
-                        line-height: 1.7;
-                    }}
-                    .post-image {{
-                        margin: 20px 0;
-                        text-align: center;
-                        background-color: white;
-                        padding: 20px;
-                        border-radius: 8px;
-                    }}
-                    .post-image h4 {{
-                        margin-top: 0;
-                        margin-bottom: 15px;
-                        color: #2c3e50;
-                        font-size: 16px;
-                    }}
-                    .post-image img {{
-                        max-width: 100%;
-                        max-height: 400px;
-                        height: auto;
-                        border-radius: 8px;
-                        border: 2px solid #e9ecef;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-                        display: block;
-                        margin: 0 auto;
-                    }}
-                    .no-image {{
-                        padding: 15px;
-                        background-color: #f1f3f4;
-                        border-radius: 8px;
-                        color: #6c757d;
-                        font-style: italic;
-                        text-align: center;
-                    }}
-                    .footer {{
-                        background-color: #f8f9fa;
-                        padding: 25px;
-                        text-align: center;
-                        border-top: 2px solid #e9ecef;
-                        margin-top: 30px;
-                        border-radius: 8px;
-                    }}
-                    .footer p {{
-                        margin: 10px 0;
-                        color: #6c757d;
-                    }}
-                    @media (max-width: 600px) {{
-                        body {{ padding: 10px; }}
-                        .container {{ padding: 20px; }}
-                        .header h1 {{ font-size: 24px; }}
-                        .post-header {{ font-size: 18px; }}
-                    }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="header">
-                        <h1>� PostNow</h1>
-                    </div>
-                    
-                    <div class="greeting">
-                        Olá <strong>{user.first_name}</strong>! 👋
-                    </div>
-                    
-                    <p>Seu conteúdo diário foi gerado com sucesso! Aqui estão os posts criados para você:</p>
-            """
+                else:
+                    # Handle regular URL images
+                    attachments.append({
+                        'url': feed_image,
+                        'filename': 'feed_image.jpg',
+                        'content_type': 'image/jpeg',
+                        'content_id': 'feed_image'
+                    })
 
-            for post in posts:
-                # Get post type emoji
-                type_emoji = {
-                    'feed': '📝',
-                    'reels': '🎬',
-                    'story': '📱'
-                }.get(post['type'].lower(), '📄')
+            # Generate HTML content using the template
+            html_content = daily_content_template(
+                user_name=user_name,
+                feed_image=feed_image,
+                feed_text=feed_text,
+                reels_text=reels_text,
+                story_text=story_text
+            )
 
-                html_content += f"""
-                    <div class="post-item">
-                        <div class="post-header">
-                            <span>{type_emoji}</span>
-                            <span>{post['type'].title()} - Post #{post['id']}</span>
-                        </div>
-                        <div class="post-objective">
-                            <strong>Objetivo:</strong> {post.get('objective', 'Não especificado')}
-                        </div>
-                        
-                        <div class="post-content">
-                            {post['ideas__content']}
-                        </div>
-                """
+            # Send email with attachments for inline images
+            status_code, response = mailjet.send_email(
+                user.email, subject, html_content, attachments)
 
-                # Add embedded image for feed posts only
-                if post['type'].lower() == 'feed' and post.get('ideas__image_url'):
-                    content_id = image_mappings.get(post['id'])
-                    if content_id:
-                        html_content += f"""
-                        <div class="post-image">
-                            <h4>🖼️ Imagem Gerada:</h4>
-                            <img src="cid:{content_id}" 
-                                 alt="Imagem do post {post['id']}" 
-                                 style="max-width: 100%; height: auto;">
-                        </div>
-                        """
-                elif post['type'].lower() == 'feed':
-                    html_content += """
-                        <div class="no-image">
-                            📷 Imagem não foi gerada para este post
-                        </div>
-                    """
-
-                html_content += "</div>"
-
-            html_content += """
-                    <div class="footer">
-                        <p>🚀 <strong>Obrigado por usar PostNow!</strong></p>
-                        <p><small>Este é um e-mail automático. Para dúvidas, entre em contato conosco.</small></p>
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-
-            # Send email with attachments
-            status_code, response = mailjet.send_email(user.email, subject, html_content, attachments if attachments else None)
-            
             if status_code and status_code == 200:
-                logger.info(f"E-mail enviado com sucesso para o usuário {user.id} - {user.username} com {len(attachments)} imagens anexadas")
+                logger.info(
+                    f"E-mail enviado com sucesso para o usuário {user.id} - {user.username} com {len(attachments)} imagens anexadas")
             else:
-                logger.error(f"Falha ao enviar e-mail para o usuário {user.id}: Status {status_code}, Response: {response}")
-                # Try sending without attachments as fallback
-                if attachments:
-                    logger.info(f"Tentando reenviar e-mail sem anexos para o usuário {user.id}")
-                    fallback_html = html_content.replace('src="cid:', 'src="#broken-image" data-original-cid="')
-                    fallback_status, fallback_response = mailjet.send_email(user.email, subject, fallback_html, None)
-                    if fallback_status == 200:
-                        logger.info(f"E-mail de fallback enviado com sucesso para o usuário {user.id}")
-                    else:
-                        logger.error(f"Falha no envio de fallback para o usuário {user.id}: {fallback_response}")
-            
+                logger.error(
+                    f"Falha ao enviar e-mail para o usuário {user.id}: Status {status_code}, Response: {response}")
+
         except Exception as e:
-            logger.error(f"Erro ao enviar e-mail para o usuário {user.id}: {str(e)}")
+            logger.error(
+                f"Erro ao enviar e-mail para o usuário {user.id}: {str(e)}")
 
     async def fetch_users_automatic_posts(self) -> List[Dict[str, Any]]:
         """Recupera todos os posts automáticos gerados para usuários."""
@@ -329,16 +157,10 @@ class DailyContentService:
     async def process_all_users_async(self) -> Dict[str, Any]:
         """Processa geração de conteúdo para todos os usuários com limite de concorrência."""
         start_time = timezone.now()
-        logger.info(
-            "Iniciando processamento de conteúdo diário para todos os usuários"
-        )
 
         try:
             eligible_users = await self._get_eligible_users()
             total_users = len(eligible_users)
-            logger.info(
-                f"Total de usuários a receberem conteúdo: {total_users}")
-
             if total_users == 0:
                 return {
                     'status': 'completed',
@@ -369,15 +191,11 @@ class DailyContentService:
                 'details': results,
             }
 
-            logger.info(
-                f"Processamento concluído: {processed_count} processados, {failed_count} falhas, {skipped_count} pulados em {duration:.2f} segundos"
-            )
             return result
         except Exception as e:
             end_time = timezone.now()
             duration = (end_time - start_time).total_seconds()
 
-            logger.error(f"Erro ao processar usuários: {str(e)}")
             return {
                 'status': 'error',
                 'error': str(e),
@@ -401,8 +219,6 @@ class DailyContentService:
         processed_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.error(
-                    f"Erro ao processar usuário {users[i]['id']}: {str(result)}")
                 processed_results.append({
                     'user_id': users[i]['id'],
                     'status': 'failed',
@@ -424,8 +240,6 @@ class DailyContentService:
             user, creator_profile = user_data
 
             validation_result = await self._validate_user_eligibility(user)
-            logger.info(
-                f"Validação de elegibilidade para usuário {user.id} - {user.username}: {validation_result['status']}")
             if validation_result['status'] != 'eligible':
                 return {'user_id': user_id,
                         'status': 'skipped',
@@ -438,9 +252,6 @@ class DailyContentService:
             if result:
                 # Handle campaign mode result
                 if result.get('campaign_mode', False):
-                    posts_created = result.get('posts', [])
-                    logger.info(
-                        f"Campanha gerada para usuário {user.id} - {user.username}: {len(posts_created)} posts criados")
                     return {
                         'user_id': user_id,
                         'user': user.first_name,
@@ -455,8 +266,6 @@ class DailyContentService:
                         'status': 'success',
                     }
             else:
-                logger.warning(
-                    f"Nenhum conteúdo gerado para o usuário {user.id} - {user.username}")
                 return {
                     'user_id': user_id,
                     'status': 'failed',
@@ -464,7 +273,6 @@ class DailyContentService:
                 }
 
         except Exception as e:
-            logger.error(f"Erro ao processar usuário {user_id}: {str(e)}")
             return {
                 'user_id': user_id,
                 'status': 'failed',
@@ -514,9 +322,6 @@ class DailyContentService:
                 'include_image': False,
             }
 
-            logger.info(
-                f"Gerando conteúdo para usuário {user.id} - {user.username}"
-            )
             with transaction.atomic():
                 # Add campaign-specific data to post_data
                 post_data.update({
@@ -562,14 +367,11 @@ class DailyContentService:
 
                     return result
         except Exception as e:
-            logger.error(
-                f"Erro ao gerar conteúdo para o usuário {user.id}: {str(e)}")
             return {'status': 'error', 'error': str(e)}
 
     async def process_users_batch_async(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
         """Process a specific batch of users for daily content generation."""
         start_time = timezone.now()
-        logger.info(f"Processing batch {batch_number} with size {batch_size}")
 
         try:
             # Calculate offset based on batch number
@@ -577,9 +379,6 @@ class DailyContentService:
 
             eligible_users = await self._get_eligible_users_batch(offset, batch_size)
             total_users = len(eligible_users)
-
-            logger.info(
-                f"Batch {batch_number}: Processing {total_users} users")
 
             if total_users == 0:
                 return {
@@ -613,15 +412,12 @@ class DailyContentService:
                 'details': results,
             }
 
-            logger.info(
-                f"Batch {batch_number} completed: {processed_count} processed in {duration:.2f} seconds")
             return result
 
         except Exception as e:
             end_time = timezone.now()
             duration = (end_time - start_time).total_seconds()
 
-            logger.error(f"Error processing batch {batch_number}: {str(e)}")
             return {
                 'status': 'error',
                 'batch': batch_number,

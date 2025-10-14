@@ -1,9 +1,9 @@
+import base64
 import logging
 import os
-import requests
-import base64
-from urllib.parse import urlparse
 
+import requests
+from IdeaBank.utils.mail_templates.logo_base64 import logo
 from mailjet_rest import Client
 
 logger = logging.getLogger(__name__)
@@ -45,15 +45,20 @@ class MailService():
                 "HTMLPart": html_content
             }
 
+            # Add PostNow logo attachment using base64
+            attachments.append({
+                'url': logo,
+                'filename': 'postnow_logo.svg',
+                'content_type': 'image/png',
+                'content_id': 'postnow_logo'
+            })
+
             # Add attachments if provided
             if attachments:
                 message_data["InlinedAttachments"] = []
-                logger.info(
-                    f"Processing {len(attachments)} attachments for email")
 
                 for i, attachment in enumerate(attachments):
-                    logger.info(
-                        f"Processing attachment {i+1}: {attachment['url']}")
+
                     attachment_data = self._process_attachment(attachment, i)
                     if attachment_data:
                         inline_attachment = {
@@ -62,16 +67,13 @@ class MailService():
                             "ContentID": attachment_data['content_id'],
                             "Base64Content": attachment_data['base64_content']
                         }
+                        logger.info(
+                            f"Adding inline attachment: {attachment_data['filename']} with ContentID: {attachment_data['content_id']}")
                         message_data["InlinedAttachments"].append(
                             inline_attachment)
-                        logger.info(
-                            f"Successfully added inline attachment with ContentID: {attachment_data['content_id']}")
                     else:
                         logger.error(
                             f"Failed to process attachment {i+1}: {attachment['url']}")
-
-                logger.info(
-                    f"Total inline attachments added: {len(message_data['InlinedAttachments'])}")
 
             data = {
                 'Messages': [message_data]
@@ -108,35 +110,37 @@ class MailService():
         """
         try:
             image_url = attachment['url']
-            logger.info(f"Processing attachment: {image_url[:100]}...")
-
             # Check if it's already a data URL (base64 encoded image)
             if image_url.startswith('data:image/'):
                 logger.info(
-                    "Image is already a data URL, extracting base64 content")
+                    f"Processing data URL for attachment: {attachment.get('filename', 'unknown')} (length: {len(image_url)})")
                 try:
                     # Parse data URL: data:image/png;base64,iVBORw0KGgo...
                     header, base64_data = image_url.split(',', 1)
                     content_type = header.split(';')[0].replace('data:', '')
+                    logger.info(
+                        f"Extracted content_type: {content_type}, base64 length: {len(base64_data)}")
 
                     # Validate base64 content
                     # This will raise exception if invalid
-                    base64.b64decode(base64_data)
+                    decoded_content = base64.b64decode(base64_data)
+                    logger.info(
+                        f"Successfully decoded base64 content, decoded length: {len(decoded_content)}")
+
+                    # Use provided content_id or generate one
+                    content_id = attachment.get('content_id')
+                    if not content_id:
+                        # Extract post ID from filename to create proper content ID
+                        filename = attachment.get('filename', f'image_{index}')
+                        if 'post_image_' in filename:
+                            post_id = filename.replace(
+                                'post_image_', '').replace('.jpg', '')
+                            content_id = f"image_post_{post_id}"
+                        else:
+                            content_id = f"image_{index}_{hash(image_url) % 10000}"
 
                     logger.info(
-                        f"Data URL parsed successfully: {content_type}, base64 length: {len(base64_data)}")
-
-                    # Extract post ID from filename to create proper content ID
-                    filename = attachment.get('filename', f'image_{index}')
-                    if 'post_image_' in filename:
-                        post_id = filename.replace(
-                            'post_image_', '').replace('.jpg', '')
-                        content_id = f"image_post_{post_id}"
-                    else:
-                        content_id = f"image_{index}_{hash(image_url) % 10000}"
-
-                    logger.info(f"Generated content ID: {content_id}")
-
+                        f"Successfully processed attachment: filename={attachment['filename']}, content_id={content_id}, content_type={content_type}")
                     return {
                         'base64_content': base64_data,
                         'content_type': content_type,
@@ -149,7 +153,6 @@ class MailService():
 
             # Handle regular HTTP/HTTPS URLs
             elif image_url.startswith(('http://', 'https://')):
-                logger.info("Image is a regular URL, downloading...")
 
                 # Add headers to mimic a browser request
                 headers = {
@@ -157,38 +160,31 @@ class MailService():
                 }
 
                 response = requests.get(image_url, timeout=30, headers=headers)
-                logger.info(
-                    f"Image download response: {response.status_code} for {image_url[:100]}")
 
                 if response.status_code == 200:
                     # Get actual content type from response headers
                     actual_content_type = response.headers.get(
                         'content-type', attachment['content_type'])
-                    logger.info(
-                        f"Image content type: {actual_content_type}, size: {len(response.content)} bytes")
 
                     # Validate that we got image content
                     if not actual_content_type.startswith('image/'):
-                        logger.error(
-                            f"URL did not return an image: {actual_content_type}")
                         return None
 
                     # Convert image to base64
                     base64_content = base64.b64encode(
                         response.content).decode('utf-8')
-                    logger.info(
-                        f"Base64 content length: {len(base64_content)} characters")
 
-                    # Extract post ID from filename to create proper content ID
-                    filename = attachment.get('filename', f'image_{index}')
-                    if 'post_image_' in filename:
-                        post_id = filename.replace(
-                            'post_image_', '').replace('.jpg', '')
-                        content_id = f"image_post_{post_id}"
-                    else:
-                        content_id = f"image_{index}_{hash(attachment['url']) % 10000}"
-
-                    logger.info(f"Generated content ID: {content_id}")
+                    # Use provided content_id or generate one
+                    content_id = attachment.get('content_id')
+                    if not content_id:
+                        # Extract post ID from filename to create proper content ID
+                        filename = attachment.get('filename', f'image_{index}')
+                        if 'post_image_' in filename:
+                            post_id = filename.replace(
+                                'post_image_', '').replace('.jpg', '')
+                            content_id = f"image_post_{post_id}"
+                        else:
+                            content_id = f"image_{index}_{hash(attachment['url']) % 10000}"
 
                     return {
                         'base64_content': base64_content,

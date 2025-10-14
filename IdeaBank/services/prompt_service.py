@@ -19,7 +19,6 @@ class PromptService:
         elif post_type == 'campaign':
             # Campaign uses full content prompt
             creator_profile_data = self._get_creator_profile_data()
-            print(creator_profile_data)
             return self._build_automatic_post_prompt(post_data, creator_profile_data)
         else:
             # Default fallback for other types (carousel, live, etc.)

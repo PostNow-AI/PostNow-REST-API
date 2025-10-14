@@ -45,7 +45,6 @@ class SubscriptionService:
             raise ValidationError(f"Assinatura inválida: {str(e)}")
 
         # Log do evento recebido para debug
-        print(f"[WEBHOOK DEBUG] Evento recebido: {event['type']}")
         if event.get('data', {}).get('object', {}).get('mode'):
             print(f"[WEBHOOK DEBUG] Modo: {event['data']['object']['mode']}")
 
