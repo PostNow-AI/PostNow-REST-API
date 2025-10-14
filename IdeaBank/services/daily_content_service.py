@@ -326,15 +326,17 @@ class DailyContentService:
 
                     post_idea = PostIdea.objects.create(
                         post=post,
-                        content=generated_content['content']
+                        content=generated_content['content'],
+                        image_url=generated_content.get('image_url', '')
                     )
 
-                    return {
+                    result = {
                         'post_id': post.id,
                         'post_idea_id': post_idea.id,
-                        'content': generated_content['content'],
                         'generated_at': timezone.now().isoformat()
                     }
+
+                    return result
         except Exception as e:
             logger.error(
                 f"Erro ao gerar conteúdo para o usuário {user.id}: {str(e)}")
@@ -409,6 +411,6 @@ class DailyContentService:
         return list(
             User.objects.filter(
                 usersubscription__status='active',
-                is_active=True
+                is_active=True,
             ).distinct().values('id', 'email', 'username')[offset:offset + limit]
         )
