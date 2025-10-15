@@ -103,7 +103,7 @@ ROOT_URLCONF = 'Sonora_REST_API.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],  # Add custom templates directory
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -219,7 +219,14 @@ REST_AUTH = {
 ACCOUNT_AUTHENTICATION_METHOD = "email"  # Use Email / Password authentication
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = "none"  # Do not require email confirmation
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"  # Require email confirmation
+# Automatically log in after email verification
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[PostNow] "  # Email subject prefix
+# Protocol for email links
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https" if not DEBUG else "http"
+# Custom adapter for email templates
+ACCOUNT_ADAPTER = 'Users.adapters.CustomAccountAdapter'
 
 # Social Account Settings
 SOCIALACCOUNT_PROVIDERS = {
@@ -270,6 +277,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "https://sonora-ui.vercel.app",  # Vercel frontend
     "https://sonoria-posts.vercel.app",  # Production domain
+    "https://postnow.com.br",  # Production domain
+    "https://www.postnow.com.br",
 ]
 
 # Add additional CORS origins from environment variable
@@ -316,6 +325,30 @@ CREDIT_SYSTEM_ENABLED = True
 DEFAULT_CREDIT_BALANCE = 0.00
 
 CRON_SECRET = os.environ.get('CRON_SECRET', 'dev-secret-change-in-production')
+
+# Email Configuration with Mailjet
+# Use console backend for development, Mailjet for production
+if DEBUG and not os.getenv('USE_MAILJET_EMAIL'):
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    # Use Mailjet SMTP for email sending
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = 'in-v3.mailjet.com'
+    EMAIL_HOST_USER = os.getenv('MJ_APIKEY_PUBLIC')  # Mailjet API Key (Public)
+    # Mailjet Secret Key (Private)
+    EMAIL_HOST_PASSWORD = os.getenv('MJ_APIKEY_PRIVATE')
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_USE_SSL = False
+
+# Mailjet API Configuration (for direct API usage if needed)
+MAILJET_API_KEY = os.getenv('MJ_APIKEY_PUBLIC')
+MAILJET_SECRET_KEY = os.getenv('MJ_APIKEY_PRIVATE')
+
+# Default email settings
+DEFAULT_FROM_EMAIL = os.getenv('SENDER_EMAIL', 'contato@postnow.com.br')
+SERVER_EMAIL = os.getenv('SENDER_EMAIL', 'contato@postnow.com.br')
+DEFAULT_FROM_NAME = os.getenv('SENDER_NAME', 'PostNow AI')
 
 # Async processing settings
 MAX_CONCURRENT_USERS = int(os.environ.get('MAX_CONCURRENT_USERS', '10'))

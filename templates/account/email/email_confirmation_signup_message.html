@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PostNow - Conteúdo automático diário</title>
+    <style>
+      .circle-check {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid white;
+        background-color: transparent;
+        color: white;
+        font-size: 12px;
+        font-weight: bold;
+        text-align: center;
+        line-height: 16px;
+        vertical-align: middle;
+        margin-right: 8px;
+      }
+    </style>
+  </head>
+
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f8fafc;
+    "
+  >
+    <div style="width: 100%; max-width: 600px; margin: 0 auto; padding: 20px">
+      <table
+        role="presentation"
+        style="
+          width: 100%;
+          border-collapse: collapse;
+          background-color: #ffffff;
+          border-radius: 8px;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        "
+      >
+        <!-- Header -->
+        <tr>
+          <td
+            style="
+              background-color: #0f172a;
+              padding: 40px;
+              text-align: center;
+              border-radius: 8px 8px 0 0;
+            "
+          >
+            <img
+              src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjQwIiB2aWV3Qm94PSIwIDAgMTIwIDQwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjQwIiByeD0iOCIgZmlsbD0idXJsKCNncmFkaWVudCkiLz4KPHR5cGUgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE2IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiPgo8dGV4dCB4PSI2MCIgeT0iMjUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkBvc3ROb3c8L3RleHQ+CjwvdHlwZT4KPGR0Zm9zPgo8bGluZWFyR3JhZGllbnQgaWQ9ImdyYWRpZW50IiB4MT0iMCUiIHkxPSIwJSIgeDI9IjEwMCUiIHkyPSIwJSI+CjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM4YjVjZjYiLz4KPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjOTgxMGZhIi8+CjwvbGluZWFyR3JhZGllbnQ+CjwvZGVmcz4KPC9zdmc+"
+              alt="PostNow Logo"
+              style="
+                width: 120px;
+                height: 40px;
+                margin-bottom: 20px;
+                display: block;
+              "
+            />
+            <h1
+              style="
+                margin: 0;
+                color: #8b5cf6;
+                font-size: 24px;
+                font-weight: 600;
+              "
+            >
+              <span style="color: white">Olá, </span>{{user.first_name}}
+            </h1>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding: 40px">
+            <!-- Main Content -->
+            <div style="margin-bottom: 40px">
+              <h2
+                style="
+                  margin: 0 0 20px 0;
+                  color: #1e293b;
+                  font-size: 20px;
+                  font-weight: 400;
+                  line-height: 1.4;
+                  text-align: start;
+                "
+              >
+                Falta só um passo! Clique no botão abaixo para
+                <span style="font-weight: 700">verificar seu e-mail</span>
+                e ativar sua conta na Postnow.
+              </h2>
+
+              <!-- Button -->
+              <div style="text-align: center; margin: 30px 0">
+                <a
+                  href="{{frontend_url}}/verify-email?key={{key}}"
+                  style="
+                    display: inline-block;
+                    background: linear-gradient(
+                      90deg,
+                      #8b5cf6 0%,
+                      #9810fa 100%
+                    );
+                    color: white;
+                    text-decoration: none;
+                    padding: 16px 32px;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    font-size: 16px;
+                    text-align: center;
+                  "
+                >
+                  <span class="circle-check"
+                    ><span style="margin-top: 4px"> &#x2713; </span>
+                  </span>
+                  Verificar minha conta agora
+                </a>
+              </div>
+
+              <!-- Warning Text -->
+              <p
+                style="
+                  margin: 20px 0 0 0;
+                  color: #64748b;
+                  font-weight: 400;
+                  font-size: 14px;
+                  text-align: start;
+                  line-height: 1.4;
+                "
+              >
+                *Por motivos de segurança,
+                <span style="font-weight: 700"
+                  >este link expira em 24 horas.</span
+                ><br />
+                Se você não solicitou esta verificação, ignore este e-mail.<br />
+                Sua conta permanecerá inativa.
+              </p>
+            </div>
+          </td>
+        </tr>
+        <!-- Footer Section -->
+        <tr>
+          <td>
+            <div
+              style="
+                background-color: #f8fafc;
+                border-radius: 8px;
+                padding: 30px;
+                text-align: center;
+                border-top: 1px solid #e2e8f0;
+              "
+            >
+              <p
+                style="
+                  margin: 0 0 10px 0;
+                  color: #64748b;
+                  font-size: 14px;
+                  font-weight: 500;
+                "
+              >
+                Precisa de ajuda? Entre em contato conosco respondendo este
+                email.
+              </p>
+              <p
+                style="
+                  margin: 0;
+                  color: #6a7282;
+                  font-size: 12px;
+                  font-weight: 500;
+                "
+              >
+                © 2025 PostNow. Destrave sua criatividade, posts prontos mais
+                rápido que nunca.
+              </p>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

@@ -1,14 +1,18 @@
-
 import os
 from urllib.parse import urlencode, urljoin
 
 import requests
+from allauth.account.views import ConfirmEmailView
 from allauth.socialaccount.models import SocialAccount
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
+from django.contrib.auth.models import User
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from dotenv import load_dotenv
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -22,6 +26,35 @@ load_dotenv()
 
 def get_base_url():
     return os.getenv('BACKEND_BASE_URL', 'http://localhost:8000')
+
+# Create a CSRF-exempt version of ConfirmEmailView
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CsrfExemptConfirmEmailView(ConfirmEmailView):
+    def post(self, request, *args, **kwargs):
+        """
+        Override POST method to return JSON instead of redirecting
+        """
+        self.object = self.get_object()
+        if self.object:
+            try:
+                self.object.confirm(self.request)
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Email confirmed successfully. You are now logged in.',
+                    'redirect_url': os.getenv('FRONTEND_URL', 'http://localhost:5173') + '/login'
+                }, status=200)
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Email confirmation failed: {str(e)}',
+                }, status=400)
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': 'Invalid or expired confirmation link.',
+            }, status=404)
 
 
 class GoogleLogin(SocialLoginView):
@@ -182,5 +215,65 @@ def disconnect_social_account(request, account_id):
     except Exception as e:
         return Response(
             {'error': f'Failed to disconnect social account: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_user(request):
+    """
+    Delete the current user and associated data
+    """
+    try:
+        # Get the current user
+        user = request.user
+
+        # Optionally, you can perform additional checks or actions here
+
+        # Delete the user
+        user.delete()
+
+        return Response({
+            'message': 'User account and associated data deleted successfully'
+        }, status=status.HTTP_204_NO_CONTENT)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to delete user account: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_user_by_email(request):
+    """
+    Delete a user from the database using their email address as a query parameter.
+    Usage: DELETE /api/v1/auth/delete-user/?email=user@example.com
+    """
+    email = request.GET.get('email')
+
+    if not email:
+        return Response(
+            {'error': 'Email parameter is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        user = User.objects.get(email=email)
+        user.delete()
+        return Response(
+            {'message': f'User with email {email} has been deleted successfully'},
+            status=status.HTTP_200_OK
+        )
+    except User.DoesNotExist:
+        return Response(
+            {'error': f'User with email {email} not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to delete user: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
