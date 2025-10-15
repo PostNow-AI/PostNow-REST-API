@@ -1,8 +1,13 @@
+import json
 import os
 from urllib.parse import urlencode, urljoin
 
 import requests
-from allauth.account.views import ConfirmEmailView
+from allauth.account.views import (
+    ConfirmEmailView,
+    PasswordResetFromKeyView,
+    PasswordResetView,
+)
 from allauth.socialaccount.models import SocialAccount
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -42,7 +47,7 @@ class CsrfExemptConfirmEmailView(ConfirmEmailView):
                 self.object.confirm(self.request)
                 return JsonResponse({
                     'success': True,
-                    'message': 'Email confirmed successfully. You are now logged in.',
+                    'message': 'Email confirmado com sucesso',
                     'redirect_url': os.getenv('FRONTEND_URL', 'http://localhost:5173') + '/login'
                 }, status=200)
             except Exception as e:
@@ -55,6 +60,91 @@ class CsrfExemptConfirmEmailView(ConfirmEmailView):
                 'success': False,
                 'message': 'Invalid or expired confirmation link.',
             }, status=404)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CsrfExemptPasswordResetView(PasswordResetView):
+    def get_form_kwargs(self):
+        """
+        Override to handle JSON data instead of form data
+        """
+        kwargs = super().get_form_kwargs()
+        if self.request.method == 'POST' and self.request.content_type == 'application/json':
+            try:
+                data = json.loads(self.request.body)
+                kwargs['data'] = data
+            except json.JSONDecodeError:
+                pass
+        return kwargs
+
+    def post(self, request, *args, **kwargs):
+        """
+        Override POST method to return JSON instead of redirecting
+        """
+        form = self.get_form()
+        if form.is_valid():
+            try:
+                form.save(
+                    request=self.request,
+                    use_https=self.request.is_secure(),
+                    email_template_name='account/email/password_reset_key_message.html'
+                )
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Email de recuperação de senha enviado. Siga as instruções no email.',
+                }, status=200)
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Falha ao enviar email de recuperação de senha: {str(e)}',
+                }, status=500)
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': 'Por favor, forneça um endereço de email válido.',
+                'errors': form.errors
+            }, status=400)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CsrfExemptPasswordResetFromKeyView(PasswordResetFromKeyView):
+    def get_form_kwargs(self):
+        """
+        Override to handle JSON data instead of form data
+        """
+        kwargs = super().get_form_kwargs()
+        if self.request.method == 'POST' and self.request.content_type == 'application/json':
+            try:
+                data = json.loads(self.request.body)
+                kwargs['data'] = data
+            except json.JSONDecodeError:
+                pass
+        return kwargs
+
+    def post(self, request, *args, **kwargs):
+        """
+        Override POST method to return JSON instead of redirecting
+        """
+        form = self.get_form()
+        if form.is_valid():
+            try:
+                form.save()
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Senha redefinida com sucesso.',
+                    'redirect_url': os.getenv('FRONTEND_URL', 'http://localhost:5173') + '/ideabank'
+                }, status=200)
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'Falha ao redefinir senha: {str(e)}',
+                }, status=400)
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': 'Dados de redefinição de senha inválidos.',
+                'errors': form.errors
+            }, status=400)
 
 
 class GoogleLogin(SocialLoginView):

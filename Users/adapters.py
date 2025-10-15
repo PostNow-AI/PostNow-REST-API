@@ -17,6 +17,13 @@ class CustomAccountAdapter(DefaultAccountAdapter):
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
         return f"{frontend_url}/verify-email?key={emailconfirmation.key}"
 
+    def get_password_reset_url(self, request, uidb36, token):
+        """
+        Override to use frontend URL for password reset
+        """
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        return f"{frontend_url}/reset-password?uidb36={uidb36}&key={token}"
+
     def send_mail(self, template_prefix, email, context):
         """
         Completely override send_mail to force HTML emails with proper error handling

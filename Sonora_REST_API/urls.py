@@ -19,6 +19,8 @@ from django.urls import include, path
 
 from Sonora_REST_API.Users.views import (
     CsrfExemptConfirmEmailView,
+    CsrfExemptPasswordResetFromKeyView,
+    CsrfExemptPasswordResetView,
     GoogleLogin,
     delete_user_by_email,
     disconnect_social_account,
@@ -34,6 +36,10 @@ urlpatterns = [
     # Add allauth URLs for email verification, but override confirm-email with CSRF-exempt version
     path('api/v1/auth/accounts/confirm-email/<str:key>/',
          CsrfExemptConfirmEmailView.as_view(), name='account_confirm_email'),
+    path('api/v1/auth/accounts/password/reset/',
+         CsrfExemptPasswordResetView.as_view(), name='account_reset_password'),
+    path('api/v1/auth/accounts/password/reset/<str:uidb36>/<str:key>/',
+         CsrfExemptPasswordResetFromKeyView.as_view(), name='account_reset_password_from_key'),
     path('api/v1/auth/accounts/', include('allauth.urls')),
     path('api/v1/auth/google/', GoogleLogin.as_view(), name='google_login'),
     path('api/v1/auth/google/auth/', google_auth, name='google_auth'),
