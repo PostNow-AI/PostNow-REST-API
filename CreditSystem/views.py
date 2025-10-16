@@ -414,6 +414,22 @@ class CreateStripeCheckoutSessionView(APIView):
             load_dotenv()
             frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 
+            # Configure discounts based on plan interval
+            discounts = []
+            if plan.interval == 'monthly':
+                # 50% off first month only
+                # Replace with actual Stripe coupon ID
+                discounts = [{'coupon': 'monthly_first_50_off'}]
+            elif plan.interval == 'semesterly':
+                # 25% off all months forever
+                # Replace with actual Stripe coupon ID
+                discounts = [{'coupon': 'semesterly_25_off'}]
+            elif plan.interval == 'yearly':
+                # 50% off all months forever
+                # Replace with actual Stripe coupon ID
+                discounts = [{'coupon': 'yearly_50_off'}]
+            # Lifetime plans have no discounts (one-time payment)
+
             # Configure subscription data with trial period for non-lifetime plans
             subscription_data = None
             if plan.interval != 'lifetime':
@@ -432,6 +448,7 @@ class CreateStripeCheckoutSessionView(APIView):
                     'price': plan.stripe_price_id,
                     'quantity': 1,
                 }],
+                discounts=discounts,  # Apply the configured discounts
                 mode='subscription' if plan.interval != 'lifetime' else 'payment',
                 success_url=f'{frontend_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}',
                 cancel_url=f'{frontend_url}/subscription/cancel',
