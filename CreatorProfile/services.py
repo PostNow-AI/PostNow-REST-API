@@ -49,6 +49,23 @@ class CreatorProfileService:
         except CreatorProfile.DoesNotExist:
             return False
 
+    @staticmethod
+    def complete_profile(user: User) -> bool:
+        """Complete user profile onboarding."""
+        try:
+            CreatorProfile.objects.filter(user=user).update(
+                step_1_completed=True,
+                step_2_completed=True,
+                step_3_completed=True,
+                onboarding_completed=True,
+            )
+
+            return True
+        except CreatorProfile.DoesNotExist:
+            return False
+        except CreatorProfile.DoesNotExist:
+            return False
+
 
 class SuggestionService:
     """Service class for providing suggestions."""

@@ -180,9 +180,7 @@ class PromptService:
         """Build prompt specifically for feed posts."""
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
-        further_details = post_data.get('further_details', '')
-
-        details = self._build_all_details(further_details)
+        details = post_data.get('further_details', '')
 
         # Get dynamic data from creator profile and post
         creator_profile_data = self._get_creator_profile_data()
@@ -311,54 +309,137 @@ Entregar um resultado de alta qualidade, digno de uma marca profissional.
         """Build prompt specifically for reels."""
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
-        further_details = post_data.get('further_details', '')
+        details = post_data.get('further_details', '')
 
-        details = self._build_all_details(further_details)
+        creator_profile_data = self._get_creator_profile_data()
         # TODO: Replace with your specific reel prompt
         prompt = f"""
-Você é um especialista em copywriting estratégico, criativo e persuasivo.
-Sua missão é gerar roteiros curtos, impactantes e envolventes para Reels, otimizados para gerar atenção e engajamento já nos primeiros segundos.
-O conteúdo deve ser dinâmico, direto e fácil de acompanhar, respeitando as boas práticas do Meta e Google Ads.
+Você é um roteirista criativo e estrategista de conteúdo digital, especialista em roteiros curtos e envolventes para Reels.
+Sua missão é criar roteiros personalizados de 20 a 40 segundos, com base nas informações do onboarding do cliente e nos dados de entrada do post.
 
-### DADOS DE ENTRADA
-- Assunto do post: {name}
-- Objetivo do post: {objective}
-- Tipo do post: Reel
-- Mais detalhes: {details}
+O roteiro deve ser atual, estratégico, dinâmico e conectado às tendências do momento dentro do nicho do cliente.
 
----
+ DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
-### REGRAS PARA A COPY:
+Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
 
-1. Estruture o roteiro internamente no método AIDA, mas entregue o resultado final **sem rótulos ou divisões visíveis de Atenção, Interesse, etc.**.
+Profissão: {creator_profile_data.get('profession', 'Não informado')}
 
-2. O texto deve estar organizado em um **roteiro de até 15 segundos**, dividido por blocos de tempo, exemplo:
-   - [0s – 3s]
-   - [3s – 6s]
-   - [6s – 12s]
-   - [12s – 15s]
+Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
 
-3. O gancho inicial deve ser **forte e impactante**, capaz de prender a atenção já nos 3 primeiros segundos.
+Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
 
-4. A linguagem deve ser fluida, natural e alinhada ao **tom de voz definido no formulário da empresa** (ex.: motivacional, técnico, acolhedor, educativo, inspirador).
+Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
 
-5. Use **frases curtas, fáceis de ler e de ouvir**, perfeitas para um vídeo rápido.
+Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
 
-6. Utilize **emojis moderados e estratégicos**, mas nunca em excesso.
+Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
 
-7. Sempre finalize com **uma única CTA clara e objetiva**, coerente com o objetivo da campanha (ex.: “Clique no link da bio”, “Marque alguém”, “Agende agora”).
+Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
 
-8. Nunca use linguagem sensacionalista ou promessas exageradas. Sempre respeite as políticas do Meta e Google Ads.
+Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
 
----
+Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
 
-### SAÍDA ESPERADA:
-- Um roteiro curto para Reel, com blocos de tempo (até 15 segundos).
-- Copy pronta para ser usada no vídeo, fluida e envolvente.
-- Texto dividido de forma natural em parágrafos curtos.
-- Emojis aplicados de forma leve e estratégica.
-- Apenas **uma CTA final** integrada ao texto.
+Logo: {creator_profile_data.get('logo', 'Não fornecido')}
 
+Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
+
+Tom de voz: {creator_profile_data.get('voice_tone', 'Profissional')}
+
+🧠 DADOS DO POST:
+
+Assunto: {name}
+
+Objetivo: {objective}
+
+Mais detalhes: {details}
+OBJETIVO DO ROTEIRO:
+
+Criar um roteiro de Reels (20–40 segundos) que comunique a mesma mensagem central do post de Feed, de forma dinâmica, autêntica e visualmente atraente.
+
+O conteúdo deve:
+
+Prender a atenção nos primeiros 3 segundos;
+
+Ter ritmo fluido, natural e envolvente;
+
+Ser relevante e atual dentro do nicho;
+
+Refletir o tom, estilo e posicionamento da marca;
+
+Estar alinhado com as tendências e formatos performáticos atuais (sons, transições, narrativas curtas e storytelling visual).
+
+🪶 ESTRUTURA RECOMENDADA:
+
+Abertura (0–3s):
+
+Crie um gancho forte e direto, inspirado em trends atuais do nicho (ex: uma pergunta provocativa, frase de impacto, som popular ou movimento visual em alta).
+
+O objetivo é capturar atenção imediata antes que o usuário role o feed.
+
+Desenvolvimento (4–30s):
+
+Entregue o insight principal, dica, explicação ou micro-história.
+
+Use linguagem natural e conversacional, no estilo “fala para a câmera”.
+
+Mantenha o ritmo com transições visuais e expressões autênticas.
+
+Se fizer sentido, descreva gestos, cenas, enquadramentos ou ações visuais que reforcem a mensagem.
+
+Sempre contextualize conforme o público-alvo e o tom de voz ({creator_profile_data.get('voice_tone', 'Profissional')}).
+
+Fechamento (últimos 5–10s):
+
+Inclua uma CTA leve e natural, coerente com o objetivo do post (ex: “Comenta aqui o que você acha”, “Salva pra lembrar depois”, “Manda pra alguém que precisa ouvir isso”).
+
+Finalize com uma frase que reforce a emoção ou insight do vídeo.
+
+💡 DIRETRIZES CRIATIVAS:
+
+O roteiro deve ser visualmente interessante e emocionalmente envolvente.
+
+Pode sugerir locais de gravação, gestos, olhares, movimentos de câmera ou efeitos de trend.
+
+Utilize referências de formatos populares atuais (ex: cortes rápidos, close na fala, dublagens, legendas dinâmicas).
+
+Evite formalidade — o texto deve parecer uma conversa leve e espontânea.
+
+Mantenha coerência com o posicionamento e voz da marca ({creator_profile_data.get('voice_tone', 'Profissional')}).
+
+Sempre que possível, integre elementos visuais da paleta de cores ({creator_profile_data.get('color_palette', 'Não definida')}) ou ambientes que reflitam o negócio ({creator_profile_data.get('business_name', 'Não informado')}).
+
+📦 FORMATO DE SAÍDA:
+
+Gere o conteúdo neste formato exato:
+
+🎬 Roteiro de Reels (20–40 segundos):
+
+Abertura (Gancho):
+[Texto curto e impactante — até 3 segundos — baseado em trend atual do nicho.]
+
+Desenvolvimento:
+[Texto fluido e natural, descrevendo falas, ações e gestos principais. Pode sugerir planos de câmera e transições visuais.]
+
+Fechamento (CTA):
+[Chamada leve e coerente com o objetivo do post. Final inspirador ou emocional.]
+
+📅 CONTEXTO DE USO:
+
+Este prompt será usado para gerar roteiros de Reels diários, com base no onboarding e nos dados de entrada do post.
+
+Cada roteiro deve ser:
+
+Original, atual e adaptado ao público do cliente;
+
+Baseado em trends e formatos que estão performando bem no momento;
+
+Curto, criativo e impactante o suficiente para reter atenção e gerar engajamento real;
+
+Fiel à identidade da marca, ao tom de voz e ao estilo visual do negócio.
+
+O resultado deve ser tão bom quanto o roteiro de um conteúdo viral profissional, pronto para ser gravado e publicado.
 
 
 """
@@ -368,52 +449,130 @@ O conteúdo deve ser dinâmico, direto e fácil de acompanhar, respeitando as bo
         """Build prompt specifically for stories."""
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
-        further_details = post_data.get('further_details', '')
-        details = self._build_all_details(further_details)
+        details = post_data.get('further_details', '')
+
+        # Get dynamic data from creator profile and post
+        creator_profile_data = self._get_creator_profile_data()
         prompt = f"""
-Você é um especialista em copywriting estratégico, criativo e persuasivo.
-Sua missão é gerar copies curtas, envolventes e interativas para Stories em redes sociais, com foco em atenção imediata, clareza e incentivo à ação.
+Você é um estrategista de conteúdo e roteirista criativo para redes sociais, especialista em planejar ideias de Stories envolventes, estratégicos e alinhados à marca.
+Sua missão é criar 5 ideias de Stories com base nas informações do onboarding do cliente e nos dados de entrada do post.
 
-### DADOS DE ENTRADA
-- Assunto do post: {name}
-- Objetivo do post: {objective}
-- Tipo do post: Story
-- Mais detalhes: {details}
-
----
-
-### REGRAS PARA A COPY:
-
-1. Estruture a copy em 1 tela, com mensagens simples, claras e fáceis de ler.  
-
-2. Cada tela deve conter **uma frase curta e impactante**, que mantenha a atenção e conduza o público até a CTA final.  
-
-3. O tom de voz deve seguir exatamente o definido nos detalhes do formulário (ex.: inspirador, educativo, acolhedor, motivacional).  
-
-4. Use **emojis moderados e estratégicos** para dar proximidade, mas sem exageros.  
-
-5. A primeira tela deve ser um **gancho forte** que capture a atenção imediatamente.  
-
-6. A última tela deve sempre conter **uma única CTA clara e direta**, coerente com o objetivo do post (ex.: “Arraste pra cima 🚀”, “Clique no link da bio 👉”, “Responda essa enquete ✨”).  
-
-7. Frases devem ser curtas, de leitura rápida, evitando blocos longos de texto.  
-
-8. A copy deve ser positiva, inclusiva e motivadora, nunca sensacionalista ou proibida pelas diretrizes do Meta/Google Ads.  
+Cada ideia deve ser prática, atual e coerente com o tema principal da campanha, respeitando a identidade visual, o tom de voz e o público da marca.
 
 
----
+🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
+Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
 
+Profissão: {creator_profile_data.get('profession', 'Não informado')}
 
-### SAÍDA ESPERADA:
-- Copy finalizada para Story, 1 tela.  
-- Texto pronto para copiar e colar.  
-- Frases curtas, impactantes e fáceis de ler.  
-- Emojis usados de forma leve e natural.  
-- Apenas **uma CTA final** integrada ao último Story.  
+Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
 
+Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
 
+Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
 
+Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
+
+Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
+
+Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
+
+Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
+
+Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
+
+Logo: {creator_profile_data.get('logo', 'Não fornecido')}
+
+Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
+
+Tom de voz: {creator_profile_data.get('voice_tone', 'Profissional')}
+
+🧠 DADOS DO POST:
+
+Assunto: {name}
+
+Objetivo: {objective}
+
+Mais detalhes: {details}
+
+OBJETIVO GERAL:
+
+Criar 5 ideias de Stories que complementem o tema principal da campanha, mantenham o público engajado ao longo do dia e transmitam autoridade, conexão e valor.
+
+Cada ideia deve ser simples de produzir, atual (baseada em trends do momento) e adequada ao público e nicho do cliente.
+
+🪶 REGRAS DE CRIAÇÃO:
+
+Conexão com o Tema Principal:
+
+Todas as ideias devem estar relacionadas ao assunto central da campanha (definido em {name}, {objective} e {details}).
+
+O conteúdo deve ser coerente com o post de Feed e/ou Reels do mesmo dia.
+
+Estilo e Tom:
+
+Adapte as ideias ao tom de voz da marca ({creator_profile_data.get('voice_tone', 'Profissional')}) e ao perfil do público ({creator_profile_data.get('target_gender', 'Não informado')}, {creator_profile_data.get('target_age_range', 'Não informado')}).
+
+As ideias devem parecer naturais e autênticas, como se o próprio cliente estivesse falando.
+
+Utilize linguagem leve, envolvente e humana.
+
+Tendências:
+
+Sempre que possível, baseie-se em trends atuais do nicho (músicas, formatos, filtros ou tipos de interação em alta).
+
+Prefira formatos nativos de Story: enquetes, caixas de pergunta, bastidores, frases inspiradoras, vídeos curtos, depoimentos ou demonstrações.
+
+Variedade:
+
+Traga formatos diferentes nas 5 ideias (ex: 1 bastidor, 1 dica, 1 pergunta, 1 reflexão e 1 interação).
+
+As ideias devem ser complementares e sequenciais, criando uma jornada de conteúdo ao longo do dia.
+
+📦 FORMATO DE SAÍDA:
+
+Gere a resposta neste formato exato:
+
+📱 5 Ideias de Stories (coerentes com o tema do dia):
+
+1️⃣ [Ideia 1 — breve descrição da ideia e sua finalidade. Ex: “Mostre um bastidor da rotina do negócio e escreva na legenda: ‘Nem sempre é fácil, mas cada passo vale a pena 💪’.”]
+
+2️⃣ [Ideia 2 — descreva o formato (ex: enquete, pergunta, frase ou vídeo) e o tema central.]
+
+3️⃣ [Ideia 3 — sugira uma interação simples para aumentar engajamento. Ex: “Caixa de perguntas: qual seu maior desafio com X?”]
+
+4️⃣ [Ideia 4 — traga um insight rápido ou dica prática, que possa ser gravada em vídeo curto.]
+
+5️⃣ [Ideia 5 — finalize o dia com algo inspirador, reflexivo ou engraçado, de acordo com o tom da marca.]
+
+💡 EXEMPLO DE SAÍDA (tema: Saúde da Mulher):
+
+1️⃣ Mostre um momento real do dia (ex: tomando café, indo trabalhar) e escreva: “Cuidar de si começa nos pequenos gestos ☕💗”.
+
+2️⃣ Enquete: “Você costuma reservar um tempo só pra você?” (✅ Sim / 😅 Quase nunca).
+
+3️⃣ Caixinha: “Qual o seu momento favorito de autocuidado?”
+
+4️⃣ Compartilhe uma dica rápida de saúde feminina (ex: hidratação, sono, exames).
+
+5️⃣ Finalize com uma frase trend: “Você merece se cuidar — todos os dias ✨”.
+
+📅 CONTEXTO DE USO:
+
+Este prompt será utilizado para gerar somente ideias de Stories diários, com base nas informações do onboarding e nos dados do post.
+
+As ideias devem ser:
+
+Simples e aplicáveis na rotina real do cliente;
+
+Alinhadas às tendências visuais e comportamentais atuais;
+
+Conectadas ao público e à essência da marca;
+
+Diferentes a cada dia, garantindo variedade e criatividade contínua.
+
+O resultado final deve parecer o planejamento de um estrategista de conteúdo profissional, pronto para execução imediata.
 
 """
         return prompt.strip()
@@ -630,7 +789,7 @@ Mais detalhes: {further_details}
 
 OBJETIVO DA IMAGEM:
 
-Criar uma imagem que represente visualmente o tema, emoção e intenção do post de Feed, mantendo coerência com o texto, o público e o nicho do cliente.
+Criar uma imagem que represente visualmente o tema, emoção e intenção do post de Feed, mantendo coerência com os dados, o público e o nicho do cliente.
 
 A imagem deve ser:
 
@@ -660,7 +819,7 @@ Luz: natural e bem equilibrada (suave e inspiradora)
 
 Textura: limpa e nítida, com foco em contraste, harmonia e composição
 
-Sem textos escritos ou sobreposições gráficas
+SEM TEXTO NA IMAGEM:
 
 Sem marcas d’água ou elementos de interface
 
@@ -678,16 +837,6 @@ Sempre que o tema permitir, use rostos reais, olhares e gestos para transmitir e
 
 O resultado deve parecer fotografia ou arte de nível editorial, própria de uma campanha premiada.
 
-⚙️ FORMATO DE SAÍDA (para a ferramenta de imagem):
-
-Gere apenas uma descrição detalhada da imagem ideal, sem instruções técnicas adicionais.
-
-Essa descrição será passada diretamente para o gerador de imagens da IA (ex: Gemini Image, Midjourney, DALL·E, Stable Diffusion).
-
-Exemplo de saída esperada:
-
-Mulher sorrindo em um ambiente com luz natural suave, tons pastel e atmosfera leve. Elementos de natureza e bem-estar ao redor. Paleta rosa e bege. Enquadramento vertical 4:5, estilo editorial, realista e refinado. Aparência profissional, como uma fotografia de revista moderna.
-
 📅 CONTEXTO DE USO:
 
 Este prompt será usado para gerar apenas a imagem correspondente a um post de Feed.
@@ -695,6 +844,12 @@ Este prompt será usado para gerar apenas a imagem correspondente a um post de F
 A imagem deve traduzir o tema e a emoção da copy textual, respeitar a identidade visual da marca e transmitir excelência e autenticidade.
 
 O resultado visual deve ser tão bom que pareça criado por um designer de elite, com harmonia, estilo e impacto perfeitos.
+
+⚙️ SAÍDA OBRIGATÓRIA:
+
+Crie uma imagem de marketing profissional e visualmente atraente, adequada para redes sociais, no formato vertical Tamanho: 1080 x 1350 px (Proporção: 4:5 (vertical – formato de post para Feed), utilizando a imagem anexada como canvas base para a arte. 
+
+NÃO DEIXE BORDAS BRANCAS AO REDOR DA IMAGEM, PREENCHA TODO O ESPAÇO, E NEM ADICIONE TEXTOS NA IMAGEM. NÃO QUEREMOS TEXTO E NEM BORDA BRANCA, APENAS A IMAGEM NO FORMATO 4:5, 1080X1350 PX
 
 """
         return prompt.strip()

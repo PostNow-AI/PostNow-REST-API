@@ -21,6 +21,8 @@ urlpatterns = [
     path('profile/', views.CreatorProfileView.as_view(), name='profile'),
     path('profile/reset/', views.ResetCreatorProfileStatusView.as_view(),
          name='reset_profile'),
+    path('profile/complete/', views.CompleteCreatorProfileStatusView.as_view(),
+         name='complete_profile'),
 
     # User behavior tracking
     path('behavior/', views.UserBehaviorView.as_view(), name='behavior'),

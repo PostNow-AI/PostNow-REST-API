@@ -197,6 +197,31 @@ class ResetCreatorProfileStatusView(generics.GenericAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class CompleteCreatorProfileStatusView(generics.GenericAPIView):
+    """Complete user profile onboarding."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            success = CreatorProfileService.complete_profile(request.user)
+            if success:
+                return Response({
+                    'message': 'Perfil completado com sucesso!',
+                    'completed': True
+                })
+            else:
+                return Response({
+                    'message': 'Nenhum perfil encontrado para resetar',
+                    'reset': False
+                }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'message': 'Erro ao resetar o perfil',
+                'reset': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class UserBehaviorView(generics.RetrieveUpdateAPIView):
     """Manage user behavioral data for personalization."""
     permission_classes = [permissions.IsAuthenticated]
