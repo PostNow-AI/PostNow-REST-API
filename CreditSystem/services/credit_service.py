@@ -461,9 +461,9 @@ class CreditService:
         )
 
         return {
-            'monthly_allocated': float(credits.monthly_credits_allocated),
+            'monthly_allocated': float(credits.balance),
             'monthly_used': float(credits.monthly_credits_used),
-            'monthly_remaining': float(credits.monthly_credits_allocated - credits.monthly_credits_used),
+            'monthly_remaining': float(credits.balance),
             'last_reset': credits.last_credit_reset.isoformat() if credits.last_credit_reset else None,
             'usage_percentage': float(
                 (credits.monthly_credits_used /
