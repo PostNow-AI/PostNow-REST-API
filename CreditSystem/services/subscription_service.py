@@ -155,14 +155,14 @@ class SubscriptionService:
                 stripe_subscription_id=stripe_subscription_id
             )
 
-            # Trigger credit reset for new subscription
+            # Set credits to the plan's monthly_credits value
             try:
-                CreditService.check_and_reset_monthly_credits(user)
+                CreditService.set_user_credits(user, plan.monthly_credits)
                 print(
-                    f"[WEBHOOK DEBUG] Credits reset triggered for user {user.id} with new subscription")
+                    f"[WEBHOOK DEBUG] Credits set to {plan.monthly_credits} for user {user.id} with new subscription")
             except Exception as e:
                 print(
-                    f"[WEBHOOK DEBUG] Error resetting credits for user {user.id}: {str(e)}")
+                    f"[WEBHOOK DEBUG] Error setting credits for user {user.id}: {str(e)}")
 
             return {
                 'status': 'success',
@@ -247,15 +247,16 @@ class SubscriptionService:
                 user_subscription.save()
 
                 # Trigger credit reset if subscription became active
-                if previous_status != 'active' and user_subscription.status == 'active':
-                    try:
-                        CreditService.check_and_reset_monthly_credits(
-                            user_subscription.user)
-                        print(
-                            f"[WEBHOOK DEBUG] Credits reset triggered for user {user_subscription.user.id} - subscription reactivated")
-                    except Exception as e:
-                        print(
-                            f"[WEBHOOK DEBUG] Error resetting credits for user {user_subscription.user.id}: {str(e)}")
+            if previous_status != 'active' and user_subscription.status == 'active':
+                try:
+                    # Set credits to the plan's monthly_credits when reactivating
+                    CreditService.set_user_credits(
+                        user_subscription.user, user_subscription.plan.monthly_credits)
+                    print(
+                        f"[WEBHOOK DEBUG] Credits set to {user_subscription.plan.monthly_credits} for user {user_subscription.user.id} - subscription reactivated")
+                except Exception as e:
+                    print(
+                        f"[WEBHOOK DEBUG] Error setting credits for user {user_subscription.user.id}: {str(e)}")
 
                 return {
                     'status': 'success',

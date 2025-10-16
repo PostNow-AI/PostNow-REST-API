@@ -21,6 +21,43 @@ class CreditService:
     """
 
     @staticmethod
+    def set_user_credits(user, amount):
+        """
+        Sets the user's credit balance to a specific amount.
+
+        Args:
+            user: The user instance
+            amount: The amount to set (integer or float)
+
+        Returns:
+            None
+
+        Raises:
+            ValidationError: If amount is invalid or user has no credit record
+        """
+        from ..models import UserCredits  # Assuming UserCredit is the model for credits
+
+        try:
+            # Get or create the user's credit record
+            user_credit, created = UserCredits.objects.get_or_create(
+                user=user,
+                defaults={'balance': 0}
+            )
+
+            # Validate amount
+            if amount < 0:
+                raise ValidationError("Credit amount cannot be negative")
+
+            # Set the balance
+            user_credit.balance = amount
+            user_credit.save()
+
+            print(f"[CREDIT DEBUG] Set credits to {amount} for user {user.id}")
+
+        except Exception as e:
+            raise ValidationError(f"Error setting user credits: {str(e)}")
+
+    @staticmethod
     def validate_user_subscription(user) -> bool:
         """
         Valida se o usuário possui uma assinatura ativa
