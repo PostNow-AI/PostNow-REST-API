@@ -420,10 +420,10 @@ class CreateStripeCheckoutSessionView(APIView):
                 # 50% off first month only
                 # Replace with actual Stripe coupon ID
                 discounts = [{'coupon': 'monthly_first_50_off'}]
-            elif plan.interval == 'semesterly':
+            elif plan.interval == 'semester':
                 # 25% off all months forever
                 # Replace with actual Stripe coupon ID
-                discounts = [{'coupon': 'semesterly_25_off'}]
+                discounts = [{'coupon': 'semester_25_off'}]
             elif plan.interval == 'yearly':
                 # 50% off all months forever
                 # Replace with actual Stripe coupon ID
