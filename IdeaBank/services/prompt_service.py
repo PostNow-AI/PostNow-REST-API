@@ -189,9 +189,11 @@ class PromptService:
 
         prompt = f"""
 Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em posts de Feed para redes sociais (Instagram, Facebook, LinkedIn, etc.).
-Sua missão é gerar copies otimizadas e prompts de imagem complementares, com base nas informações do negócio do cliente e nos dados específicos do post.
 
-Siga todas as instruções abaixo com atenção e precisão:
+Sua missão é gerar posts de Feed completos, com base nos dados do onboarding do cliente e nos dados de entrada abaixo.
+
+O texto deve ser fluido, natural, relevante e alinhado às tendências atuais do nicho, utilizando o método AIDA e linguagem adaptada ao público.
+
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
@@ -229,70 +231,79 @@ Objetivo: {objective}
 
 Mais detalhes: {details}
 
-🪶 REGRAS PARA A COPY:
+OBJETIVO GERAL:
 
-Siga o método AIDA (Atenção, Interesse, Desejo, Ação):
+Criar uma copy otimizada e estratégica para post de Feed, baseada no assunto, objetivo e detalhes informados, levando em conta o contexto, o público e o tom de voz do cliente.
 
-Comece com uma frase ou pergunta envolvente que capture a atenção.
+O conteúdo deve ser original, envolvente e alinhado com as trends atuais do tema, trazendo valor real ao público e fortalecendo a presença da marca.
 
-Desenvolva o tema de forma fluida e relevante, despertando curiosidade e identificação.
+🪶 REGRAS PARA O TEXTO:
 
-Crie conexão emocional e mostre benefícios reais.
+Método AIDA:
 
-Finalize com uma única CTA natural e coerente com o objetivo do post.
+Atenção: Comece com uma frase ou pergunta envolvente.
+
+Interesse: Desenvolva o tema com empatia e relevância.
+
+Desejo: Mostre benefícios e gere identificação.
+
+Ação: Finalize com uma única CTA natural e coerente com o objetivo.
 
 Estilo e tom:
 
-Use parágrafos curtos e bem espaçados, facilitando a leitura rápida e escaneável.
+Texto fluido, natural e pronto para o Feed.
 
-Respeite o tom de voz informado ({creator_profile_data.get('voice_tone', 'Profissional')}).
+Parágrafos curtos e bem espaçados.
 
-Evite sensacionalismo, exageros ou promessas irreais.
+Em média 5 emojis bem distribuídos, reforçando o tom emocional.
 
-Adapte o vocabulário ao público-alvo, nicho e faixa etária.
+Respeite o tom de voz ({creator_profile_data.get('voice_tone', 'Profissional')}).
 
-Traga expressões, temas ou referências atuais que estejam em alta no contexto do post.
+Use expressões e referências em alta no tema e no nicho.
 
-Uso de emojis:
+Adapte a linguagem ao público-alvo ({creator_profile_data.get('target_gender', 'Não informado')}, {creator_profile_data.get('target_age_range', 'Não informado')}, {creator_profile_data.get('target_location', 'Não informado')}).
 
-Utilize em média 5 emojis por copy principal, aplicados de forma natural, coerente e distribuída ao longo do texto.
+Evite sensacionalismo e exageros.
 
-Os emojis devem reforçar o tom e o sentimento do conteúdo, nunca poluir visualmente.
+Personalização:
 
-Não use emojis no título, subtítulo ou CTA da imagem.
+Conecte a mensagem ao negócio ({creator_profile_data.get('business_name', 'Não informado')}), ao nicho ({creator_profile_data.get('specialization', 'Não informado')}) e aos interesses do público ({creator_profile_data.get('target_interests', 'Não informado')}).
 
-Personalização obrigatória:
+Ajuste o tom conforme o tipo de profissional e o público descrito no onboarding.
 
-Considere o nicho, público, localização e interesses para contextualizar a linguagem e o estilo.
+Tendências:
 
-Faça alusões sutis ao negócio do cliente ({creator_profile_data.get('business_name', 'seu negócio')}) quando fizer sentido, sem autopromoção direta.
+O conteúdo deve se basear em assuntos e comportamentos que estão em alta nas redes sociais dentro do nicho.
+
+O texto deve parecer atual, moderno e relevante no momento da geração.
 
 📦 FORMATO DE SAÍDA:
 
-Gere a resposta exatamente neste formato:
+Gere o conteúdo exatamente neste formato:
 
-[TEXTO COMPLETO DA COPY — fluido, natural e pronto para publicação no Feed, com média de 5 emojis inseridos de forma estratégica.]
+[TEXTO COMPLETO DA COPY – fluido, natural, escaneável e com média de 5 emojis.]
 
 Como sugestão para escrever na imagem:
 
-Título: [Frase curta e chamativa (até 8 palavras)]
+Título: [Curto e criativo – até 8 palavras – diferente dos anteriores]
 
-Subtítulo: [Frase complementar breve, despertando curiosidade ou contexto]
+Subtítulo: [Frase complementar breve e envolvente – formato sempre variado]
 
-CTA: [Uma chamada clara e coerente com o objetivo do post]
+CTA: [Chamada clara e coerente com o objetivo do post – alternada a cada campanha]
 
-Descrição para gerar a imagem (sem texto):
-Crie uma descrição detalhada da imagem ideal para acompanhar o post, considerando:
+📅 CONTEXTO DE USO:
 
-Identidade visual (use a paleta de cores {creator_profile_data.get('color_palette')})
+Esse prompt será usado para gerar apenas o texto do post de Feed, sem necessidade de ideias de imagem, Stories ou Reels.
 
-Nicho e público-alvo ({creator_profile_data.get('specialization')}, {creator_profile_data.get('target_gender')}, {creator_profile_data.get('target_age_range')}, {creator_profile_data.get('target_location')})
+Cada texto deve:
 
-Tom de voz e emoção transmitida pela copy ({creator_profile_data.get('voice_tone')})
+Ser diferente e original;
 
-Cores, estilo, iluminação e ambientação condizentes com o negócio ({creator_profile_data.get('business_name')})
+Refletir as tendências atuais do tema;
 
-Elementos visuais que comuniquem a mensagem principal da copy sem incluir textos.
+Manter variação diária de título, subtítulo e CTA;
+
+Entregar um resultado de alta qualidade, digno de uma marca profissional.
 """
         return prompt.strip()
 
@@ -568,43 +579,122 @@ Sua missão é gerar copies poderosas, relevantes e seguras para campanhas, semp
 
     def _build_feed_image_prompt(self, post_data: Dict, content: str) -> str:
         """Build prompt specifically for feed post images."""
-        tema, objective, post_type, identidade_marca, context_adicional = self._get_image_context_section(
-            post_data, content)
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+
+        creator_profile_data = self._get_creator_profile_data()
 
         # TODO: Replace with your specific feed image prompt
         prompt = f"""
-Você é um especialista em design para marketing digital e redes sociais.  
-Sua missão é gerar artes visuais profissionais e impactantes, otimizadas para posts de Feed no Instagram ou Facebook.  
+Você é um diretor de arte virtual e designer premiado, especializado em criar imagens profissionais e altamente estéticas para redes sociais.
+Sua missão é gerar uma imagem de excelência visual que represente, de forma criativa e coerente, o conteúdo do post de Feed produzido a partir das informações abaixo.
 
-### DADOS DE ENTRADA 
-- Assunto do post: {tema}
-- Objetivo do post: {objective}
-- Tipo do post: Feed
-- Mais detalhes: {context_adicional}
+Essa imagem será usada como ilustração principal do post e deve parecer ter sido criada por um designer premiado e criativo, com qualidade digna de uma campanha profissional.
 
----
+🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
-### REGRAS PARA A IMAGEM:
+Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
 
-1. A imagem deve ser **clara, atrativa e diretamente relacionada ao tema do post**.  
-2. Formato padrão de Feed: **quadrado 1080x1080 px**.  
-3. Use **chamadas curtas e impactantes como título na imagem**, sem excesso de texto.  
-   - Exemplo: “Mais energia no seu dia 💧”, “Transforme sua rotina com saúde ✨”.  
-   - Nunca coloque blocos longos de texto.  
-4. O design deve ser limpo, moderno e profissional, respeitando a identidade visual da marca (quando fornecida).  
-5. As cores, tipografia e estilo devem transmitir **o tom da marca** descrito nos detalhes (ex.: acolhedor, sofisticado, jovem, minimalista).  
-6. Usar elementos visuais que conectem com o **público-alvo e seus interesses**.  
-7. Respeitar sempre comunicação ética e positiva, sem sensacionalismo ou imagens que possam gerar desconforto.  
-8. Se apropriado, incluir ícones ou ilustrações sutis que reforcem a mensagem (ex.: gotas para hidratação, folha para saúde, raio de energia para disposição).  
+Profissão: {creator_profile_data.get('profession', 'Não informado')}
 
----
+Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
 
-### SAÍDA ESPERADA:
-- **Uma imagem final, pronta para ser publicada no Feed.**  
-- A arte deve conter apenas uma chamada curta e impactante como título.  
-- O design deve estar finalizado de acordo com os dados fornecidos e pronto para uso imediato.  
+Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
 
+Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
 
+Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
+
+Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
+
+Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
+
+Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
+
+Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
+
+Logo: {creator_profile_data.get('logo', 'Não fornecido')}
+
+Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
+
+Tom de voz: {creator_profile_data.get('voice_tone', 'Profissional')}
+
+🧠 DADOS DO POST:
+
+Assunto: {name}
+
+Objetivo: {objective}
+
+Mais detalhes: {further_details}
+
+OBJETIVO DA IMAGEM:
+
+Criar uma imagem que represente visualmente o tema, emoção e intenção do post de Feed, mantendo coerência com o texto, o público e o nicho do cliente.
+
+A imagem deve ser:
+
+Visualmente impactante, moderna e profissional;
+
+Autêntica e emocionalmente conectada ao público;
+
+Com aparência de design ultra refinado, como se tivesse sido criada por um designer premiado internacionalmente;
+
+Realista sempre que possível, utilizando pessoas reais (com expressões autênticas e emoções coerentes ao tema) quando fizer sentido;
+
+Harmônica e fiel à paleta de cores da marca ({creator_profile_data.get('color_palette', 'Não definida')});
+
+Alinhada às tendências visuais atuais do nicho e das redes sociais (trends em alta).
+
+🧩 DIRETRIZES TÉCNICAS:
+
+Tamanho: 1080 x 1350 px
+
+Proporção: 4:5 (vertical – formato de post para Feed)
+
+Estilo: realista, moderno e sofisticado
+
+Qualidade: ultra-detalhada, profissional e refinada
+
+Luz: natural e bem equilibrada (suave e inspiradora)
+
+Textura: limpa e nítida, com foco em contraste, harmonia e composição
+
+Sem textos escritos ou sobreposições gráficas
+
+Sem marcas d’água ou elementos de interface
+
+Pode conter pessoas reais ou elementos simbólicos relacionados ao tema, conforme adequado.
+
+💡 ESTILO E DIREÇÃO CRIATIVA:
+
+A imagem deve traduzir visualmente a emoção da copy.
+
+Utilize referências visuais contemporâneas, inspiradas em campanhas de grandes marcas (ex: Apple, Nike, Natura, Heineken, Airbnb, etc.), conforme o tom da marca do cliente.
+
+A composição deve ser inteligente e equilibrada, com atenção ao foco visual principal.
+
+Sempre que o tema permitir, use rostos reais, olhares e gestos para transmitir empatia e conexão humana.
+
+O resultado deve parecer fotografia ou arte de nível editorial, própria de uma campanha premiada.
+
+⚙️ FORMATO DE SAÍDA (para a ferramenta de imagem):
+
+Gere apenas uma descrição detalhada da imagem ideal, sem instruções técnicas adicionais.
+
+Essa descrição será passada diretamente para o gerador de imagens da IA (ex: Gemini Image, Midjourney, DALL·E, Stable Diffusion).
+
+Exemplo de saída esperada:
+
+Mulher sorrindo em um ambiente com luz natural suave, tons pastel e atmosfera leve. Elementos de natureza e bem-estar ao redor. Paleta rosa e bege. Enquadramento vertical 4:5, estilo editorial, realista e refinado. Aparência profissional, como uma fotografia de revista moderna.
+
+📅 CONTEXTO DE USO:
+
+Este prompt será usado para gerar apenas a imagem correspondente a um post de Feed.
+
+A imagem deve traduzir o tema e a emoção da copy textual, respeitar a identidade visual da marca e transmitir excelência e autenticidade.
+
+O resultado visual deve ser tão bom que pareça criado por um designer de elite, com harmonia, estilo e impacto perfeitos.
 
 """
         return prompt.strip()
@@ -983,209 +1073,192 @@ Sua missão é editar a imagem já criada, mantendo **100% da identidade visual,
         details = self._build_all_details(further_details)
 
         prompt = f"""
-        GERAÇÃO DE CAMPANHA COMPLETA (Feed + Stories + Reels + Imagem)
-Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em conteúdos para redes sociais (Instagram, Facebook, LinkedIn, etc.).
- Sua missão é gerar campanhas completas de conteúdo diário, baseadas nas informações do cliente e do post, incluindo:
-1 post de Feed principal (com copy + sugestão de texto para imagem + prompt de imagem)
+      Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em conteúdos para redes sociais (Instagram, Facebook, LinkedIn, etc.).
+Sua missão é gerar campanhas completas e diárias, personalizadas para cada cliente com base nos dados do onboarding, sem precisar de campos manuais como “assunto” ou “objetivo”.
 
+Todos os conteúdos devem refletir as tendências (trends) atuais do nicho do cliente, ter alta qualidade de comunicação e se alinhar à identidade visual e tom de voz do negócio.
 
-5 ideias de Stories complementares
+Cada campanha deve conter:
 
+1 Conteúdo de Feed (copy + sugestão de texto para imagem + prompt de imagem);
 
-1 ideia de roteiro de Reels, criativo e coerente com o mesmo tema.
+5 ideias de Stories coerentes com o tema;
 
-
+1 roteiro de Reels criativo e estratégico.
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
-Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
 
+Nome profissional: {creator_profile_data.get('professional_name', '')}
 
-Profissão: {creator_profile_data.get('profession', 'Não informado')}
+Profissão: {creator_profile_data.get('profession', '')}
 
+Número de celular: {creator_profile_data.get('whatsapp_number', '')}
 
-Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
+Nome do negócio: {creator_profile_data.get('business_name', '')}
 
+Setor/Nicho: {creator_profile_data.get('specialization', '')}
 
-Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
+Descrição do negócio: {creator_profile_data.get('business_description', '')}
 
+Gênero do público-alvo: {creator_profile_data.get('target_gender', '')}
 
-Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
+Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', '')}
 
+Interesses do público-alvo: {creator_profile_data.get('target_interests', '')}
 
-Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
+Localização do público-alvo: {creator_profile_data.get('target_location', '')}
 
+Logo: {creator_profile_data.get('logo', '')}
 
-Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
+Paleta de cores: {creator_profile_data.get('color_palette', '')}
 
-
-Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
-
-
-Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
-
-
-Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
-
-
-Logo: {creator_profile_data.get('logo', 'Não fornecido')}
-
-
-Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
-
-
-Tom de voz: {creator_profile_data.get('voice_tone', 'Profissional')}
-
-
-
-🧠 DADOS DO POST:
-Assunto: {name}
-
-
-Objetivo: {objective}
-
-
-Mais detalhes: {details}
-
-
+Tom de voz: {creator_profile_data.get('voice_tone', '')}
 
 🎯 OBJETIVO GERAL:
-Gerar uma campanha diária completa e integrada, sempre com base no mesmo tema ({name}), voltada para o objetivo definido ({objective}), conectando Feed, Stories e Reels de forma coesa, estratégica e criativa.
-Essa campanha será parte de uma sequência diária de publicações (uma por dia), portanto, o conteúdo deve ser atemporal, relevante e reaproveitável.
 
-🪶 REGRAS PARA A COPY PRINCIPAL (Feed):
+Gerar uma campanha de conteúdo completa e personalizada, inspirada em assuntos, formatos e trends atuais dentro do nicho e interesse do público.
+
+Cada dia, o sistema deve entregar uma nova campanha, com:
+
+Conteúdo diferente e original;
+
+Título, subtítulo e CTA alternados e nunca repetidos;
+
+Temas sempre atualizados e relevantes para o público.
+
+🪶 REGRAS PARA A COPY DO FEED:
+
 Estrutura AIDA (Atenção, Interesse, Desejo, Ação):
 
+Comece com uma frase ou pergunta envolvente e natural.
 
-Frase de abertura envolvente e contextualizada.
+Desenvolva a mensagem com fluidez, contexto e empatia.
 
+Gere identificação e desperte emoção.
 
-Desenvolvimento com linguagem fluida, empática e natural.
-
-
-Valor ou benefício claro para o leitor.
-
-
-Uma única CTA natural no final.
-
+Finalize com uma única CTA coerente e natural.
 
 Estilo e tom:
 
+Texto fluido, natural e pronto para publicação.
 
-Use parágrafos curtos e bem espaçados.
+Parágrafos curtos e bem espaçados.
 
+Média de 5 emojis por texto, usados de forma natural e coerente.
 
-Adapte o texto ao tom de voz do cliente ({creator_profile_data.get('voice_tone', 'Profissional')}).
+Linguagem ajustada ao tom de voz ({creator_profile_data.get('voice_tone', '')}) e público-alvo ({creator_profile_data.get('target_gender', '')}, {creator_profile_data.get('target_age_range', '')}).
 
+Use referências, expressões e temas em alta nas trends do nicho.
 
-Linguagem adequada ao público-alvo, faixa etária e localização.
-
-
-Use em média 5 emojis ao longo da copy, distribuídos de forma natural.
-
-
-Traga expressões e referências atuais relacionadas ao tema.
-
+Evite sensacionalismo e exageros.
 
 Personalização:
 
+Adapte a linguagem e exemplos conforme o nicho e localização do cliente ({creator_profile_data.get('specialization', '')}, {creator_profile_data.get('target_location', '')}).
 
-Conecte o tema à realidade e valores do negócio ({creator_profile_data.get('business_name', 'seu negócio')}).
-
-
-Adapte exemplos, situações e vocabulário conforme o nicho e público-alvo.
-
-
-O texto deve ser fluido e pronto para publicação.
-
-
+Faça alusões sutis ao negócio ({creator_profile_data.get('business_name', '')}) quando couber.
 
 📦 FORMATO DE SAÍDA:
-Retorne o conteúdo neste formato exato:
+
+Gere a resposta exatamente neste formato:
 
 🧩 1. Conteúdo de Feed (Copy Principal):
-[Texto completo e pronto para o Feed, com média de 5 emojis bem posicionados e linguagem natural.]
+
+[Texto completo da copy, com média de 5 emojis bem distribuídos, pronto para publicação no Feed.]
+
 Como sugestão para escrever na imagem:
-Título: [Curto e chamativo — até 8 palavras]
 
+Título: [Frase curta e chamativa — até 8 palavras — diferente das anteriores , sem usar as palavras 'Conteúdo Diário' ou 'Dica do Dia' ou relacionados] 
 
-Subtítulo: [Frase complementar que gere curiosidade]
+Subtítulo: [Frase complementar breve e criativa — formato sempre variado]
 
-
-CTA: [Ação breve e coerente com o objetivo]
-
+CTA: [Chamada natural e coerente com o conteúdo — alternada diariamente]
 
 Descrição para gerar a imagem (sem texto):
- Descreva a imagem ideal para o post, levando em conta:
-Paleta de cores ({creator_profile_data.get('color_palette', 'Não definida')})
+Gere uma descrição detalhada de uma imagem profissional no tamanho 1080 x 1350 px (proporção 4:5), formato vertical otimizado para o Feed.
 
+A imagem deve ser:
 
-Público-alvo ({creator_profile_data.get('target_gender', 'Não informado')}, {creator_profile_data.get('target_age_range', 'Não informado')}, {creator_profile_data.get('target_location', 'Não informado')})
+Altamente profissional e esteticamente impecável, com qualidade de um designer premiado;
 
+Realista e visualmente impactante, priorizando imagens de pessoas reais sempre que fizer sentido para o tema;
 
-Nicho ({creator_profile_data.get('specialization', 'Não informado')})
+Coerente com o conteúdo da copy e o nicho do cliente ({creator_profile_data.get('specialization', '')});
 
+Criada com composição, iluminação e cores em harmonia com a paleta da marca ({creator_profile_data.get('color_palette', '')});
 
-Emoção e tom do texto ({creator_profile_data.get('voice_tone', 'Profissional')})
+Visualmente moderna, sofisticada e criativa;
 
+Seguindo as tendências visuais mais atuais das redes sociais e do setor;
 
-Cores, iluminação e ambientação condizentes com o negócio ({creator_profile_data.get('business_name', 'seu negócio')})
+Sem textos visíveis na imagem.
 
-
-A imagem não deve conter texto, apenas elementos visuais que reforcem a mensagem principal.
-
-
+O resultado visual deve ser de excelência, com aparência de algo feito por um designer de alto nível, criativo, premiado e sensível à identidade da marca.
 
 🎥 2. Ideias de Stories (5 sugestões):
-Gere 5 ideias de Stories práticos e complementares ao tema do post, que o cliente possa gravar ou publicar ao longo do dia.
- As ideias devem:
-Manter coerência com o conteúdo do Feed.
 
+Crie 5 ideias de Stories que mantenham coerência com o tema do Feed.
 
-Alternar entre bastidores, enquetes, perguntas, bastidores, reflexões e provas sociais.
+Cada ideia deve:
 
+Ser prática e fácil de executar;
 
-Ser simples de executar (sem precisar de edição complexa).
+Refletir trends atuais (ex: formatos, filtros, sons, interações em alta);
 
+Estimular engajamento e conexão emocional;
 
-Estimular interação e engajamento rápido.
+Misturar formatos (enquetes, perguntas, bastidores, dicas rápidas, reflexões).
 
+Exemplo:
 
-Exemplo de formato de saída:
 [Ideia 1]
-
 
 [Ideia 2]
 
-
 [Ideia 3]
-
 
 [Ideia 4]
 
-
 [Ideia 5]
 
-
-
 🎬 3. Ideia de Roteiro para Reels:
-Crie 1 roteiro curto de Reels (duração entre 20 e 40 segundos), coerente com o mesmo tema do post e que amplifique a mensagem.
+
+Crie 1 roteiro curto (20–40 segundos) de Reels com o mesmo tema da campanha.
+
 Estrutura recomendada:
-Abertura (gancho em 3s): Comece com algo que prenda a atenção de forma natural.
 
+Abertura (3s): Gancho forte baseado em trends recentes do nicho.
 
-Desenvolvimento: Entregue um insight, dica ou reflexão central.
+Desenvolvimento: Insight, dica ou história envolvente.
 
+Fechamento: CTA leve e natural.
 
-Fechamento (CTA): Convide o público para agir (curtir, comentar, salvar, compartilhar, seguir).
+O roteiro deve:
 
+Ser criativo, dinâmico e visualmente interessante;
 
-O roteiro deve estar alinhado ao tom de voz e estilo do cliente, e pode sugerir ambientação, tipo de cena ou fala.
+Refletir o tom de voz ({creator_profile_data.get('voice_tone', '')}) e estilo da marca;
+
+Sugerir falas, gestos ou cenas se fizer sentido;
+
+Basear-se em formatos de Reels que estejam performando bem no momento.
 
 📅 CONTEXTO DE USO:
-Esse prompt será utilizado diariamente para gerar uma nova campanha de conteúdo por dia, com base no assunto informado pelo cliente.
- As campanhas devem ser originais, criativas e complementares, mantendo coerência com o histórico do negócio e as tendências atuais do nicho.
 
-Formato: Gere a resposta em HTML , deixe sempre topicos e titulos em negrito para melhorar a UI 
+Este prompt será utilizado diariamente para gerar uma campanha nova por dia, baseada nas informações do onboarding do cliente.
+
+As campanhas devem ser:
+
+Originais, criativas e atualizadas com as tendências do momento;
+
+Com variação diária de títulos, subtítulos e CTAs;
+
+Visualmente impecáveis e alinhadas à identidade da marca.
+
+O resultado final deve transmitir qualidade de agência premium — um conteúdo que o cliente publicaria com orgulho, digno de uma marca profissional e moderna.
+
+# SAÍDA ESPERADA:
+Gere a resposta em HTML , deixe sempre topicos e titulos em negrito para melhorar a UI, OBRIGATORIAMENTE.
 
         """
         return prompt.strip()

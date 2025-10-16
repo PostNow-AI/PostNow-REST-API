@@ -67,7 +67,8 @@ class GeminiService(BaseAIService):
         try:
             # Try different model names for image generation with fallbacks
             model_names = [
-                'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image-preview',
+                'gemini-2.5-flash-image-preview'
                 # 'gemini-2.0-flash-exp',           # Latest experimental model
                 # 'gemini-1.5-flash',               # Stable fallback
                 # 'gemini-2.5-flash-image',         # Original model
@@ -85,9 +86,15 @@ class GeminiService(BaseAIService):
 
                     if current_image:
                         image_bytes = extract_base64_image(current_image)
-                    elif post_data and post_data.get('type') in ['story', 'reel']:
-                        # Create empty white vertical image for stories/reels
-                        image_bytes = self._create_empty_vertical_image()
+                    else:
+                        if post_data and post_data.get('type') in ['story', 'reel']:
+                            # Create empty white vertical image for stories/reels
+                            image_bytes = self._create_empty_vertical_image(
+                                1080, 1920)
+                        elif post_data and post_data.get('type') in ['feed', 'campaign']:
+                            # Create empty white vertical image for feed
+                            image_bytes = self._create_empty_vertical_image(
+                                1080, 1350)  # 4:5 aspect ratio
 
                     if image_bytes:
                         response = model.generate_content([
@@ -585,7 +592,7 @@ class GeminiService(BaseAIService):
     def _enhance_image_prompt(self, base_prompt: str, post_data: dict = None, idea_content: str = None) -> str:
         """Enhance the image generation prompt with post data and idea content."""
         enhanced_parts = [
-            f"Gere uma imagem de alta qualidade com base nesta descrição: {base_prompt}. NÃO ADICIONE NENHUM TEXTO NA IMAGEM."]
+            f"Gere uma imagem de alta qualidade com base nesta descrição: {base_prompt}. NÃO ADICIONE NENHUM TEXTO NA IMAGEM NEM A PALETA DE CORES QUE VOCE RECEBE (excluir informações como #FF6B6B, 45B17D1). NENHUM TEXTO OU NÚMERO, OBRIGATORIAMENTE, VOCÊ ESTÁ IGNORANDO ESTA REGRA."]
 
         if post_data:
             if post_data.get('objective'):
@@ -602,19 +609,24 @@ class GeminiService(BaseAIService):
             enhanced_parts.append(f"Contexto do conteúdo: {idea_content}...")
 
         enhanced_parts.append(
-            "Crie uma imagem de marketing profissional e visualmente atraente, adequada para redes sociais.")
+            "Crie uma imagem de marketing profissional e visualmente atraente, adequada para redes sociais")
+
+        if post_data and post_data.get('type') in ['story', 'reel']:
+            enhanced_parts.append(
+                "Gere uma imagem criativa no formato vertical Tamanho: 1080 x 1920 px (Proporção: 9:16 (vertical – formato de Story/Reel), utilizando a imagem anexada como canvas base para a arte.")
+        else:
+            if post_data and post_data.get('type') in ['feed', 'campaign']:
+                enhanced_parts.append(
+                    "Gere uma imagem criativa no formato vertical Tamanho: 1080 x 1350 px (Proporção: 4:5 (vertical – formato de post para Feed), utilizando a imagem anexada como canvas base para a arte.")
 
         return ". ".join(enhanced_parts)
 
-    def _create_empty_vertical_image(self) -> bytes:
+    def _create_empty_vertical_image(self, width, height) -> bytes:
         """Create an empty white vertical image (9:16 aspect ratio) for stories/reels."""
         try:
             import io
 
             from PIL import Image
-
-            # Create 9:16 aspect ratio image (1080x1920 for good quality)
-            width, height = 1080, 1920
 
             # Create white image
             image = Image.new('RGB', (width, height), color='white')

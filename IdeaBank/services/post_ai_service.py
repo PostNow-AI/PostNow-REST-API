@@ -606,136 +606,574 @@ Chamada para ação no post/carrossel: Saiba mais!"""
     def _extract_image_description_from_content(self, content: str) -> str:
         """
         Extract image description text from feed post content.
-        Looks for patterns like "Descrição para gerar a imagem" or similar.
+        Looks for various patterns and formats to identify image generation prompts.
         """
         try:
-            content_lower = content.lower()
+            if not content or not content.strip():
+                return ""
 
-            # Look for common patterns in Portuguese feed content
+            content_lower = content.lower()
+            original_content = content
+
+            # Look for common patterns in Portuguese and English feed content
             patterns = [
+                # Portuguese patterns
                 "descrição para gerar a imagem",
                 "descrição da imagem",
+                "descrição para imagem",
+                "prompt para imagem",
+                "prompt da imagem",
                 "imagem:",
                 "visual:",
-                "arte:"
+                "arte:",
+                "ilustração:",
+                "foto:",
+                "gráfico:",
+                "design:",
+                "crie uma imagem",
+                "gere uma imagem",
+                "descreva a imagem",
+                "descrição visual",
+                "descrição de imagem",
+                # English patterns
+                "image description",
+                "image prompt",
+                "visual description",
+                "art description",
+                "illustration:",
+                "photo:",
+                "graphic:",
+                "design:",
+                "create an image",
+                "generate an image",
+                "describe the image",
+                # More specific patterns
+                "descrição para gerar a imagem (sem texto):",
+                "descrição para gerar imagem:",
+                "prompt de imagem:",
+                "descrição visual:",
+                "imagem a ser gerada:",
+                "arte a ser criada:",
             ]
+
+            best_match = ""
+            best_score = 0
 
             for pattern in patterns:
                 pattern_start = content_lower.find(pattern)
                 if pattern_start != -1:
-                    # Find the start of the description text
-                    desc_start = content.find(":", pattern_start) + 1
-                    if desc_start > 0:
-                        # Find the end (next section or end of content)
-                        remaining_content = content[desc_start:]
+                    # Find the start of the description text (after colon or pattern end)
+                    colon_pos = content.find(":", pattern_start)
+                    if colon_pos != -1:
+                        desc_start = colon_pos + 1
+                    else:
+                        # If no colon, start after the pattern
+                        desc_start = pattern_start + len(pattern)
 
-                        # Look for common section endings
-                        end_markers = ["\n\n", "###", "##", "---", "***"]
-                        end_pos = len(remaining_content)
+                    # Skip whitespace
+                    while desc_start < len(content) and content[desc_start].isspace():
+                        desc_start += 1
 
-                        for marker in end_markers:
-                            marker_pos = remaining_content.find(marker)
-                            if marker_pos != -1 and marker_pos < end_pos:
-                                end_pos = marker_pos
+                    if desc_start >= len(content):
+                        continue
 
-                        description = remaining_content[:end_pos].strip()
-                        if len(description) > 20:  # Ensure it's substantial
-                            return description
+                    # Extract potential description
+                    remaining_content = content[desc_start:]
 
-            # Fallback: look for any text after "Crie" or "Descreva"
-            fallback_patterns = ["crie uma", "descreva", "gere uma imagem"]
+                    # Find the end of the description section
+                    end_pos = self._find_description_end(remaining_content)
+
+                    description = remaining_content[:end_pos].strip()
+
+                    # Score this match based on length and content quality
+                    score = self._score_description(description)
+
+                    if score > best_score:
+                        best_match = description
+                        best_score = score
+
+            # If we found a good match, return it
+            if best_score > 0.5:  # Threshold for acceptable match
+                return best_match
+
+            # Fallback: Look for quoted text that might be an image description
+            import re
+            # Look for quotes with substantial content
+            quotes = re.findall(r'"([^"]{20,200})"', original_content)
+            for quote in quotes:
+                if self._is_likely_image_description(quote):
+                    return quote.strip()
+
+            # Another fallback: Look for text after "Crie", "Gere", "Descreva" that spans multiple lines
+            fallback_patterns = [
+                r"crie uma?\s+([^.!?\n]{50,300})",
+                r"gere uma?\s+([^.!?\n]{50,300})",
+                r"descreva\s+([^.!?\n]{50,300})",
+                r"create an?\s+([^.!?\n]{50,300})",
+                r"generate an?\s+([^.!?\n]{50,300})",
+                r"describe\s+([^.!?\n]{50,300})"
+            ]
+
             for pattern in fallback_patterns:
-                pattern_start = content_lower.find(pattern)
-                if pattern_start != -1:
-                    # Take up to 500 chars
-                    remaining = content[pattern_start:pattern_start + 500]
-                    lines = remaining.split('\n')
-                    if len(lines) > 0 and len(lines[0]) > 30:
-                        return lines[0].strip()
+                matches = re.findall(pattern, content_lower, re.IGNORECASE)
+                for match in matches:
+                    cleaned_match = match.strip()
+                    if len(cleaned_match) > 30 and self._is_likely_image_description(cleaned_match):
+                        return cleaned_match
+
+            # Final fallback: Look for any substantial paragraph that contains visual keywords
+            paragraphs = re.split(r'\n\s*\n', original_content)
+            for paragraph in paragraphs:
+                paragraph = paragraph.strip()
+                if len(paragraph) > 50 and len(paragraph) < 500:
+                    if self._is_likely_image_description(paragraph):
+                        return paragraph
 
             return ""
 
-        except Exception:
+        except Exception as e:
+            print(f"Error extracting image description: {str(e)}")
             return ""
+
+    def _find_description_end(self, content: str) -> int:
+        """
+        Find the end position of an image description within content.
+        """
+        # Look for section endings
+        end_markers = [
+            "\n\n##", "\n\n###", "\n\n####", "\n\n#####", "\n\n######",
+            "\n\n---", "\n\n***", "\n\n___",
+            "\n\n1.", "\n\n2.", "\n\n3.", "\n\n4.", "\n\n5.",
+            "\n\n•", "\n\n-", "\n\n*",
+            "\n\nTexto:", "\n\nCopy:", "\n\nLegenda:",
+            "\n\nHashtags:", "\n\n#", "\n\nLinks:",
+            "\n\nCall to action:", "\n\nCTA:",
+            "\n\nConclusão:", "\n\nFinal:",
+        ]
+
+        end_pos = len(content)
+
+        # Find the earliest end marker
+        for marker in end_markers:
+            marker_pos = content.find(marker)
+            if marker_pos != -1 and marker_pos < end_pos:
+                end_pos = marker_pos
+
+        # If no marker found, look for double line breaks
+        if end_pos == len(content):
+            double_break = content.find("\n\n")
+            if double_break != -1:
+                end_pos = double_break
+
+        # If still no end found, limit to reasonable length (max 1000 chars)
+        if end_pos > 1000:
+            # Try to find a natural break point
+            sentences = content.split('.')
+            if len(sentences) > 3:
+                # Take first 3 sentences
+                end_pos = content.find(sentences[3]) + len(sentences[3])
+            else:
+                end_pos = min(1000, len(content))
+
+        return end_pos
+
+    def _score_description(self, description: str) -> float:
+        """
+        Score a potential image description based on various criteria.
+        Returns a score between 0 and 1.
+        """
+        if not description or len(description) < 10:
+            return 0.0
+
+        score = 0.0
+        desc_lower = description.lower()
+
+        # Length score (sweet spot around 50-200 chars)
+        length = len(description)
+        if 50 <= length <= 200:
+            score += 0.3
+        elif 20 <= length <= 300:
+            score += 0.2
+        elif length < 20:
+            score += 0.1
+
+        # Visual keywords score
+        visual_keywords = [
+            'imagem', 'image', 'visual', 'foto', 'photo', 'ilustração', 'illustration',
+            'arte', 'art', 'design', 'gráfico', 'graphic', 'pintura', 'painting',
+            'desenho', 'drawing', 'retrato', 'portrait', 'paisagem', 'landscape',
+            'cena', 'scene', 'estilo', 'style', 'cor', 'color', 'luz', 'light',
+            'sombra', 'shadow', 'textura', 'texture', 'composição', 'composition'
+        ]
+
+        keyword_count = sum(
+            1 for keyword in visual_keywords if keyword in desc_lower)
+        score += min(keyword_count * 0.1, 0.4)  # Max 0.4 for keywords
+
+        # Action verbs score
+        action_verbs = [
+            'mostrar', 'show', 'ilustrar', 'illustrate', 'representar', 'represent',
+            'capturar', 'capture', 'refletir', 'reflect', 'expressar', 'express',
+            'criar', 'create', 'gerar', 'generate', 'produzir', 'produce'
+        ]
+
+        action_count = sum(1 for verb in action_verbs if verb in desc_lower)
+        score += min(action_count * 0.05, 0.2)  # Max 0.2 for action verbs
+
+        # Quality indicators
+        if any(word in desc_lower for word in ['detalhes', 'details', 'realista', 'realistic', 'profissional', 'professional']):
+            score += 0.1
+
+        # Penalty for non-visual content
+        if any(word in desc_lower for word in ['hashtags', 'link', 'call to action', 'cta', 'compartilhar', 'share']):
+            score -= 0.2
+
+        return max(0.0, min(1.0, score))
+
+    def _is_likely_image_description(self, text: str) -> bool:
+        """
+        Determine if a text snippet is likely to be an image description.
+        """
+        if not text or len(text) < 20:
+            return False
+
+        text_lower = text.lower()
+
+        # Must have some visual keywords
+        visual_keywords = [
+            'imagem', 'image', 'visual', 'foto', 'photo', 'ilustração', 'illustration',
+            'arte', 'art', 'design', 'gráfico', 'graphic', 'pintura', 'painting',
+            'desenho', 'drawing', 'retrato', 'portrait', 'paisagem', 'landscape',
+            'cor', 'color', 'luz', 'light', 'estilo', 'style'
+        ]
+
+        has_visual_keyword = any(
+            keyword in text_lower for keyword in visual_keywords)
+
+        # Should not have too many non-visual elements
+        non_visual_indicators = [
+            'hashtags', '#', 'link', 'compartilhar', 'share', 'seguir', 'follow',
+            'curtir', 'like', 'comentar', 'comment', 'salvar', 'save'
+        ]
+
+        non_visual_count = sum(
+            1 for indicator in non_visual_indicators if indicator in text_lower)
+
+        # Allow some non-visual content but not too much
+        return has_visual_keyword and non_visual_count <= 2
 
     def _remove_image_description_from_content(self, content: str, image_description: str) -> str:
         """
         Remove the image description section from the content after successful image generation.
+        Uses multiple strategies to identify and remove the description section.
         """
         try:
-            if not image_description or not image_description.strip():
+            if not content or not image_description or not image_description.strip():
                 return content
 
+            original_content = content
             content_lower = content.lower()
-            image_desc_lower = image_description.lower()
+            image_desc_lower = image_description.lower().strip()
 
-            # Look for common patterns that precede the image description
-            patterns = [
+            # Strategy 1: Look for structured sections with headers
+            section_headers = [
                 "descrição para gerar a imagem",
                 "descrição da imagem",
+                "descrição para imagem",
+                "prompt para imagem",
+                "prompt da imagem",
                 "imagem:",
                 "visual:",
-                "arte:"
+                "arte:",
+                "ilustração:",
+                "foto:",
+                "gráfico:",
+                "design:",
+                "descrição visual",
+                "descrição de imagem",
+                "image description",
+                "image prompt",
+                "visual description",
+                "art description",
             ]
 
-            for pattern in patterns:
-                pattern_start = content_lower.find(pattern)
-                if pattern_start != -1:
-                    # Find where the image description starts in the original content
-                    desc_section_start = content.find(":", pattern_start)
-                    if desc_section_start != -1:
-                        # Find the end of the description section
-                        remaining_content = content[desc_section_start + 1:]
+            for header in section_headers:
+                header_start = content_lower.find(header)
+                if header_start != -1:
+                    # Find the colon after the header
+                    colon_pos = content.find(":", header_start)
+                    if colon_pos != -1:
+                        # Extract the section from header start to end
+                        section_start = header_start
 
-                        # Look for section endings
-                        end_markers = ["\n\n", "###", "##", "---", "***"]
-                        end_pos = len(remaining_content)
+                        # Find where this section ends
+                        section_end = self._find_section_end(
+                            content, colon_pos + 1)
 
-                        for marker in end_markers:
-                            marker_pos = remaining_content.find(marker)
-                            if marker_pos != -1 and marker_pos < end_pos:
-                                end_pos = marker_pos
+                        # Extract the description from this section
+                        extracted_desc = content[colon_pos +
+                                                 1:section_end].strip()
 
-                        # Extract the description section
-                        extracted_description = remaining_content[:end_pos].strip(
-                        )
+                        # Check if this matches our image description (with fuzzy matching)
+                        if self._descriptions_match(extracted_desc, image_description):
+                            # Remove the entire section
+                            cleaned_content = (
+                                content[:section_start] + content[section_end:]).strip()
 
-                        # Check if this matches our image description (fuzzy match)
-                        if (extracted_description.lower() in image_desc_lower or
-                            image_desc_lower in extracted_description.lower() or
-                                len(set(extracted_description.lower().split()) & set(image_desc_lower.split())) > 3):
-
-                            # Remove the entire section from pattern to end
-                            section_end = desc_section_start + 1 + end_pos
-                            # Also remove the pattern label
-                            pattern_actual_start = content.find(
-                                pattern, pattern_start - 20, pattern_start + 20)
-                            if pattern_actual_start == -1:
-                                pattern_actual_start = pattern_start
-
-                            # Remove from pattern start to section end, including trailing whitespace
-                            cleaned_content = (content[:pattern_actual_start] +
-                                               content[section_end:]).strip()
-
-                            # Clean up any double line breaks
-                            cleaned_content = cleaned_content.replace(
-                                '\n\n\n', '\n\n')
-
+                            # Clean up extra whitespace
+                            cleaned_content = self._clean_whitespace(
+                                cleaned_content)
                             return cleaned_content
 
-            # Fallback: try to remove the exact description text
+            # Strategy 2: Direct text matching with context
+            # Find the image description in the content
+            desc_pos = content_lower.find(image_desc_lower)
+            if desc_pos != -1:
+                # Look for context around the description
+                # Look back up to 100 chars
+                context_start = max(0, desc_pos - 100)
+                context_end = min(len(content), desc_pos +
+                                  len(image_description) + 100)  # Look forward
+
+                context = content[context_start:context_end]
+                context_lower = context.lower()
+
+                # Check if this is within a description section
+                section_indicators = [
+                    "descrição", "description", "prompt", "imagem", "image",
+                    "visual", "arte", "art", "ilustração", "illustration"
+                ]
+
+                has_section_context = any(
+                    indicator in context_lower for indicator in section_indicators)
+
+                if has_section_context:
+                    # Find the start of this section
+                    section_start = context_start
+                    # Look for section start indicators
+                    for indicator in section_indicators:
+                        indicator_pos = content_lower.rfind(
+                            indicator, 0, desc_pos)
+                        if indicator_pos != -1 and indicator_pos >= context_start - 50:
+                            section_start = indicator_pos
+                            break
+
+                    # Find the end of this section
+                    section_end = self._find_section_end(
+                        content, desc_pos + len(image_description))
+
+                    # Remove the section
+                    cleaned_content = (
+                        content[:section_start] + content[section_end:]).strip()
+                    cleaned_content = self._clean_whitespace(cleaned_content)
+                    return cleaned_content
+
+            # Strategy 3: Remove exact matches or very similar text
             if image_description in content:
-                cleaned_content = content.replace(
-                    image_description, "").strip()
-                # Clean up any remaining artifacts
-                cleaned_content = cleaned_content.replace('\n\n\n', '\n\n')
-                return cleaned_content
+                # Find all occurrences and remove the most likely one
+                desc_length = len(image_description)
+                best_match_pos = -1
+                best_match_score = 0
 
-            # If no pattern matches, return original content
+                start = 0
+                while True:
+                    pos = content.find(image_description, start)
+                    if pos == -1:
+                        break
+
+                    # Score this occurrence based on context
+                    context_score = self._score_removal_context(
+                        content, pos, desc_length)
+                    if context_score > best_match_score:
+                        best_match_score = context_score
+                        best_match_pos = pos
+
+                    start = pos + 1
+
+                if best_match_pos != -1 and best_match_score > 0.3:
+                    # Remove this occurrence
+                    cleaned_content = (content[:best_match_pos] +
+                                       content[best_match_pos + desc_length:]).strip()
+                    cleaned_content = self._clean_whitespace(cleaned_content)
+                    return cleaned_content
+
+            # Strategy 4: Fuzzy matching for similar descriptions
+            # Split both texts into words and find the best matching segment
+            content_words = content.split()
+            desc_words = image_description.split()
+
+            if len(desc_words) >= 3:  # Only for substantial descriptions
+                best_match_start = -1
+                best_match_end = -1
+                best_overlap = 0
+
+                # Slide through content looking for word overlaps
+                for i in range(len(content_words) - len(desc_words) + 1):
+                    window = content_words[i:i + len(desc_words)]
+                    overlap = len(set(window) & set(desc_words))
+
+                    # 60% overlap
+                    if overlap > best_overlap and overlap >= len(desc_words) * 0.6:
+                        best_overlap = overlap
+                        best_match_start = i
+                        best_match_end = i + len(desc_words)
+
+                if best_match_start != -1:
+                    # Convert word positions to character positions
+                    char_start = len(
+                        ' '.join(content_words[:best_match_start]))
+                    if best_match_start > 0:
+                        char_start += 1  # Add space
+
+                    char_end = len(' '.join(content_words[:best_match_end]))
+                    if best_match_end > 0:
+                        char_end += 1  # Add space
+
+                    # Remove this segment
+                    cleaned_content = (
+                        content[:char_start] + content[char_end:]).strip()
+                    cleaned_content = self._clean_whitespace(cleaned_content)
+                    return cleaned_content
+
+            # If no removal was successful, return original content
+            return original_content
+
+        except Exception as e:
+            print(f"Error removing image description: {str(e)}")
             return content
 
-        except Exception:
+    def _find_section_end(self, content: str, start_pos: int) -> int:
+        """
+        Find the end of a content section starting from a given position.
+        """
+        # Look for section endings
+        end_markers = [
+            "\n\n##", "\n\n###", "\n\n####", "\n\n#####", "\n\n######",
+            "\n\n---", "\n\n***", "\n\n___",
+            "\n\n1.", "\n\n2.", "\n\n3.", "\n\n4.", "\n\n5.",
+            "\n\n•", "\n\n-", "\n\n*",
+            "\n\nTexto:", "\n\nCopy:", "\n\nLegenda:",
+            "\n\nHashtags:", "\n\n#", "\n\nLinks:",
+            "\n\nCall to action:", "\n\nCTA:",
+            "\n\nConclusão:", "\n\nFinal:",
+        ]
+
+        end_pos = len(content)
+
+        # Find the earliest end marker after start_pos
+        for marker in end_markers:
+            marker_pos = content.find(marker, start_pos)
+            if marker_pos != -1 and marker_pos < end_pos:
+                end_pos = marker_pos
+
+        # If no marker found, look for double line breaks
+        if end_pos == len(content):
+            double_break = content.find("\n\n", start_pos)
+            if double_break != -1:
+                end_pos = double_break
+
+        # If still no end found, limit to reasonable length from start
+        if end_pos - start_pos > 1000:
+            # Look for sentence endings
+            search_text = content[start_pos:start_pos + 1000]
+            sentences = search_text.split('.')
+            if len(sentences) > 3:
+                # Take first 3 sentences
+                end_pos = start_pos + \
+                    search_text.find(sentences[3]) + len(sentences[3])
+            else:
+                end_pos = start_pos + min(1000, len(content) - start_pos)
+
+        return end_pos
+
+    def _descriptions_match(self, extracted: str, target: str) -> bool:
+        """
+        Check if two descriptions match, allowing for some variation.
+        """
+        if not extracted or not target:
+            return False
+
+        extracted_lower = extracted.lower().strip()
+        target_lower = target.lower().strip()
+
+        # Exact match
+        if extracted_lower == target_lower:
+            return True
+
+        # One contains the other
+        if extracted_lower in target_lower or target_lower in extracted_lower:
+            return True
+
+        # Word overlap check (at least 70% of words in common)
+        extracted_words = set(extracted_lower.split())
+        target_words = set(target_lower.split())
+
+        if not extracted_words or not target_words:
+            return False
+
+        overlap = len(extracted_words & target_words)
+        min_words = min(len(extracted_words), len(target_words))
+
+        return overlap >= min_words * 0.7
+
+    def _score_removal_context(self, content: str, pos: int, length: int) -> float:
+        """
+        Score how likely a text segment is to be an image description that should be removed.
+        """
+        score = 0.0
+
+        # Look at context before and after
+        context_before = content[max(0, pos - 50):pos].lower()
+        context_after = content[pos + length:pos + length + 50].lower()
+
+        # Positive indicators (suggests this is a description section)
+        positive_indicators = [
+            "descrição", "description", "prompt", "imagem", "image",
+            "visual", "arte", "art", "ilustração", "illustration",
+            "gerar", "generate", "criar", "create"
+        ]
+
+        for indicator in positive_indicators:
+            if indicator in context_before:
+                score += 0.3
+
+        # Negative indicators (suggests this is part of main content)
+        negative_indicators = [
+            "hashtags", "link", "compartilhar", "share", "seguir", "follow",
+            "curtir", "like", "comentar", "comment", "salvar", "save",
+            "call to action", "cta", "legenda", "caption"
+        ]
+
+        for indicator in negative_indicators:
+            if indicator in context_after or indicator in context_before:
+                score -= 0.4
+
+        # Length consideration
+        if 50 <= length <= 300:
+            score += 0.2
+        elif length < 30:
+            score -= 0.3
+
+        return max(0.0, min(1.0, score))
+
+    def _clean_whitespace(self, content: str) -> str:
+        """
+        Clean up whitespace and formatting in content.
+        """
+        if not content:
             return content
+
+        # Replace multiple line breaks with double line breaks
+        import re
+        content = re.sub(r'\n\s*\n\s*\n+', '\n\n', content)
+
+        # Remove excessive spaces
+        content = re.sub(r' +', ' ', content)
+
+        # Clean up line breaks around section markers
+        content = re.sub(r'\n\s*(\n\s*)+(?=\n\s*#)', '\n\n', content)
+
+        return content.strip()
 
     def _generate_image_from_description(self, ai_service, image_description: str, user, post_data: Dict, content: str) -> str:
         """
