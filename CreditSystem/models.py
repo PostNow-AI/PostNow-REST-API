@@ -17,6 +17,16 @@ class SubscriptionPlan(models.Model):
     ]
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, default="")
+    benefits = models.JSONField(default=list, blank=True)
+    monthly_credits = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('30.00'),
+        validators=[MinValueValidator(Decimal('0.00'))],
+        verbose_name="Créditos Mensais",
+        help_text="Quantidade de créditos renovados a cada mês"
+    )
+    # e.g. ["Benefit 1", "Benefit 2", "Benefit 3"]
     interval = models.CharField(
         max_length=20, choices=INTERVAL_CHOICES, unique=True)
     price = models.DecimalField(max_digits=8, decimal_places=2)

@@ -17,7 +17,7 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubscriptionPlan
         fields = ['id', 'name', 'description', 'price', 'interval', 'interval_display',
-                  'stripe_price_id', 'is_active']
+                  'stripe_price_id', 'is_active', 'benefits']
         read_only_fields = ['id', 'interval_display']
 
     def to_representation(self, instance):
