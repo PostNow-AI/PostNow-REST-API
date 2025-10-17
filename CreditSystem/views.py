@@ -448,7 +448,7 @@ class CreateStripeCheckoutSessionView(APIView):
                     'price': plan.stripe_price_id,
                     'quantity': 1,
                 }],
-                discounts=discounts,  # Apply the configured discounts
+                allow_promotion_codes=True,  # Allow for coupons
                 mode='subscription' if plan.interval != 'lifetime' else 'payment',
                 success_url=f'{frontend_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}',
                 cancel_url=f'{frontend_url}/subscription/cancel',
