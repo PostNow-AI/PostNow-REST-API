@@ -68,8 +68,8 @@ class GeminiService(BaseAIService):
         try:
             # Try different model names for image generation with fallbacks
             model_names = [
-                'gemini-2.5-flash-image-preview',
-                'gemini-2.5-flash-image-preview'
+                'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image',
                 # 'gemini-2.0-flash-exp',           # Latest experimental model
                 # 'gemini-1.5-flash',               # Stable fallback
                 # 'gemini-2.5-flash-image',         # Original model
