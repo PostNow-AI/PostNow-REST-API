@@ -251,7 +251,7 @@ class StripeSubscriptionWebhookView(APIView):
 
 
 class SubscriptionPlanListView(generics.ListAPIView):
-    queryset = SubscriptionPlan.objects.all()
+    queryset = SubscriptionPlan.objects.filter(is_active=True)
     serializer_class = SubscriptionPlanSerializer
     permission_classes = [permissions.AllowAny]
 
