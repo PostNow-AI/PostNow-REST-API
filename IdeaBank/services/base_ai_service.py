@@ -57,7 +57,7 @@ class ProgressTracker:
 class BaseAIService(ABC):
     """Base class for AI service implementations."""
 
-    def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
+    def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None, conversation_id: str = 'default') -> str:
         """Generate an image for the given prompt. Should be implemented by subclasses."""
         raise NotImplementedError(
             "Image generation is not implemented for this provider.")
@@ -82,7 +82,7 @@ class BaseAIService(ABC):
         pass
 
     @abstractmethod
-    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None) -> str:
+    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, conversation_id: str = 'default') -> str:
         """Make the actual AI API request."""
         pass
 

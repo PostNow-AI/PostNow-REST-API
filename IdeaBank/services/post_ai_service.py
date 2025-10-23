@@ -52,7 +52,7 @@ class PostAIService(BaseAIService):
         except ImportError:
             return len(prompt) // 4
 
-    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None) -> str:
+    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, conversation_id: str = 'default') -> str:
         """Make AI request using the AI service factory."""
         # Force to use only supported model
         if model_name != 'gemini-2.5-flash':
@@ -65,7 +65,7 @@ class PostAIService(BaseAIService):
                 f"AI service not available for provider: {self.default_provider}")
 
         # Make the request
-        return ai_service._make_ai_request(prompt, model_name, api_key)
+        return ai_service._make_ai_request(prompt, model_name, api_key, user, conversation_id)
 
     def generate_post_content(
         self,
@@ -115,7 +115,8 @@ class PostAIService(BaseAIService):
         # Generate content using the AI service
         try:
             # Use the AI service's direct method
-            content = self._generate_content_with_ai(ai_service, prompt)
+            content = self._generate_content_with_ai(
+                ai_service, prompt, 'post_generation')
 
             # Deduct credits after successful generation (skip for unauthenticated users)
             if user and user.is_authenticated:
@@ -179,7 +180,8 @@ class PostAIService(BaseAIService):
 
         try:
             # Generate content using the AI service
-            full_content = self._generate_content_with_ai(ai_service, prompt)
+            full_content = self._generate_content_with_ai(
+                ai_service, prompt, 'campaign_generation')
 
             # Deduct credits after successful generation (skip for unauthenticated users)
             if user and user.is_authenticated:
@@ -412,10 +414,10 @@ class PostAIService(BaseAIService):
         try:
             if current_image is not None:
                 image_url = ai_service.generate_image(
-                    prompt, current_image, user, post_data, content)
+                    prompt, current_image, user, post_data, content, conversation_id='image_generation')
             else:
                 image_url = ai_service.generate_image(
-                    prompt, '', user, post_data, content)
+                    prompt, '', user, post_data, content, conversation_id='image_generation')
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
 
@@ -477,7 +479,8 @@ class PostAIService(BaseAIService):
                 f"AI service not available for provider: {provider}")
 
         try:
-            content = self._generate_content_with_ai(ai_service, prompt)
+            content = self._generate_content_with_ai(
+                ai_service, prompt, 'post_generation')
 
             # Clean and validate HTML content
             content = self._clean_and_validate_html(content)
@@ -581,12 +584,12 @@ class PostAIService(BaseAIService):
             # If cleaning fails, return original content
             return content
 
-    def _generate_content_with_ai(self, ai_service, prompt: str) -> str:
+    def _generate_content_with_ai(self, ai_service, prompt: str, conversation_id: str) -> str:
         """Generate content using the AI service with direct API request."""
         try:
             # Use the AI service's direct _make_ai_request method with our sophisticated prompt
             response_text = ai_service._make_ai_request(
-                prompt, ai_service.model_name)
+                prompt, ai_service.model_name, user=self.user, conversation_id=conversation_id)
 
             if response_text and response_text.strip():
                 cleaned_content = self._clean_and_validate_html(
@@ -1192,7 +1195,7 @@ Chamada para ação no post/carrossel: Saiba mais!"""
 
             # Generate image using the AI service
             image_url = ai_service.generate_image(
-                image_description, '', user, post_data, content)
+                image_description, '', user, post_data, content, conversation_id='image_generation')
 
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
