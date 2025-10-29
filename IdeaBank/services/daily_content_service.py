@@ -46,6 +46,7 @@ class DailyContentService:
 
         processed = 0
         failed = 0
+
         for user_id, posts_list in user_posts.items():
             try:
                 # Fetch user instance
@@ -58,6 +59,16 @@ class DailyContentService:
             except Exception as e:
                 logger.error(f"Failed to process user {user_id}: {str(e)}")
                 failed += 1
+
+        if failed > 0:
+            logger.warning(
+                f"Failed to process {failed} users out of {len(user_posts)}")
+            failed_users = await sync_to_async(list)(
+                User.objects.filter(id__in=user_posts.keys()).values('email'))
+            await self.send_fallback_email_to_admins(
+                f"{failed} processos, de um total de {len(user_posts)} usuários, obtiveram falha ao enviar emails durante o envio de conteúdo diário. Emails de usuários: " +
+                ", ".join(str(user['email']) for user in failed_users)
+            )
 
         return {
             'status': 'completed',
@@ -143,6 +154,26 @@ class DailyContentService:
         except Exception as e:
             logger.error(
                 f"Erro ao enviar e-mail para o usuário {user.id}: {str(e)}")
+
+    async def send_fallback_email_to_admins(self, error_message: str):
+        """Send fallback email to admins in case of critical failure."""
+        try:
+            mailjet = MailService()
+            subject = "Falha na Geração de Conteúdo Diário"
+            admin_emails = os.getenv(
+                'ADMIN_EMAILS', '').split(',')
+            html_content = f"""
+            <h1>Falha na Geração de Conteúdo Diário</h1>
+            <p>Ocorreu um erro durante o processo de geração de conteúdo diário:</p>
+            <pre>{error_message or 'Erro interno de servidor'}</pre>
+            """
+            for admin_email in admin_emails:
+                mailjet.send_email(
+                    admin_email.strip(), subject, html_content)
+
+        except Exception as e:
+            logger.error(
+                f"Erro ao enviar e-mail de fallback para administradores: {str(e)}")
 
     async def fetch_users_automatic_posts(self) -> List[Dict[str, Any]]:
         """Recupera todos os posts automáticos gerados para usuários."""
