@@ -233,13 +233,12 @@ class DailyContentService:
         """Processa geração de conteúdo para um único usuário."""
         try:
             user_data = await self._get_user_data(user_id)
-
             if not user_data:
                 return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
 
             user, creator_profile = user_data
 
-            validation_result = await self._validate_user_eligibility(user)
+            validation_result = await self._validate_user_eligibility(user, user_data)
             if validation_result['status'] != 'eligible':
                 return {'user_id': user_id,
                         'status': 'skipped',
@@ -300,13 +299,16 @@ class DailyContentService:
             return None
 
     @sync_to_async
-    def _validate_user_eligibility(self, user) -> Dict[str, str]:
+    def _validate_user_eligibility(self, user, user_data) -> Dict[str, str]:
         """Check if user is eligible for content generation."""
         if not self.credit_service.validate_user_subscription(user):
             return {'status': 'ineligible', 'reason': 'no_active_subscription'}
 
         if not self.credit_service.has_sufficient_credits(user, required_amount=0.02):
             return {'status': 'ineligible', 'reason': 'insufficient_credits'}
+
+        if not user_data[1].onboarding_completed:
+            return {'status': 'ineligible', 'reason': 'incomplete_onboarding'}
 
         return {'status': 'eligible'}
 
