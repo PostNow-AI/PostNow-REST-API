@@ -3,68 +3,114 @@ from typing import Dict, List
 from django.contrib.auth.models import User
 from django.db import transaction
 
+from core.services import BaseBusinessService
+
 from .models import CreatorProfile
 
 
-class CreatorProfileService:
+class CreatorProfileService(BaseBusinessService[CreatorProfile]):
     """Service class for CreatorProfile business logic."""
 
-    @staticmethod
-    def get_or_create_profile(user: User) -> CreatorProfile:
+    model = CreatorProfile
+
+    @classmethod
+    def validate_business_rules(cls, data: Dict, instance: CreatorProfile = None) -> Dict:
+        """
+        Validate business rules for creator profile.
+
+        Args:
+            data: The data to validate
+            instance: Existing instance for updates
+
+        Returns:
+            Dict: Validated data
+
+        Raises:
+            ValueError: If business rules are violated
+        """
+        # Validate step progression
+        if instance and 'current_step' in data:
+            new_step = data['current_step']
+            if new_step > instance.current_step + 1:
+                raise ValueError("Não é possível pular etapas do onboarding.")
+
+        return data
+
+    @classmethod
+    def get_or_create_profile(cls, user: User) -> CreatorProfile:
         """Get existing profile or create new one."""
-        profile, created = CreatorProfile.objects.get_or_create(user=user)
+        profile, created = cls.get_or_create(user=user)
         return profile
 
-    @staticmethod
-    def update_profile_data(user: User, data: Dict) -> CreatorProfile:
+    @classmethod
+    @transaction.atomic
+    def update_profile_data(cls, user: User, data: Dict) -> CreatorProfile:
         """Update profile with provided data."""
-        with transaction.atomic():
-            profile = CreatorProfileService.get_or_create_profile(user)
+        profile = cls.get_or_create_profile(user)
 
-            # Update only the fields that were provided
-            for key, value in data.items():
-                if hasattr(profile, key):
-                    # Clean the value before setting
-                    if isinstance(value, str):
-                        value = value.strip() if value else None
-                    setattr(profile, key, value)
+        # Update only the fields that were provided
+        for key, value in data.items():
+            if hasattr(profile, key):
+                # Clean the value before setting
+                if isinstance(value, str):
+                    value = value.strip() if value else None
+                setattr(profile, key, value)
 
-            # Force save to trigger the custom save method
-            profile.save()
+        # Validate business rules before saving
+        validated_data = {k: v for k, v in data.items() if hasattr(profile, k)}
+        cls.validate_business_rules(validated_data, profile)
+
+        # Force save to trigger the custom save method
+        profile.save()
 
         return profile
 
-    @staticmethod
-    def reset_profile(user: User) -> bool:
+    @classmethod
+    def reset_profile(cls, user: User) -> bool:
         """Reset user profile."""
         try:
-            CreatorProfile.objects.filter(user=user).update(
-                step_1_completed=False,
-                step_2_completed=False,
-                step_3_completed=False,
-                onboarding_completed=False,
-            )
-
-            return True
-        except CreatorProfile.DoesNotExist:
+            profile = cls.get_queryset().filter(user=user).first()
+            if profile:
+                profile.step_1_completed = False
+                profile.step_2_completed = False
+                profile.step_3_completed = False
+                profile.onboarding_completed = False
+                profile.save()
+                return True
+            return False
+        except Exception:
             return False
 
-    @staticmethod
-    def complete_profile(user: User) -> bool:
+    @classmethod
+    def complete_profile(cls, user: User) -> bool:
         """Complete user profile onboarding."""
         try:
-            CreatorProfile.objects.filter(user=user).update(
-                step_1_completed=True,
-                step_2_completed=True,
-                step_3_completed=True,
-                onboarding_completed=True,
-            )
+            profile = cls.get_queryset().filter(user=user).first()
+            if profile:
+                profile.step_1_completed = True
+                profile.step_2_completed = True
+                profile.step_3_completed = True
+                profile.onboarding_completed = True
+                profile.save()
+                return True
+            return False
+        except Exception:
+            return False
 
-            return True
-        except CreatorProfile.DoesNotExist:
-            return False
-        except CreatorProfile.DoesNotExist:
-            return False
+    @classmethod
+    def get_profiles_by_step(cls, step: int) -> List[CreatorProfile]:
+        """Get all profiles currently on a specific step."""
+        return cls.get_queryset().filter(current_step=step)
+
+    @classmethod
+    def get_completed_profiles(cls) -> List[CreatorProfile]:
+        """Get all completed profiles."""
+        return cls.get_queryset().filter(onboarding_completed=True)
+
+    @classmethod
+    def get_incomplete_profiles(cls) -> List[CreatorProfile]:
+        """Get all incomplete profiles."""
+        return cls.get_queryset().filter(onboarding_completed=False)
 
 
 class SuggestionService:

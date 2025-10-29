@@ -1,7 +1,9 @@
 
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
+
+from core.responses import APIResponse
+from core.views import BaseAPIView
 
 from .models import UserBehavior
 from .serializers import (
@@ -15,7 +17,7 @@ from .serializers import (
 from .services import CreatorProfileService
 
 
-class OnboardingStatusView(generics.RetrieveAPIView):
+class OnboardingStatusView(BaseAPIView, generics.RetrieveAPIView):
     """Get user's current onboarding status and step."""
     permission_classes = [permissions.IsAuthenticated]
 
@@ -42,10 +44,10 @@ class OnboardingStatusView(generics.RetrieveAPIView):
             }
 
         serializer = OnboardingStatusSerializer(status_data)
-        return Response(serializer.data)
+        return self.success_response(serializer.data)
 
 
-class Step1PersonalView(generics.RetrieveUpdateAPIView):
+class Step1PersonalView(BaseAPIView, generics.RetrieveUpdateAPIView):
     """Handle Step 1: Personal information (professional_name, profession, instagram_handle, whatsapp_number)"""
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = Step1PersonalSerializer
@@ -66,15 +68,17 @@ class Step1PersonalView(generics.RetrieveUpdateAPIView):
         )
 
         response_serializer = CreatorProfileSerializer(updated_profile)
-        return Response({
-            'message': 'Dados pessoais salvos com sucesso!',
-            'step_completed': updated_profile.step_1_completed,
-            'current_step': updated_profile.current_step,
-            'profile': response_serializer.data
-        })
+        return self.success_response(
+            data={
+                'step_completed': updated_profile.step_1_completed,
+                'current_step': updated_profile.current_step,
+                'profile': response_serializer.data
+            },
+            message='Dados pessoais salvos com sucesso!'
+        )
 
 
-class Step2BusinessView(generics.RetrieveUpdateAPIView):
+class Step2BusinessView(BaseAPIView, generics.RetrieveUpdateAPIView):
     """Handle Step 2: Business information (business_name, specialization, business_instagram_handle, business_website, business_city, business_description, target demographics)"""
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = Step2BusinessSerializer
@@ -88,9 +92,7 @@ class Step2BusinessView(generics.RetrieveUpdateAPIView):
 
         # Check if step 1 is completed
         if not instance.step_1_completed:
-            return Response({
-                'error': 'Complete o passo 1 antes de prosseguir para o passo 2.'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return self.bad_request_response('Complete o passo 1 antes de prosseguir para o passo 2.')
 
         serializer = self.get_serializer(
             instance, data=request.data, partial=partial)
@@ -102,15 +104,17 @@ class Step2BusinessView(generics.RetrieveUpdateAPIView):
         )
 
         response_serializer = CreatorProfileSerializer(updated_profile)
-        return Response({
-            'message': 'Dados do negócio salvos com sucesso!',
-            'step_completed': updated_profile.step_2_completed,
-            'current_step': updated_profile.current_step,
-            'profile': response_serializer.data
-        })
+        return self.success_response(
+            data={
+                'step_completed': updated_profile.step_2_completed,
+                'current_step': updated_profile.current_step,
+                'profile': response_serializer.data
+            },
+            message='Dados do negócio salvos com sucesso!'
+        )
 
 
-class Step3BrandingView(generics.RetrieveUpdateAPIView):
+class Step3BrandingView(BaseAPIView, generics.RetrieveUpdateAPIView):
     """Handle Step 3: Branding information (logo, voice_tone, colors)"""
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = Step3BrandingSerializer
@@ -124,9 +128,7 @@ class Step3BrandingView(generics.RetrieveUpdateAPIView):
 
         # Check if step 2 is completed
         if not instance.step_2_completed:
-            return Response({
-                'error': 'Complete o passo 2 antes de prosseguir para o passo 3.'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return self.bad_request_response('Complete o passo 2 antes de prosseguir para o passo 3.')
 
         serializer = self.get_serializer(
             instance, data=request.data, partial=partial)
@@ -137,17 +139,20 @@ class Step3BrandingView(generics.RetrieveUpdateAPIView):
             request.user, serializer.validated_data
         )
 
+        message = 'Dados de marca salvos com sucesso!' if not updated_profile.onboarding_completed else 'Onboarding completado com sucesso!'
         response_serializer = CreatorProfileSerializer(updated_profile)
-        return Response({
-            'message': 'Dados de marca salvos com sucesso!' if not updated_profile.onboarding_completed else 'Onboarding completado com sucesso!',
-            'step_completed': updated_profile.step_3_completed,
-            'current_step': updated_profile.current_step,
-            'onboarding_completed': updated_profile.onboarding_completed,
-            'profile': response_serializer.data
-        })
+        return self.success_response(
+            data={
+                'step_completed': updated_profile.step_3_completed,
+                'current_step': updated_profile.current_step,
+                'onboarding_completed': updated_profile.onboarding_completed,
+                'profile': response_serializer.data
+            },
+            message=message
+        )
 
 
-class CreatorProfileView(generics.RetrieveUpdateAPIView):
+class CreatorProfileView(BaseAPIView, generics.RetrieveUpdateAPIView):
     """Get and update complete creator profile."""
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = CreatorProfileSerializer
@@ -166,13 +171,13 @@ class CreatorProfileView(generics.RetrieveUpdateAPIView):
             request.user, serializer.validated_data)
 
         response_serializer = CreatorProfileSerializer(updated_profile)
-        return Response({
-            'message': 'Perfil atualizado com sucesso!',
-            'profile': response_serializer.data
-        })
+        return self.success_response(
+            data={'profile': response_serializer.data},
+            message='Perfil atualizado com sucesso!'
+        )
 
 
-class ResetCreatorProfileStatusView(generics.GenericAPIView):
+class ResetCreatorProfileStatusView(BaseAPIView, generics.GenericAPIView):
     """Reset user profile to start onboarding again."""
     permission_classes = [permissions.IsAuthenticated]
 
@@ -180,24 +185,17 @@ class ResetCreatorProfileStatusView(generics.GenericAPIView):
         try:
             success = CreatorProfileService.reset_profile(request.user)
             if success:
-                return Response({
-                    'message': 'Perfil resetado com sucesso!',
-                    'reset': True
-                })
+                return self.success_response(
+                    data={'reset': True},
+                    message='Perfil resetado com sucesso!'
+                )
             else:
-                return Response({
-                    'message': 'Nenhum perfil encontrado para resetar',
-                    'reset': False
-                }, status=status.HTTP_404_NOT_FOUND)
+                return self.not_found_response('Nenhum perfil encontrado para resetar')
         except Exception as e:
-            return Response({
-                'message': 'Erro ao resetar o perfil',
-                'reset': False,
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return self.server_error_response(f'Erro ao resetar o perfil: {str(e)}')
 
 
-class CompleteCreatorProfileStatusView(generics.GenericAPIView):
+class CompleteCreatorProfileStatusView(BaseAPIView, generics.GenericAPIView):
     """Complete user profile onboarding."""
     permission_classes = [permissions.IsAuthenticated]
 
@@ -205,24 +203,17 @@ class CompleteCreatorProfileStatusView(generics.GenericAPIView):
         try:
             success = CreatorProfileService.complete_profile(request.user)
             if success:
-                return Response({
-                    'message': 'Perfil completado com sucesso!',
-                    'completed': True
-                })
+                return self.success_response(
+                    data={'completed': True},
+                    message='Perfil completado com sucesso!'
+                )
             else:
-                return Response({
-                    'message': 'Nenhum perfil encontrado para resetar',
-                    'reset': False
-                }, status=status.HTTP_404_NOT_FOUND)
+                return self.not_found_response('Nenhum perfil encontrado para completar')
         except Exception as e:
-            return Response({
-                'message': 'Erro ao resetar o perfil',
-                'reset': False,
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return self.server_error_response(f'Erro ao completar o perfil: {str(e)}')
 
 
-class UserBehaviorView(generics.RetrieveUpdateAPIView):
+class UserBehaviorView(BaseAPIView, generics.RetrieveUpdateAPIView):
     """Manage user behavioral data for personalization."""
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = UserBehaviorSerializer
@@ -241,10 +232,10 @@ class UserBehaviorView(generics.RetrieveUpdateAPIView):
 
         serializer.save()
 
-        return Response({
-            'message': 'Dados comportamentais atualizados!',
-            'behavior': serializer.data
-        })
+        return self.success_response(
+            data={'behavior': serializer.data},
+            message='Dados comportamentais atualizados!'
+        )
 
 
 @api_view(['POST'])
@@ -254,15 +245,12 @@ def reset_profile(request):
     success = CreatorProfileService.reset_profile(request.user)
 
     if success:
-        return Response({
-            'message': 'Perfil resetado com sucesso!',
-            'reset': True
-        })
+        return APIResponse.success(
+            data={'reset': True},
+            message='Perfil resetado com sucesso!'
+        )
     else:
-        return Response({
-            'message': 'Nenhum perfil encontrado para resetar',
-            'reset': False
-        }, status=status.HTTP_404_NOT_FOUND)
+        return APIResponse.not_found('Nenhum perfil encontrado para resetar')
 
 
 @api_view(['GET'])
@@ -271,7 +259,7 @@ def generate_random_colors(request):
     """Generate a set of random colors for the user's palette."""
     from .models import generate_random_colors
     colors = generate_random_colors()
-    return Response({
+    return APIResponse.success(data={
         'colors': {
             'color_1': colors[0],
             'color_2': colors[1],
@@ -288,7 +276,7 @@ def onboarding_suggestions(request):
     """Get suggestions for onboarding fields."""
     from .services import SuggestionService
     suggestions = SuggestionService.get_all_suggestions()
-    return Response(suggestions)
+    return APIResponse.success(data=suggestions)
 
 
 # TEMPORARY TEST ENDPOINT - Remove in production
@@ -304,8 +292,7 @@ def test_structure(request):
     # Get a sample of field names from the model
     field_names = [field.name for field in CreatorProfile._meta.get_fields()]
 
-    return Response({
-        "message": "Creator Profile API is working correctly!",
+    return APIResponse.success(data={
         "total_profiles": total_profiles,
         "model_fields": field_names[:10],  # First 10 fields
         "endpoints_available": [
@@ -315,4 +302,4 @@ def test_structure(request):
             "/api/v1/creator-profile/onboarding/step3/",
             "/api/v1/creator-profile/suggestions/"
         ]
-    })
+    }, message="Creator Profile API is working correctly!")

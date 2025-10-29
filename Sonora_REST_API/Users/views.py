@@ -336,7 +336,7 @@ def delete_user(request):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def delete_user_by_email(request):
     """
     Delete a user from the database using their email address as a query parameter.

@@ -6,6 +6,8 @@ from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.views import exception_handler
 
+from core.exceptions import BaseAPIException
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,12 +16,16 @@ def unified_exception_handler(exc, context):
     Custom exception handler that provides unified error response format.
 
     Format: {
-        "status": "error",
+        "success": false,
         "code": "ERROR_CODE",
         "message": "Human readable error message",
-        "errors": []  # List of detailed error messages
+        "errors": {}  # Detailed error information
     }
     """
+
+    # Handle custom API exceptions first
+    if isinstance(exc, BaseAPIException):
+        return _handle_custom_api_exception(exc)
 
     # Get the standard DRF exception handler response
     response = exception_handler(exc, context)
@@ -32,6 +38,24 @@ def unified_exception_handler(exc, context):
         return _handle_unhandled_exception(exc, context)
 
 
+def _handle_custom_api_exception(exc: BaseAPIException) -> JsonResponse:
+    """
+    Handle custom API exceptions with unified format.
+    """
+    response_data = {
+        "success": False,
+        "code": exc.error_code,
+        "message": exc.message,
+        "errors": exc.errors,
+    }
+
+    # Add any extra data from the exception
+    if exc.extra_data:
+        response_data.update(exc.extra_data)
+
+    return JsonResponse(response_data, status=exc.status_code)
+
+
 def _format_drf_exception_response(exc, response):
     """
     Format DRF exception responses to unified format
@@ -41,7 +65,7 @@ def _format_drf_exception_response(exc, response):
 
     # Initialize unified response
     unified_response = {
-        "status": "error",
+        "success": False,
         "code": _get_error_code(exc, status_code),
         "message": _get_main_error_message(exc, data),
         "errors": _extract_error_details(data)
@@ -84,7 +108,7 @@ def _handle_unhandled_exception(exc, context):
         message = "Erro interno do sistema"
 
     unified_response = {
-        "status": "error",
+        "success": False,
         "code": code,
         "message": message,
         "errors": [str(exc)] if str(exc) != message else []
@@ -148,14 +172,14 @@ def _get_main_error_message(exc, data):
 
 def _extract_error_details(data):
     """
-    Extract detailed error information into a list
+    Extract detailed error information into a dict
     """
-    errors = []
+    errors = {}
 
     if isinstance(data, dict):
         # Handle non_field_errors
         if 'non_field_errors' in data:
-            errors.extend(data['non_field_errors'])
+            errors['non_field_errors'] = data['non_field_errors']
 
         # Handle field-specific errors
         for field, field_errors in data.items():
@@ -163,24 +187,23 @@ def _extract_error_details(data):
                 continue
 
             if isinstance(field_errors, list):
-                for error in field_errors:
-                    errors.append(f"{field}: {error}")
+                errors[field] = field_errors
             elif isinstance(field_errors, str):
-                errors.append(f"{field}: {field_errors}")
+                errors[field] = [field_errors]
             elif isinstance(field_errors, dict):
                 # Nested errors (e.g., from nested serializers)
-                for nested_field, nested_errors in field_errors.items():
-                    if isinstance(nested_errors, list):
-                        for error in nested_errors:
-                            errors.append(f"{field}.{nested_field}: {error}")
+                nested_errors = {}
+                for nested_field, nested_error_list in field_errors.items():
+                    if isinstance(nested_error_list, list):
+                        nested_errors[nested_field] = nested_error_list
                     else:
-                        errors.append(
-                            f"{field}.{nested_field}: {nested_errors}")
+                        nested_errors[nested_field] = [str(nested_error_list)]
+                errors[field] = nested_errors
 
     elif isinstance(data, list):
-        errors.extend(data)
+        errors['general'] = data
 
     elif isinstance(data, str):
-        errors.append(data)
+        errors['general'] = [data]
 
     return errors

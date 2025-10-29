@@ -1,6 +1,8 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
+from core.serializers import BaseModelSerializer, BaseSerializer
+
 from .models import CreatorProfile, UserBehavior
 
 
@@ -15,7 +17,7 @@ class UserBasicSerializer(serializers.ModelSerializer):
 
 # === STEP-BASED SERIALIZERS FOR ONBOARDING ===
 
-class Step1PersonalSerializer(serializers.ModelSerializer):
+class Step1PersonalSerializer(BaseModelSerializer):
     """Step 1: Personal information - professional_name, profession, instagram_handle, whatsapp_number"""
 
     class Meta:
@@ -29,27 +31,15 @@ class Step1PersonalSerializer(serializers.ModelSerializer):
 
     def validate_professional_name(self, value):
         """Validate professional name is required and has minimum length."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Nome profissional é obrigatório e deve ter pelo menos 2 caracteres."
-            )
-        return value.strip()
+        return self.validate_required_string(value, "Nome profissional", min_length=2)
 
     def validate_profession(self, value):
         """Validate profession is required and has minimum length."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Profissão é obrigatória e deve ter pelo menos 2 caracteres."
-            )
-        return value.strip()
+        return self.validate_required_string(value, "Profissão", min_length=2)
 
     def validate_whatsapp_number(self, value):
         """Validate WhatsApp number is required."""
-        if not value or len(value.strip()) < 10:
-            raise serializers.ValidationError(
-                "Número do WhatsApp é obrigatório e deve ter pelo menos 10 dígitos."
-            )
-        return value.strip()
+        return self.validate_phone_number(value, "WhatsApp")
 
     def validate_instagram_handle(self, value):
         """Clean instagram handle by removing @ if present."""
@@ -60,7 +50,7 @@ class Step1PersonalSerializer(serializers.ModelSerializer):
         return value if value else None
 
 
-class Step2BusinessSerializer(serializers.ModelSerializer):
+class Step2BusinessSerializer(BaseModelSerializer):
     """Step 2: Business information - business_name, specialization, business_instagram_handle, business_website, business_city, business_description, target demographics"""
 
     class Meta:
@@ -80,59 +70,31 @@ class Step2BusinessSerializer(serializers.ModelSerializer):
 
     def validate_business_name(self, value):
         """Validate business name is required."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Nome do negócio é obrigatório e deve ter pelo menos 2 caracteres."
-            )
-        return value.strip()
+        return self.validate_required_string(value, "Nome do negócio", min_length=2)
 
     def validate_specialization(self, value):
         """Validate specialization is required."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Especialização é obrigatória e deve ter pelo menos 2 caracteres."
-            )
-        return value.strip()
+        return self.validate_required_string(value, "Especialização", min_length=2)
 
     def validate_business_city(self, value):
         """Validate business city is required."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Cidade do negócio é obrigatória."
-            )
-        return value.strip()
+        return self.validate_required_string(value, "Cidade do negócio", min_length=2)
 
     def validate_business_description(self, value):
         """Validate business description is required."""
-        if not value or len(value.strip()) < 10:
-            raise serializers.ValidationError(
-                "Descrição do negócio é obrigatória e deve ter pelo menos 10 caracteres."
-            )
-        return value.strip()
+        return self.validate_required_string(value, "Descrição do negócio", min_length=10)
 
     def validate_target_gender(self, value):
         """Validate target gender is required."""
-        if not value or len(value.strip()) < 1:
-            raise serializers.ValidationError(
-                "Gênero do público-alvo é obrigatório."
-            )
-        return value.strip()
+        return self.validate_required_string(value, "Gênero do público-alvo", min_length=1)
 
     def validate_target_age_range(self, value):
         """Validate target age range is required."""
-        if not value or len(value.strip()) < 1:
-            raise serializers.ValidationError(
-                "Faixa etária do público-alvo é obrigatória."
-            )
-        return value.strip()
+        return self.validate_required_string(value, "Faixa etária do público-alvo", min_length=1)
 
     def validate_target_location(self, value):
         """Validate target location is required."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Localização do público-alvo é obrigatória."
-            )
-        return value.strip()
+        return self.validate_required_string(value, "Localização do público-alvo", min_length=2)
 
     def validate_business_instagram_handle(self, value):
         """Clean business instagram handle by removing @ if present."""
@@ -143,7 +105,7 @@ class Step2BusinessSerializer(serializers.ModelSerializer):
         return value if value else None
 
 
-class Step3BrandingSerializer(serializers.ModelSerializer):
+class Step3BrandingSerializer(BaseModelSerializer):
     """Step 3: Branding information - logo, voice_tone, colors (optional, default to random)"""
 
     class Meta:
@@ -160,56 +122,40 @@ class Step3BrandingSerializer(serializers.ModelSerializer):
 
     def validate_voice_tone(self, value):
         """Validate voice tone is required."""
-        if not value or len(value.strip()) < 2:
+        return self.validate_required_string(value, "Tom de voz", min_length=2)
+
+    def _validate_color(self, value, field_name):
+        """Validate color format if provided."""
+        if value and not value.startswith('#'):
             raise serializers.ValidationError(
-                "Tom de voz é obrigatório."
+                f"{field_name} deve estar no formato hexadecimal (ex: #FFFFFF)."
             )
-        return value.strip()
+        return value
 
     def validate_color_1(self, value):
         """Validate color format if provided."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
-            )
-        return value
+        return self._validate_color(value, "Cor 1")
 
     def validate_color_2(self, value):
         """Validate color format if provided."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
-            )
-        return value
+        return self._validate_color(value, "Cor 2")
 
     def validate_color_3(self, value):
         """Validate color format if provided."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
-            )
-        return value
+        return self._validate_color(value, "Cor 3")
 
     def validate_color_4(self, value):
         """Validate color format if provided."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
-            )
-        return value
+        return self._validate_color(value, "Cor 4")
 
     def validate_color_5(self, value):
         """Validate color format if provided."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
-            )
-        return value
+        return self._validate_color(value, "Cor 5")
 
 
 # === MAIN CREATOR PROFILE SERIALIZER ===
 
-class CreatorProfileSerializer(serializers.ModelSerializer):
+class CreatorProfileSerializer(BaseModelSerializer):
     """Complete Creator Profile serializer with all fields and step status."""
 
     user = UserBasicSerializer(read_only=True)
@@ -253,7 +199,7 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
 
 # === ONBOARDING STATUS SERIALIZER ===
 
-class OnboardingStatusSerializer(serializers.Serializer):
+class OnboardingStatusSerializer(BaseSerializer):
     """Serializer for onboarding status response."""
 
     current_step = serializers.IntegerField()
@@ -266,7 +212,7 @@ class OnboardingStatusSerializer(serializers.Serializer):
 
 # === USER BEHAVIOR SERIALIZER ===
 
-class UserBehaviorSerializer(serializers.ModelSerializer):
+class UserBehaviorSerializer(BaseModelSerializer):
     """
     Serializer for user behavioral data tracking.
     Used for personalization and analytics.
