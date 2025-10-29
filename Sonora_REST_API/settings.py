@@ -282,7 +282,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://sonoria-posts.vercel.app",  # Production domain
     "https://postnow.com.br",  # Production domain
     "https://www.postnow.com.br",
-    "https://postnow-ui.vercel.app"
+    "https://post-now-ui-devel.vercel.app"
 ]
 
 # Add additional CORS origins from environment variable
