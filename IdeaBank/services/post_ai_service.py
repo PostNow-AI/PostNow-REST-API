@@ -52,7 +52,7 @@ class PostAIService(BaseAIService):
         except ImportError:
             return len(prompt) // 4
 
-    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, conversation_id: str = 'default') -> str:
+    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, conversation_id: str = 'default', post_data: dict = None) -> str:
         """Make AI request using the AI service factory."""
         # Force to use only supported model
         if model_name != 'gemini-2.5-flash':
@@ -65,7 +65,7 @@ class PostAIService(BaseAIService):
                 f"AI service not available for provider: {self.default_provider}")
 
         # Make the request
-        return ai_service._make_ai_request(prompt, model_name, api_key, user, conversation_id)
+        return ai_service._make_ai_request(prompt, model_name, api_key, user, conversation_id, post_data)
 
     def generate_post_content(
         self,
@@ -116,7 +116,7 @@ class PostAIService(BaseAIService):
         try:
             # Use the AI service's direct method
             content = self._generate_content_with_ai(
-                ai_service, prompt, 'post_generation')
+                ai_service, prompt, 'post_generation', post_data)
 
             # Deduct credits after successful generation (skip for unauthenticated users)
             if user and user.is_authenticated:
@@ -181,7 +181,7 @@ class PostAIService(BaseAIService):
         try:
             # Generate content using the AI service
             full_content = self._generate_content_with_ai(
-                ai_service, prompt, 'campaign_generation')
+                ai_service, prompt, 'campaign_generation', post_data)
 
             # Deduct credits after successful generation (skip for unauthenticated users)
             if user and user.is_authenticated:
@@ -480,7 +480,7 @@ class PostAIService(BaseAIService):
 
         try:
             content = self._generate_content_with_ai(
-                ai_service, prompt, 'post_generation')
+                ai_service, prompt, 'post_generation', post_data)
 
             # Clean and validate HTML content
             content = self._clean_and_validate_html(content)
@@ -584,12 +584,12 @@ class PostAIService(BaseAIService):
             # If cleaning fails, return original content
             return content
 
-    def _generate_content_with_ai(self, ai_service, prompt: str, conversation_id: str) -> str:
+    def _generate_content_with_ai(self, ai_service, prompt: str, conversation_id: str, post_data: dict = None) -> str:
         """Generate content using the AI service with direct API request."""
         try:
             # Use the AI service's direct _make_ai_request method with our sophisticated prompt
             response_text = ai_service._make_ai_request(
-                prompt, ai_service.model_name, user=self.user, conversation_id=conversation_id)
+                prompt, ai_service.model_name, user=self.user, conversation_id=conversation_id, post_data=post_data)
 
             if response_text and response_text.strip():
                 cleaned_content = self._clean_and_validate_html(

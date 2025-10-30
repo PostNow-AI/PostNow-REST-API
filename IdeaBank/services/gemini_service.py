@@ -1,3 +1,4 @@
+import json
 import os
 
 try:
@@ -15,6 +16,9 @@ from django.contrib.auth.models import User
 
 from ..models import ChatHistory
 from .base_ai_service import BaseAIService
+from .prompt_service import PromptService
+
+prompt_service = PromptService()
 
 
 def extract_base64_image(data_url: str) -> bytes:
@@ -131,7 +135,6 @@ class GeminiService(BaseAIService):
                 'gemini-2.5-flash-image',
                 'gemini-2.5-flash-image',
                 'gemini-2.5-flash-image',
-
             ]
 
             for model_name in model_names:
@@ -142,6 +145,17 @@ class GeminiService(BaseAIService):
 
                     # Prepare message content
                     message_parts = [enhanced_prompt]
+
+                    creator_profile_data = prompt_service.get_creator_profile_data()
+                    logo = creator_profile_data.get('logo_image', None)
+                    if logo:
+                        logo_bytes = extract_base64_image(logo)
+                        message_parts.append({
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": logo_bytes
+                            }
+                        })
 
                     # Add current image if provided
                     if current_image:
@@ -423,7 +437,7 @@ class GeminiService(BaseAIService):
         # Fallback estimation: roughly 4 characters per token
         return len(prompt) // 4
 
-    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, conversation_id: str = 'default') -> str:
+    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, conversation_id: str = 'default', post_data: dict = None) -> str:
         """Make the actual AI API request to Gemini with conversation history support."""
         # Configure API key
         api_key = api_key or self.default_api_key
@@ -443,14 +457,57 @@ class GeminiService(BaseAIService):
                 except ChatHistory.DoesNotExist:
                     # No existing history, start fresh
                     pass
+
             # Start a chat session with the fetched history
             chat = self.model.start_chat(history=chat_history_data)
 
-            # Send the prompt as the message
-            response = chat.send_message(prompt)
+            # Handle special conversation flows
+            if conversation_id == "campaign_generation":
+                return self._handle_campaign_generation_flow(chat, user, conversation_id, post_data)
+            else:
+                # Default flow - send the prompt as the message
+                response = chat.send_message(prompt)
+
+                if response.text:
+                    # Save the updated history back to database
+                    if user:
+                        updated_history = chat.history
+                        serializable_history = self._convert_history_to_serializable(
+                            updated_history)
+                        chat_history_obj, created = ChatHistory.objects.get_or_create(
+                            user=user, conversation_id=conversation_id)
+                        chat_history_obj.set_history(serializable_history)
+                        chat_history_obj.save()
+
+                    return response.text
+                else:
+                    raise Exception("Empty response from Gemini API")
+
+        except Exception as e:
+            raise Exception(f"Falha na comunicação com Gemini: {str(e)}")
+
+    def _handle_campaign_generation_flow(self, chat, user: User, conversation_id: str, post_data: dict = None) -> str:
+        """Handle campaign generation flow with historical analysis."""
+        try:
+            # Import prompt service
+
+            # Call special prompt for historical analysis
+            analysis_prompt = prompt_service.build_historical_analysis_prompt(
+                post_data)
+            response = chat.send_message(analysis_prompt)
 
             if response.text:
-                # Save the updated history back to database
+                # Parse the JSON response
+                try:
+                    analysis_data = json.loads(response.text)
+                except json.JSONDecodeError as e:
+                    raise Exception(f"Failed to parse analysis JSON: {str(e)}")
+
+                updated_prompt = prompt_service.build_automatic_post_prompt(
+                    analysis_data)
+                content_gen_res = chat.send_message(updated_prompt)
+
+                # Save the analysis interaction to chat history
                 if user:
                     updated_history = chat.history
                     serializable_history = self._convert_history_to_serializable(
@@ -460,9 +517,9 @@ class GeminiService(BaseAIService):
                     chat_history_obj.set_history(serializable_history)
                     chat_history_obj.save()
 
-                return response.text
+                return content_gen_res.text
             else:
-                raise Exception("Empty response from Gemini API")
+                raise Exception("Empty response from historical analysis")
 
         except Exception as e:
-            raise Exception(f"Falha na comunicação com Gemini: {str(e)}")
+            raise Exception(f"Failed in campaign generation flow: {str(e)}")
