@@ -1,4 +1,4 @@
-name: Daily Content Mailing
+name: Daily Content Mailing Devel
 
 on:
   schedule:
