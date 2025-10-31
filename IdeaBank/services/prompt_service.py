@@ -1016,9 +1016,18 @@ Sua missão é editar a imagem já criada, mantendo **100% da identidade visual,
         creator_profile_data = self.get_creator_profile_data()
 
         prompt = f"""
-Você é um estrategista criativo especializado em copywriting e conteúdo digital, responsável por garantir que cada nova campanha gerada mantenha qualidade, coerência e originalidade absoluta.
-Sua função é analisar o histórico de conteúdos anteriores, entender o estilo, linguagem e temas já abordados, e criar um novo direcionamento criativo inédito, mantendo todas as regras, estrutura e padrão definidos no Prompt Mestre.
-O resultado deve ser obrigatoriamente retornado no formato JSON descrito no final deste prompt.
+Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em conteúdos para redes sociais (Instagram, Facebook, LinkedIn, etc.).
+Sua missão é gerar campanhas completas e diárias, personalizadas para cada cliente com base nos dados do onboarding, sem precisar de campos manuais como “assunto” ou “objetivo”.
+
+Todos os conteúdos devem refletir as tendências (trends) atuais do nicho do cliente, ter alta qualidade de comunicação e se alinhar à identidade visual e tom de voz do negócio.
+
+Cada campanha deve conter:
+
+1 Conteúdo de Feed (copy + sugestão de texto para imagem + prompt de imagem);
+
+5 ideias de Stories coerentes com o tema;
+
+1 roteiro de Reels criativo e estratégico.
 
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
@@ -1049,187 +1058,151 @@ Paleta de cores: {creator_profile_data.get('color_palette', '')}
 
 Tom de voz: {creator_profile_data.get('voice_tone', '')}
 
-🧠 DADOS DO POST ATUAL:
-Assunto: {name}
+🎯 OBJETIVO GERAL:
 
-Objetivo: {objective}
+Gerar uma campanha de conteúdo completa e personalizada, inspirada em assuntos, formatos e trends atuais dentro do nicho e interesse do público.
 
-Mais detalhes: {further_details}
+Cada dia, o sistema deve entregar uma nova campanha, com:
 
-🎯 OBJETIVO DO PROMPT:
-A partir do histórico recebido, sua missão é:
-Analisar profundamente o conteúdo anterior, identificando:
+Conteúdo diferente e original;
 
+Título, subtítulo e CTA alternados e nunca repetidos;
 
-Temas, ganchos e ideias já utilizados;
+Temas sempre atualizados e relevantes para o público.
 
+🪶 REGRAS PARA A COPY DO FEED:
 
-Frases, CTAs, estruturas e estilos de escrita repetidos;
+Estrutura AIDA (Atenção, Interesse, Desejo, Ação):
 
+Comece com uma frase ou pergunta envolvente e natural.
 
-Padrões visuais ou emocionais frequentes.
+Desenvolva a mensagem com fluidez, contexto e empatia.
 
+Gere identificação e desperte emoção.
 
-Evitar qualquer repetição, garantindo que o novo conteúdo:
+Finalize com uma única CTA coerente e natural.
 
+Estilo e tom:
 
-Seja 100% original, com vocabulário, abordagem e emoção renovados;
+Texto fluido, natural e pronto para publicação.
 
+Parágrafos curtos e bem espaçados.
 
-Explore novos ângulos e gatilhos dentro do mesmo tema;
+Média de 5 emojis por texto, usados de forma natural e coerente.
 
+Linguagem ajustada ao tom de voz ({creator_profile_data.get('voice_tone', '')}) e público-alvo ({creator_profile_data.get('target_gender', '')}, {creator_profile_data.get('target_age_range', '')}).
 
-Traga novas referências, analogias ou expressões;
+Use referências, expressões e temas em alta nas trends do nicho.
 
+Evite sensacionalismo e exageros.
 
-Use CTAs e títulos inéditos, sem reaproveitar os anteriores.
+Personalização:
 
+Adapte a linguagem e exemplos conforme o nicho e localização do cliente ({creator_profile_data.get('specialization', '')}, {creator_profile_data.get('target_location', '')}).
 
-Manter o contexto da campanha, ou seja:
+Faça alusões sutis ao negócio ({creator_profile_data.get('business_name', '')}) quando couber.
 
+📦 FORMATO DE SAÍDA:
 
-O novo conteúdo deve seguir o mesmo propósito, objetivo e linha narrativa;
+Gere a resposta exatamente neste formato:
 
+🧩 1. Conteúdo de Feed (Copy Principal):
 
-Deve refletir o mesmo posicionamento, público e tom de voz;
+[Texto completo da copy, com média de 5 emojis bem distribuídos, pronto para publicação no Feed.]
 
+Como sugestão para escrever na imagem:
 
-Mas apresentar novas ideias e abordagens, com frescor e autenticidade.
+Título: [Frase curta e chamativa — até 8 palavras — diferente das anteriores , sem usar as palavras 'Conteúdo Diário' ou 'Dica do Dia' ou relacionados] 
 
+Subtítulo: [Frase complementar breve e criativa — formato sempre variado]
 
+CTA: [Chamada natural e coerente com o conteúdo — alternada diariamente]
 
+Descrição para gerar a imagem (sem texto):
+Gere uma descrição detalhada de uma imagem profissional no tamanho 1080 x 1350 px (proporção 4:5), formato vertical otimizado para o Feed.
 
-🪶 DIRETRIZES DE ESTILO:
-Mantenha todas as regras, estrutura e padrões de qualidade do Prompt Mestre.
+A imagem deve ser:
 
-Preserve o tom de voz da marca ({creator_profile_data.get('voice_tone', '')}) e o perfil do público.
+Altamente profissional e esteticamente impecável, com qualidade de um designer premiado;
 
-Busque inovação criativa dentro do mesmo contexto — sem descaracterizar o estilo.
+Realista e visualmente impactante, priorizando imagens de pessoas reais sempre que fizer sentido para o tema;
 
-Se inspire em novas tendências atuais do nicho ({creator_profile_data.get('specialization', '')}) e expressões recentes nas redes.
+Coerente com o conteúdo da copy e o nicho do cliente ({creator_profile_data.get('specialization', '')});
 
-A ideia deve parecer nova e empolgante, sem soar genérica ou repetitiva.
+Criada com composição, iluminação e cores em harmonia com a paleta da marca ({creator_profile_data.get('color_palette', '')});
 
-⚙️ FORMATO DE SAÍDA (OBRIGATÓRIO):
-A resposta deve ser entregue estritamente em formato JSON, seguindo exatamente esta estrutura:
-{{
-  "historical_analysis": "",
-  "avoid_list": [],
-  "new_direction": "",
-  "new_headline": "",
-  "new_subtitle": "",
-  "new_cta": ""
-}}
+Visualmente moderna, sofisticada e criativa;
 
-⚙️ Regras de preenchimento do JSON:
-historical_analysis: breve análise do histórico, destacando o que foi mais usado (ganchos, CTAs, temas e padrões).
+Seguindo as tendências visuais mais atuais das redes sociais e do setor;
 
-avoid_list: lista com expressões, ideias ou CTAs que não devem ser repetidas.
+Sem textos visíveis na imagem.
 
-new_direction: resumo da nova linha criativa (novo enfoque, emoção, narrativa e ângulo de comunicação).
+O resultado visual deve ser de excelência, com aparência de algo feito por um designer de alto nível, criativo, premiado e sensível à identidade da marca.
 
-new_headline: novo título curto e original (até 8 palavras, diferente de qualquer anterior).
+🎥 2. Ideias de Stories (5 sugestões):
 
-new_subtitle: subtítulo complementar, criativo e inédito.
+Crie 5 ideias de Stories que mantenham coerência com o tema do Feed.
 
-new_cta: chamada clara, natural e diferente das anteriores.
+Cada ideia deve:
+
+Ser prática e fácil de executar;
+
+Refletir trends atuais (ex: formatos, filtros, sons, interações em alta);
+
+Estimular engajamento e conexão emocional;
+
+Misturar formatos (enquetes, perguntas, bastidores, dicas rápidas, reflexões).
+
+Exemplo:
+
+[Ideia 1]
+
+[Ideia 2]
+
+[Ideia 3]
+
+[Ideia 4]
+
+[Ideia 5]
+
+🎬 3. Ideia de Roteiro para Reels:
+
+Crie 1 roteiro curto (20–40 segundos) de Reels com o mesmo tema da campanha.
+
+Estrutura recomendada:
+
+Abertura (3s): Gancho forte baseado em trends recentes do nicho.
+
+Desenvolvimento: Insight, dica ou história envolvente.
+
+Fechamento: CTA leve e natural.
+
+O roteiro deve:
+
+Ser criativo, dinâmico e visualmente interessante;
+
+Refletir o tom de voz ({creator_profile_data.get('voice_tone', '')}) e estilo da marca;
+
+Sugerir falas, gestos ou cenas se fizer sentido;
+
+Basear-se em formatos de Reels que estejam performando bem no momento.
 
 📅 CONTEXTO DE USO:
-Este prompt será executado antes do Prompt Mestre em cada geração diária.
-Ele serve como filtro criativo e analítico, garantindo que o novo conteúdo:
-Não repita nenhuma parte do histórico;
 
-Se mantenha totalmente original e contextualmente coerente;
+Este prompt será utilizado diariamente para gerar uma campanha nova por dia, baseada nas informações do onboarding do cliente.
 
-Siga todas as regras do Prompt Mestre (estrutura AIDA, tom, tendências, proibições e qualidade visual);
+As campanhas devem ser:
 
-E entregue uma nova linha de raciocínio para o próximo conteúdo da campanha.
-"""
+Originais, criativas e atualizadas com as tendências do momento;
 
-        return prompt.strip()
+Com variação diária de títulos, subtítulos e CTAs;
 
-    def build_automatic_post_prompt(self, analysis_data: Dict = None) -> str:
-        """Build prompt for automatic post creation based on creator profile."""
-        creator_profile_data = self.get_creator_profile_data()
-        prompt = f"""
-Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em conteúdos para redes sociais (Instagram, Facebook, LinkedIn, etc.).
-Sua missão é gerar campanhas completas e personalizadas, com base nas informações do onboarding do cliente e obrigatoriamente no JSON gerado pelo módulo “Entendimento Histórico”.
-⚠️ Atenção:
- Este prompt só deve funcionar se o JSON abaixo for recebido corretamente.
- Caso algum campo esteja vazio ou ausente, o conteúdo não deve ser gerado.
-Esse JSON define o direcionamento criativo e é essencial para garantir que o conteúdo diário seja inédito, original e não repetitivo.
+Visualmente impecáveis e alinhadas à identidade da marca.
 
-🧠 ENTRADA OBRIGATÓRIA – JSON DO ENTENDIMENTO HISTÓRICO
-Você deve receber obrigatoriamente o seguinte bloco JSON:
-{
-            "historical_analysis": "",
-  "avoid_list": [],
-  "new_direction": "",
-  "new_headline": "",
-  "new_subtitle": "",
-  "new_cta": ""
-}
+O resultado final deve transmitir qualidade de agência premium — um conteúdo que o cliente publicaria com orgulho, digno de uma marca profissional e moderna.
 
-Função de cada campo:
-- historical_analysis: resumo do que foi feito anteriormente (usado apenas para referência, sem repetir nada).
-- avoid_list: lista de ideias, expressões, CTAs ou palavras que devem ser evitadas integralmente.
-- new_direction: principal linha criativa e conceito que devem guiar toda a nova campanha.
-- new_headline / new_subtitle / new_cta: ideias e variações criativas que devem inspirar os novos textos e chamadas.
-
-🧠 JSON RECEBIDO:
-
-{analysis_data}
-
-🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE (do onboarding):
-
-Nome profissional: {creator_profile_data.get('professional_name', '')}
-
-Profissão: {creator_profile_data.get('profession', '')}
-
-Número de celular: {creator_profile_data.get('whatsapp_number', '')}
-
-Nome do negócio: {creator_profile_data.get('business_name', '')}
-
-Setor/Nicho: {creator_profile_data.get('specialization', '')}
-
-Descrição do negócio: {creator_profile_data.get('business_description', '')}
-
-Gênero do público-alvo: {creator_profile_data.get('target_gender', '')}
-
-Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', '')}
-
-Interesses do público-alvo: {creator_profile_data.get('target_interests', '')}
-
-Localização do público-alvo: {creator_profile_data.get('target_location', '')}
-
-Logo: {creator_profile_data.get('logo', '')}
-
-Paleta de cores: {creator_profile_data.get('color_palette', '')}
-
-Tom de voz: {creator_profile_data.get('voice_tone', '')}
-
-🎯 OBJETIVO GERAL
-
-Gerar uma campanha diária completa com base:
-- no novo direcionamento criativo (new_direction) do JSON;
-- nos dados do onboarding do cliente;
-- e nas trends atuais do nicho ({creator_profile_data.get('specialization', '')}).
-
-Todos os conteúdos devem ser:
-- Totalmente novos e originais;
-- Coerentes com o histórico e identidade da marca;
-- Aderentes ao público e ao tom de voz ({creator_profile_data.get('voice_tone', '')});
-- E sem repetir nada do que aparece em avoid_list.
-
-🪶 REGRAS PARA O CONTEÚDO DE FEED
-Base Criativa:
-- Toda a copy deve ser construída a partir do conteúdo de new_direction.
-- Use new_headline, new_subtitle e new_cta como inspiração direta, mas reescrevendo-os de forma fluida e contextual.
-- Estrutura AIDA (Atenção, Interesse, Desejo, Ação):
-- Abertura envolvente e atual;
-- Desenvolvimento empático e leve;
-- Valor e conexão emocional;
-- Fechamento com uma única CTA natural, coerente com o contexto do dia.
+# SAÍDA ESPERADA:
+Gere a resposta em HTML , deixe sempre topicos e titulos em negrito para melhorar a UI, OBRIGATORIAMENTE.
 
 Estilo e tom:
 - Texto fluido e natural, pronto para o Feed;
@@ -1299,4 +1272,5 @@ Ao gerar o conteúdo:
 - Aplique todas as regras do Prompt Mestre (estrutura AIDA, tom, qualidade visual, proibições de texto na imagem, etc.);
 - E produza uma campanha diária original, profissional e alinhada às trends do momento.
         """
+
         return prompt.strip()
