@@ -1,0 +1,24 @@
+name: Daily Content Mailing
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # Run once at 9:00 AM UTC (6am GMT-3)
+  workflow_dispatch:
+
+jobs:
+  mail-content:
+    runs-on: ubuntu-latest
+    environment: Production – post-now-rest-api-devel
+    steps:
+      - name: Debug Url
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/mail-automatic-posts/"
+
+      - name: Call api for mailing
+        run: |
+          echo "Mailing automatically generated content"
+          curl -X GET \
+            "${{ secrets.VERCEL_API_URL}}/api/v1/ideabank/cron/mail-automatic-posts/" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -w "HTTP Status: %{http_code}\n" \
+            -s
