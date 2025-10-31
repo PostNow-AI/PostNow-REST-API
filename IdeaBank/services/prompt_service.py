@@ -11,13 +11,19 @@ class PromptService:
 
         # Route to specific prompt based on post type
         if post_type == 'post':
-            return self._build_feed_post_prompt(post_data)
+            result = self._build_feed_post_prompt(post_data)
+            return result
         elif post_type == 'reel':
-            return self._build_reel_prompt(post_data)
+            result = self._build_reel_prompt(post_data)
+            return result
         elif post_type == 'story':
-            return self._build_story_prompt(post_data)
+            result = self._build_story_prompt(post_data)
+            return result
         elif post_type == 'campaign':
-            return self.build_automatic_post_prompt(None)
+            result = self.build_automatic_post_prompt(None)
+            return result
+
+        return ""
 
     def get_creator_profile_data(self) -> dict:
         """Get creator profile data for prompt personalization."""
@@ -81,64 +87,6 @@ class PromptService:
                     profile_data['color_palette'] = ', '.join(valid_colors)
 
         return profile_data
-
-        """Build the audience and tone section combining further details with creator profile data."""
-        sections = []
-
-        # Add further details if provided
-        if further_details and further_details.strip():
-            sections.append(further_details.strip())
-
-        # # Get creator profile data for target audience and voice tone
-        # if hasattr(self, 'user') and self.user:
-            from CreatorProfile.models import CreatorProfile
-            profile = CreatorProfile.objects.filter(user=self.user).first()
-            if profile:
-                audience_info = []
-                brand_info = []
-                if profile.business_name:
-                    brand_info.append(f"Empresa: {profile.business_name}")
-                if profile.profession:
-                    brand_info.append(f"Profissão: {profile.profession}")
-                if profile.specialization:
-                    brand_info.append(
-                        f"Especialização: {profile.specialization}")
-                # Target audience information
-                if profile.target_gender and profile.target_gender.strip():
-                    audience_info.append(
-                        f"Gênero do Público: {profile.target_gender}")
-
-                if profile.target_age_range and profile.target_age_range.strip():
-                    audience_info.append(
-                        f"Faixa Etária: {profile.target_age_range}")
-
-                if profile.target_location and profile.target_location.strip():
-                    audience_info.append(
-                        f"Localização: {profile.target_location}")
-
-                if profile.target_interests and profile.target_interests.strip():
-                    audience_info.append(
-                        f"Interesses: {profile.target_interests}")
-
-                if profile.voice_tone and profile.voice_tone.strip():
-                    brand_info.append(
-                        f"Tom de Voz da Marca: {profile.voice_tone}")
-
-                colors = [profile.color_1, profile.color_2,
-                          profile.color_3, profile.color_4, profile.color_5]
-                valid_colors = [
-                    color for color in colors if color and color.strip()]
-                if valid_colors:
-                    brand_info.append(
-                        f"Cores da marca: {', '.join(valid_colors)}")
-
-                if audience_info:
-                    sections.append(
-                        f"Dados do Público-Alvo: {' | '.join(audience_info)}")
-                if brand_info:
-                    sections.append(
-                        f"Dados da Marca: {' | '.join(brand_info)}")
-        return ' - '.join(sections) if sections else "Informações não fornecidas"
 
     def _build_feed_post_prompt(self, post_data: Dict) -> str:
         """Build prompt specifically for feed posts."""
@@ -1016,18 +964,9 @@ Sua missão é editar a imagem já criada, mantendo **100% da identidade visual,
         creator_profile_data = self.get_creator_profile_data()
 
         prompt = f"""
-Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em conteúdos para redes sociais (Instagram, Facebook, LinkedIn, etc.).
-Sua missão é gerar campanhas completas e diárias, personalizadas para cada cliente com base nos dados do onboarding, sem precisar de campos manuais como “assunto” ou “objetivo”.
-
-Todos os conteúdos devem refletir as tendências (trends) atuais do nicho do cliente, ter alta qualidade de comunicação e se alinhar à identidade visual e tom de voz do negócio.
-
-Cada campanha deve conter:
-
-1 Conteúdo de Feed (copy + sugestão de texto para imagem + prompt de imagem);
-
-5 ideias de Stories coerentes com o tema;
-
-1 roteiro de Reels criativo e estratégico.
+Você é um estrategista criativo especializado em copywriting e conteúdo digital, responsável por garantir que cada nova campanha gerada mantenha qualidade, coerência e originalidade absoluta.
+Sua função é analisar o histórico de conteúdos anteriores, entender o estilo, linguagem e temas já abordados, e criar um novo direcionamento criativo inédito, mantendo todas as regras, estrutura e padrão definidos no Prompt Mestre.
+O resultado deve ser obrigatoriamente retornado no formato JSON descrito no final deste prompt.
 
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
@@ -1060,13 +999,11 @@ Tom de voz: {creator_profile_data.get('voice_tone', '')}
 
 🎯 OBJETIVO GERAL:
 
-Gerar uma campanha de conteúdo completa e personalizada, inspirada em assuntos, formatos e trends atuais dentro do nicho e interesse do público.
+Assunto: {name}
 
-Cada dia, o sistema deve entregar uma nova campanha, com:
+Objetivo: {objective}
 
-Conteúdo diferente e original;
-
-Título, subtítulo e CTA alternados e nunca repetidos;
+Mais detalhes: {further_details}
 
 Temas sempre atualizados e relevantes para o público.
 
@@ -1123,86 +1060,138 @@ Gere uma descrição detalhada de uma imagem profissional no tamanho 1080 x 1350
 
 A imagem deve ser:
 
-Altamente profissional e esteticamente impecável, com qualidade de um designer premiado;
 
-Realista e visualmente impactante, priorizando imagens de pessoas reais sempre que fizer sentido para o tema;
+🪶 DIRETRIZES DE ESTILO:
+Mantenha todas as regras, estrutura e padrões de qualidade do Prompt Mestre.
 
-Coerente com o conteúdo da copy e o nicho do cliente ({creator_profile_data.get('specialization', '')});
+Preserve o tom de voz da marca ({creator_profile_data.get('voice_tone', '')}) e o perfil do público.
 
-Criada com composição, iluminação e cores em harmonia com a paleta da marca ({creator_profile_data.get('color_palette', '')});
+Busque inovação criativa dentro do mesmo contexto — sem descaracterizar o estilo.
 
-Visualmente moderna, sofisticada e criativa;
+Se inspire em novas tendências atuais do nicho ({creator_profile_data.get('specialization', '')}) e expressões recentes nas redes.
 
-Seguindo as tendências visuais mais atuais das redes sociais e do setor;
+A ideia deve parecer nova e empolgante, sem soar genérica ou repetitiva.
 
-Sem textos visíveis na imagem.
+⚙️ FORMATO DE SAÍDA (OBRIGATÓRIO):
+A resposta deve ser entregue estritamente em formato JSON, seguindo exatamente esta estrutura:
+{{
+  "historical_analysis": "",
+  "avoid_list": [],
+  "new_direction": "",
+  "new_headline": "",
+  "new_subtitle": "",
+  "new_cta": ""
+}}
 
-O resultado visual deve ser de excelência, com aparência de algo feito por um designer de alto nível, criativo, premiado e sensível à identidade da marca.
+⚙️ Regras de preenchimento do JSON:
+historical_analysis: breve análise do histórico, destacando o que foi mais usado (ganchos, CTAs, temas e padrões).
 
-🎥 2. Ideias de Stories (5 sugestões):
+avoid_list: lista com expressões, ideias ou CTAs que não devem ser repetidas.
 
-Crie 5 ideias de Stories que mantenham coerência com o tema do Feed.
+new_direction: resumo da nova linha criativa (novo enfoque, emoção, narrativa e ângulo de comunicação).
 
-Cada ideia deve:
+new_headline: novo título curto e original (até 8 palavras, diferente de qualquer anterior).
 
-Ser prática e fácil de executar;
+new_subtitle: subtítulo complementar, criativo e inédito.
 
-Refletir trends atuais (ex: formatos, filtros, sons, interações em alta);
-
-Estimular engajamento e conexão emocional;
-
-Misturar formatos (enquetes, perguntas, bastidores, dicas rápidas, reflexões).
-
-Exemplo:
-
-[Ideia 1]
-
-[Ideia 2]
-
-[Ideia 3]
-
-[Ideia 4]
-
-[Ideia 5]
-
-🎬 3. Ideia de Roteiro para Reels:
-
-Crie 1 roteiro curto (20–40 segundos) de Reels com o mesmo tema da campanha.
-
-Estrutura recomendada:
-
-Abertura (3s): Gancho forte baseado em trends recentes do nicho.
-
-Desenvolvimento: Insight, dica ou história envolvente.
-
-Fechamento: CTA leve e natural.
-
-O roteiro deve:
-
-Ser criativo, dinâmico e visualmente interessante;
-
-Refletir o tom de voz ({creator_profile_data.get('voice_tone', '')}) e estilo da marca;
-
-Sugerir falas, gestos ou cenas se fizer sentido;
-
-Basear-se em formatos de Reels que estejam performando bem no momento.
+new_cta: chamada clara, natural e diferente das anteriores.
 
 📅 CONTEXTO DE USO:
+Este prompt será executado antes do Prompt Mestre em cada geração diária.
+Ele serve como filtro criativo e analítico, garantindo que o novo conteúdo:
+Não repita nenhuma parte do histórico;
 
-Este prompt será utilizado diariamente para gerar uma campanha nova por dia, baseada nas informações do onboarding do cliente.
+Se mantenha totalmente original e contextualmente coerente;
 
-As campanhas devem ser:
+Siga todas as regras do Prompt Mestre (estrutura AIDA, tom, tendências, proibições e qualidade visual);
 
-Originais, criativas e atualizadas com as tendências do momento;
+E entregue uma nova linha de raciocínio para o próximo conteúdo da campanha.
+"""
 
-Com variação diária de títulos, subtítulos e CTAs;
+        return prompt.strip()
 
-Visualmente impecáveis e alinhadas à identidade da marca.
+    def build_automatic_post_prompt(self, analysis_data: Dict = None) -> str:
+        """Build prompt for automatic post creation based on creator profile."""
+        creator_profile_data = self.get_creator_profile_data()
 
-O resultado final deve transmitir qualidade de agência premium — um conteúdo que o cliente publicaria com orgulho, digno de uma marca profissional e moderna.
+        try:
+            prompt = f"""
+Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em conteúdos para redes sociais (Instagram, Facebook, LinkedIn, etc.).
+Sua missão é gerar campanhas completas e personalizadas, com base nas informações do onboarding do cliente e obrigatoriamente no JSON gerado pelo módulo “Entendimento Histórico”.
+⚠️ Atenção:
+ Este prompt só deve funcionar se o JSON abaixo for recebido corretamente.
+ Caso algum campo esteja vazio ou ausente, o conteúdo não deve ser gerado.
+Esse JSON define o direcionamento criativo e é essencial para garantir que o conteúdo diário seja inédito, original e não repetitivo.
 
-# SAÍDA ESPERADA:
-Gere a resposta em HTML , deixe sempre topicos e titulos em negrito para melhorar a UI, OBRIGATORIAMENTE.
+🧠 ENTRADA OBRIGATÓRIA – JSON DO ENTENDIMENTO HISTÓRICO
+Você deve receber obrigatoriamente o seguinte bloco JSON:
+{{
+  "historical_analysis": "",
+  "avoid_list": [],
+  "new_direction": "",
+  "new_headline": "",
+  "new_subtitle": "",
+  "new_cta": ""
+}}
+
+Função de cada campo:
+- historical_analysis: resumo do que foi feito anteriormente (usado apenas para referência, sem repetir nada).
+- avoid_list: lista de ideias, expressões, CTAs ou palavras que devem ser evitadas integralmente.
+- new_direction: principal linha criativa e conceito que devem guiar toda a nova campanha.
+- new_headline / new_subtitle / new_cta: ideias e variações criativas que devem inspirar os novos textos e chamadas.
+
+🧠 JSON RECEBIDO:
+
+{analysis_data}
+
+🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE (do onboarding):
+
+Nome profissional: {creator_profile_data.get('professional_name', '')}
+
+Profissão: {creator_profile_data.get('profession', '')}
+
+Número de celular: {creator_profile_data.get('whatsapp_number', '')}
+
+Nome do negócio: {creator_profile_data.get('business_name', '')}
+
+Setor/Nicho: {creator_profile_data.get('specialization', '')}
+
+Descrição do negócio: {creator_profile_data.get('business_description', '')}
+
+Gênero do público-alvo: {creator_profile_data.get('target_gender', '')}
+
+Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', '')}
+
+Interesses do público-alvo: {creator_profile_data.get('target_interests', '')}
+
+Localização do público-alvo: {creator_profile_data.get('target_location', '')}
+
+Paleta de cores: {creator_profile_data.get('color_palette', '')}
+
+Tom de voz: {creator_profile_data.get('voice_tone', '')}
+
+🎯 OBJETIVO GERAL
+
+Gerar uma campanha diária completa com base:
+- no novo direcionamento criativo (new_direction) do JSON;
+- nos dados do onboarding do cliente;
+- e nas trends atuais do nicho ({creator_profile_data.get('specialization', '')}).
+
+Todos os conteúdos devem ser:
+- Totalmente novos e originais;
+- Coerentes com o histórico e identidade da marca;
+- Aderentes ao público e ao tom de voz ({creator_profile_data.get('voice_tone', '')});
+- E sem repetir nada do que aparece em avoid_list.
+
+🪶 REGRAS PARA O CONTEÚDO DE FEED
+Base Criativa:
+- Toda a copy deve ser construída a partir do conteúdo de new_direction.
+- Use new_headline, new_subtitle e new_cta como inspiração direta, mas reescrevendo-os de forma fluida e contextual.
+- Estrutura AIDA (Atenção, Interesse, Desejo, Ação):
+- Abertura envolvente e atual;
+- Desenvolvimento empático e leve;
+- Valor e conexão emocional;
+- Fechamento com uma única CTA natural, coerente com o contexto do dia.
 
 Estilo e tom:
 - Texto fluido e natural, pronto para o Feed;
@@ -1271,6 +1260,22 @@ Ao gerar o conteúdo:
 - Inspire-se em new_headline, new_subtitle, e new_cta;
 - Aplique todas as regras do Prompt Mestre (estrutura AIDA, tom, qualidade visual, proibições de texto na imagem, etc.);
 - E produza uma campanha diária original, profissional e alinhada às trends do momento.
+
+⚙️ FORMATO DE SAÍDA (OBRIGATÓRIO):
+A resposta deve ser entregue estritamente em formato JSON, seguindo exatamente esta estrutura:
+{{
+  "feed_html": "",
+  "feed_image_description": "",
+  "story_html": "",
+  "reels_html": "",
+}}
+
+Apenas os campos "feed_html", "story_html" e "reels_html" devem vir formatados como HTML, deixando sempre tópicos e títulos em negrito para melhorar a UI, OBRIGATORIAMENTE.
         """
 
-        return prompt.strip()
+            return prompt.strip()
+
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            raise

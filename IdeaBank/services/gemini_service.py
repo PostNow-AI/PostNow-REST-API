@@ -499,13 +499,12 @@ class GeminiService(BaseAIService):
             if response.text:
                 # Parse the JSON response
                 try:
-                    analysis_data = json.loads(response.text)
+                    analysis_data = response.text.strip('`')
                 except json.JSONDecodeError as e:
                     raise Exception(f"Failed to parse analysis JSON: {str(e)}")
 
                 updated_prompt = prompt_service.build_automatic_post_prompt(
                     analysis_data)
-                print(updated_prompt)
                 content_gen_res = chat.send_message(updated_prompt)
 
                 # Save the analysis interaction to chat history
