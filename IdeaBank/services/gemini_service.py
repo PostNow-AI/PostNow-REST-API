@@ -505,6 +505,7 @@ class GeminiService(BaseAIService):
 
                 updated_prompt = prompt_service.build_automatic_post_prompt(
                     analysis_data)
+                print(updated_prompt)
                 content_gen_res = chat.send_message(updated_prompt)
 
                 # Save the analysis interaction to chat history
