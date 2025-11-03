@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import time
 
 try:
     import google.generativeai as genai
@@ -9,8 +11,6 @@ except ImportError:
     genai = None
 
 import base64
-import re
-import time
 
 from django.contrib.auth.models import User
 
@@ -36,6 +36,60 @@ def extract_base64_image(data_url: str) -> bytes:
 
 
 class GeminiService(BaseAIService):
+    def _parse_retry_delay(self, error_str: str) -> float:
+        """Parse retry delay from Gemini API error message."""
+        try:
+            # Look for retry_delay in the error message
+            retry_delay_match = re.search(
+                r'retry_delay\s*\{\s*seconds:\s*(\d+)', error_str)
+            if retry_delay_match:
+                return float(retry_delay_match.group(1))
+
+            # Look for "Please retry in X seconds" pattern
+            retry_match = re.search(r'Please retry in (\d+\.?\d*)s', error_str)
+            if retry_match:
+                return float(retry_match.group(1))
+
+            # Default delays for common errors
+            if '429' in error_str:
+                return 30.0  # 30 seconds for rate limits
+            elif 'quota' in error_str.lower():
+                return 60.0  # 1 minute for quota issues
+
+        except Exception:
+            pass
+
+        return 5.0  # Default 5 second delay
+
+    def _should_retry_quota_error(self, error_str: str, attempt: int, max_attempts: int = 3) -> bool:
+        """Determine if we should retry after a quota error."""
+        # Don't retry on the last attempt
+        if attempt >= max_attempts - 1:
+            return False
+
+        # Check for permanent quota exhaustion (billing issues)
+        permanent_quota_indicators = [
+            'billing details',
+            'payment required',
+            'insufficient funds',
+            'account suspended'
+        ]
+
+        if any(indicator in error_str.lower() for indicator in permanent_quota_indicators):
+            print("⚠️ Permanent quota/billing issue detected - not retrying")
+            return False
+
+        return True
+
+    def _get_quota_error_message(self, error_str: str) -> str:
+        """Generate user-friendly error message for quota issues."""
+        if 'billing details' in error_str:
+            return "Your Gemini API quota has been exceeded. Please check your Google Cloud billing and upgrade your plan at: https://console.cloud.google.com/billing"
+        elif '429' in error_str:
+            return "Gemini API rate limit exceeded. The system will automatically retry with appropriate delays."
+        else:
+            return "Gemini API quota temporarily exceeded. The system will try alternative models or retry automatically."
+
     def _convert_history_to_serializable(self, history):
         """Convert Gemini Content objects to serializable dictionaries."""
         serializable_history = []
@@ -80,7 +134,7 @@ class GeminiService(BaseAIService):
 
         return serializable_history
 
-    def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None, conversation_id: str = 'default') -> str:
+    def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using Gemini's chat API with conversation history support."""
         compressed_data = ""
         if not GEMINI_AVAILABLE:
@@ -119,8 +173,7 @@ class GeminiService(BaseAIService):
             chat_history_data = []
             if user:
                 try:
-                    chat_history_obj = ChatHistory.objects.get(
-                        user=user, conversation_id=conversation_id)
+                    chat_history_obj = ChatHistory.objects.get(user=user)
                     chat_history_data = chat_history_obj.get_history()
                 except ChatHistory.DoesNotExist:
                     # No existing history, start fresh
@@ -129,12 +182,13 @@ class GeminiService(BaseAIService):
             # Try different model names for image generation with fallbacks
             model_names = [
                 'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image-preview',
                 'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image-preview',
                 'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image-preview',
                 'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image-preview',
             ]
 
             for model_name in model_names:
@@ -204,9 +258,9 @@ class GeminiService(BaseAIService):
                             serializable_history = self._convert_history_to_serializable(
                                 updated_history)
                             chat_history_obj, created = ChatHistory.objects.get_or_create(
-                                user=user, conversation_id=conversation_id)
-                            chat_history_obj.set_history(serializable_history)
-                            chat_history_obj.save()
+                                user=user)
+                            chat_history_obj.append_interaction(
+                                serializable_history)
 
                         return compressed_data
                     else:
@@ -219,18 +273,33 @@ class GeminiService(BaseAIService):
 
                     # Check for specific quota exhaustion errors
                     if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
-                        print(
-                            f"⚠️ Quota exhausted for model {model_name}, waiting before trying next model...")
-                        # Wait 2 seconds before trying next model
-                        time.sleep(2)
+                        if self._should_retry_quota_error(error_str, model_names.index(model_name), len(model_names)):
+                            retry_delay = self._parse_retry_delay(error_str)
+                            print(
+                                f"⚠️ Quota exhausted for model {model_name}, waiting {retry_delay:.1f}s before trying next model...")
+                            time.sleep(retry_delay)
+                        else:
+                            print(
+                                f"⚠️ Skipping model {model_name} due to quota exhaustion")
                     elif 'not found' in error_str.lower() or 'invalid' in error_str.lower():
                         print(
                             f"⚠️ Model {model_name} not available, trying next model...")
+                    else:
+                        # For other errors, add a small delay
+                        time.sleep(1)
 
                     continue
 
             # If we reach here, no models worked
             print("❌ All models failed to generate image")
+
+            # Check if the last error was quota-related and provide helpful message
+            if 'error_str' in locals() and ('429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower()):
+                user_message = self._get_quota_error_message(error_str)
+                print(f"💡 {user_message}")
+                # Could raise a specific exception here for the UI to handle
+                # raise QuotaExceededException(user_message)
+
             return ""
 
         except Exception as e:
@@ -267,7 +336,7 @@ class GeminiService(BaseAIService):
         enhanced_parts = [
             f"Gere uma imagem de alta qualidade com base nesta descrição: {base_prompt}"]
 
-        if post_data:
+        if post_data.get('type') and post_data.get('type') != 'campaign':
             if post_data.get('objective'):
                 enhanced_parts.append(
                     f"Objetivo do post: {post_data['objective']}")
@@ -277,7 +346,7 @@ class GeminiService(BaseAIService):
                 enhanced_parts.append(
                     f"Detalhes adicionais: {post_data['further_details']}")
 
-        if idea_content:
+        if post_data.get('type') and post_data.get('type') != 'campaign' and idea_content:
             # Extract key themes from idea content for visual inspiration
             enhanced_parts.append(
                 f"Contexto do conteúdo: {idea_content}...")
@@ -437,7 +506,7 @@ class GeminiService(BaseAIService):
         # Fallback estimation: roughly 4 characters per token
         return len(prompt) // 4
 
-    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, conversation_id: str = 'default', post_data: dict = None) -> str:
+    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, post_data: dict = None) -> str:
         """Make the actual AI API request to Gemini with conversation history support."""
         # Configure API key
         api_key = api_key or self.default_api_key
@@ -451,8 +520,7 @@ class GeminiService(BaseAIService):
             chat_history_data = []
             if user:
                 try:
-                    chat_history_obj = ChatHistory.objects.get(
-                        user=user, conversation_id=conversation_id)
+                    chat_history_obj = ChatHistory.objects.get(user=user)
                     chat_history_data = chat_history_obj.get_history()
                 except ChatHistory.DoesNotExist:
                     # No existing history, start fresh
@@ -462,8 +530,10 @@ class GeminiService(BaseAIService):
             chat = self.model.start_chat(history=chat_history_data)
 
             # Handle special conversation flows
-            if conversation_id == "campaign_generation":
-                return self._handle_campaign_generation_flow(chat, user, conversation_id, post_data)
+            is_campaign = post_data and post_data.get(
+                'type', '').lower() == 'campaign'
+            if is_campaign:
+                return self._handle_campaign_generation_flow(chat, user, post_data)
             else:
                 # Default flow - send the prompt as the message
                 response = chat.send_message(prompt)
@@ -475,9 +545,9 @@ class GeminiService(BaseAIService):
                         serializable_history = self._convert_history_to_serializable(
                             updated_history)
                         chat_history_obj, created = ChatHistory.objects.get_or_create(
-                            user=user, conversation_id=conversation_id)
-                        chat_history_obj.set_history(serializable_history)
-                        chat_history_obj.save()
+                            user=user)
+                        chat_history_obj.append_interaction(
+                            serializable_history)
 
                     return response.text
                 else:
@@ -486,7 +556,7 @@ class GeminiService(BaseAIService):
         except Exception as e:
             raise Exception(f"Falha na comunicação com Gemini: {str(e)}")
 
-    def _handle_campaign_generation_flow(self, chat, user: User, conversation_id: str, post_data: dict = None) -> str:
+    def _handle_campaign_generation_flow(self, chat, user: User, post_data: dict = None) -> str:
         """Handle campaign generation flow with historical analysis."""
         try:
             # Import prompt service
@@ -513,9 +583,8 @@ class GeminiService(BaseAIService):
                     serializable_history = self._convert_history_to_serializable(
                         updated_history)
                     chat_history_obj, created = ChatHistory.objects.get_or_create(
-                        user=user, conversation_id=conversation_id)
-                    chat_history_obj.set_history(serializable_history)
-                    chat_history_obj.save()
+                        user=user)
+                    chat_history_obj.append_interaction(serializable_history)
 
                 return content_gen_res.text
             else:

@@ -1,21 +1,19 @@
 import base64
 import json
+import os
+import time
 import zlib
 
+from django.conf import settings
 from django.contrib.auth.models import User
-from django.db import models
+from django.db import DatabaseError, OperationalError, models, transaction
 
 
 class ChatHistory(models.Model):
-    """Store conversation history for AI chat sessions."""
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    conversation_id = models.CharField(
-        max_length=100,
-        default='default',
-        help_text="ID to distinguish different conversations"
-    )
+    """Store aggregated conversation history for AI chat sessions per user."""
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
     history = models.TextField(
-        help_text="Compressed and encoded chat history"
+        help_text="Compressed and encoded aggregated chat history for all conversations"
     )
     last_updated = models.DateTimeField(auto_now=True)
 
@@ -24,24 +22,48 @@ class ChatHistory(models.Model):
         verbose_name = 'Chat History'
         verbose_name_plural = 'Chat Histories'
         ordering = ['-last_updated']
-        unique_together = ('user', 'conversation_id')
 
     def __str__(self):
-        return f"Chat history for {self.user.username} - {self.conversation_id}"
+        return f"Aggregated chat history for {self.user.username}"
 
     def set_history(self, history_data):
-        """Compress and encode history data for storage."""
+        """Compress and encode history data for storage with maximum compression."""
         try:
             # Convert to JSON string
-            json_str = json.dumps(history_data, ensure_ascii=False)
-            # Compress using zlib
+            json_str = json.dumps(
+                history_data, ensure_ascii=False, separators=(',', ':'))
+            # Compress using zlib with maximum compression
             compressed = zlib.compress(json_str.encode('utf-8'), level=9)
             # Encode to base64 for safe text storage
             encoded = base64.b64encode(compressed).decode('ascii')
             self.history = encoded
+
+            # Save to JSON file in debug mode only
+            if settings.DEBUG:
+                self._save_debug_json(history_data)
+
         except Exception as e:
             print(f"Error encoding history: {e}")
             self.history = ""
+
+    def _save_debug_json(self, history_data):
+        """Save history data to JSON file for debugging purposes (debug mode only)."""
+        try:
+            # Create debug directory if it doesn't exist
+            debug_dir = os.path.join(settings.BASE_DIR, 'debug_chat_history')
+            os.makedirs(debug_dir, exist_ok=True)
+
+            # Create filename based on user
+            filename = f"chat_history_{self.user.username}.json"
+            filepath = os.path.join(debug_dir, filename)
+
+            # Save the history data as readable JSON
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(history_data, f, indent=2, ensure_ascii=False)
+
+        except Exception as e:
+            print(f"Error saving debug JSON file: {e}")
+            # Don't raise exception - debug file saving failure shouldn't break the main functionality
 
     def get_history(self):
         """Decode and decompress history data."""
@@ -57,6 +79,75 @@ class ChatHistory(models.Model):
         except Exception as e:
             print(f"Error decoding history: {e}")
             return []
+
+    def append_interaction(self, new_history_data, max_retries=3):
+        """Append new interaction to existing history with retry logic for connection errors."""
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                with transaction.atomic():
+                    # Refresh the object from database to ensure we have latest data
+                    self.refresh_from_db()
+
+                    current_history = self.get_history()
+                    if not isinstance(current_history, list):
+                        current_history = []
+
+                    # Append new history data
+                    current_history.extend(new_history_data)
+
+                    # Save the updated history
+                    self.set_history(current_history)
+                    self.save()
+
+                # Success - exit retry loop
+                return
+
+            except (OperationalError, DatabaseError) as e:
+                last_error = e
+                error_msg = str(e).lower()
+
+                # Check if it's a connection-related error that we should retry
+                if any(keyword in error_msg for keyword in [
+                    'gone away', 'broken pipe', 'lost connection',
+                    'server has gone away', 'connection lost'
+                ]):
+                    if attempt < max_retries - 1:  # Don't sleep on last attempt
+                        # Exponential backoff: 1, 2, 4 seconds
+                        sleep_time = (2 ** attempt)
+                        print(
+                            f"Database connection error (attempt {attempt + 1}/{max_retries}): {e}")
+                        print(f"Retrying in {sleep_time} seconds...")
+                        time.sleep(sleep_time)
+                        continue
+                    else:
+                        print(
+                            f"Failed to append interaction after {max_retries} attempts: {e}")
+                        break
+                else:
+                    # Not a connection error, don't retry
+                    print(f"Database error (not retryable): {e}")
+                    break
+
+            except Exception as e:
+                last_error = e
+                print(f"Unexpected error appending interaction: {e}")
+                break
+
+        # If we get here, all retries failed
+        print(f"All retry attempts failed. Last error: {last_error}")
+
+        # Final fallback: try to save just the new data without appending
+        try:
+            print("Attempting fallback: saving only new data...")
+            with transaction.atomic():
+                self.set_history(new_history_data)
+                self.save()
+            print("Fallback successful: saved new data only")
+        except Exception as fallback_error:
+            print(f"Fallback also failed: {fallback_error}")
+            raise fallback_error  # Re-raise the original error if fallback fails
 
 
 class PostType(models.TextChoices):
@@ -143,6 +234,11 @@ class PostIdea(models.Model):
         blank=True,
         null=True,
         help_text="URL da imagem gerada ou base64 data"
+    )
+    image_description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Descrição da imagem usada para geração (opcional)"
     )
 
     # Metadata

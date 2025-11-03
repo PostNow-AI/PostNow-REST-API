@@ -240,7 +240,8 @@ class PostAIService(BaseAIService):
                     post_idea = PostIdea.objects.create(
                         post=post,
                         content=content,
-                        image_url=image_url or ''
+                        image_url=image_url or '',
+                        image_description=feed_image_description if post_type == "feed" else None
                     )
 
                     post_result = {
@@ -392,10 +393,10 @@ class PostAIService(BaseAIService):
         try:
             if current_image is not None:
                 image_url = ai_service.generate_image(
-                    prompt, current_image, user, post_data, content, conversation_id='image_generation')
+                    prompt, current_image, user, post_data, content)
             else:
                 image_url = ai_service.generate_image(
-                    prompt, '', user, post_data, content, conversation_id='image_generation')
+                    prompt, '', user, post_data, content)
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
 
@@ -567,7 +568,7 @@ class PostAIService(BaseAIService):
         try:
             # Use the AI service's direct _make_ai_request method with our sophisticated prompt
             response_text = ai_service._make_ai_request(
-                prompt, ai_service.model_name, user=self.user, conversation_id=conversation_id, post_data=post_data)
+                prompt, ai_service.model_name, user=self.user, post_data=post_data)
 
             if response_text and response_text.strip():
                 cleaned_content = response_text.strip()
@@ -1169,7 +1170,7 @@ class PostAIService(BaseAIService):
 
             # Generate image using the AI service
             image_url = ai_service.generate_image(
-                image_description, '', user, post_data, content, conversation_id='image_generation')
+                image_description, '', user, post_data, content)
 
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
