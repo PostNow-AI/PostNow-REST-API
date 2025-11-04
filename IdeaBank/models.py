@@ -1,62 +1,6 @@
-import base64
-import json
-import zlib
 
 from django.contrib.auth.models import User
 from django.db import models
-
-
-class ChatHistory(models.Model):
-    """Store conversation history for AI chat sessions."""
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    conversation_id = models.CharField(
-        max_length=100,
-        default='default',
-        help_text="ID to distinguish different conversations"
-    )
-    history = models.TextField(
-        help_text="Compressed and encoded chat history"
-    )
-    last_updated = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'chat_histories'
-        verbose_name = 'Chat History'
-        verbose_name_plural = 'Chat Histories'
-        ordering = ['-last_updated']
-        unique_together = ('user', 'conversation_id')
-
-    def __str__(self):
-        return f"Chat history for {self.user.username} - {self.conversation_id}"
-
-    def set_history(self, history_data):
-        """Compress and encode history data for storage."""
-        try:
-            # Convert to JSON string
-            json_str = json.dumps(history_data, ensure_ascii=False)
-            # Compress using zlib
-            compressed = zlib.compress(json_str.encode('utf-8'), level=9)
-            # Encode to base64 for safe text storage
-            encoded = base64.b64encode(compressed).decode('ascii')
-            self.history = encoded
-        except Exception as e:
-            print(f"Error encoding history: {e}")
-            self.history = ""
-
-    def get_history(self):
-        """Decode and decompress history data."""
-        try:
-            if not self.history:
-                return []
-            # Decode from base64
-            compressed = base64.b64decode(self.history.encode('ascii'))
-            # Decompress
-            json_str = zlib.decompress(compressed).decode('utf-8')
-            # Parse JSON
-            return json.loads(json_str)
-        except Exception as e:
-            print(f"Error decoding history: {e}")
-            return []
 
 
 class PostType(models.TextChoices):
@@ -143,6 +87,11 @@ class PostIdea(models.Model):
         blank=True,
         null=True,
         help_text="URL da imagem gerada ou base64 data"
+    )
+    image_description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Descrição da imagem usada para geração (opcional)"
     )
 
     # Metadata

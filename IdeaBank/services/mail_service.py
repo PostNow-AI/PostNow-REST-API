@@ -45,13 +45,13 @@ class MailService():
                 "HTMLPart": html_content
             }
 
-            # Add PostNow logo attachment using base64
-            attachments.append({
-                'url': logo,
-                'filename': 'postnow_logo.svg',
-                'content_type': 'image/png',
-                'content_id': 'postnow_logo'
-            })
+            if attachments is not None:
+                attachments.append({
+                    'url': logo,
+                    'filename': 'postnow_logo.svg',
+                    'content_type': 'image/png',
+                    'content_id': 'postnow_logo'
+                })
 
             # Add attachments if provided
             if attachments:

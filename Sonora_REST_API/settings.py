@@ -149,7 +149,13 @@ DATABASES = {
         'OPTIONS': {
             'charset': 'utf8mb4',
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            'connect_timeout': 60,  # Increase connection timeout
         },
+        # For free-tier cloud databases (Aiven): disable connection pooling
+        # Free-tier databases have aggressive connection timeouts (5-30 seconds)
+        # Connection pooling can cause "MySQL server has gone away" errors
+        # Setting CONN_MAX_AGE=0 forces Django to create fresh connections for each request
+        'CONN_MAX_AGE': 0,  # No connection pooling (forces fresh connections)
     }
 }
 
@@ -282,6 +288,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://sonoria-posts.vercel.app",  # Production domain
     "https://postnow.com.br",  # Production domain
     "https://www.postnow.com.br",
+    "https://post-now-ui-devel.vercel.app"
 ]
 
 # Add additional CORS origins from environment variable
@@ -357,6 +364,18 @@ DEFAULT_FROM_NAME = os.getenv('SENDER_NAME', 'PostNow AI')
 MAX_CONCURRENT_USERS = int(os.environ.get('MAX_CONCURRENT_USERS', '10'))
 CONTENT_GENERATION_TIMEOUT = int(
     os.environ.get('CONTENT_GENERATION_TIMEOUT', '300'))
+
+# AWS S3 Configuration for Chat History Storage
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
+AWS_S3_CHAT_HISTORY_BUCKET = os.getenv(
+    'AWS_S3_CHAT_HISTORY_BUCKET', 'postnow-history-bucket')
+AWS_S3_CUSTOM_DOMAIN = os.getenv('AWS_S3_CUSTOM_DOMAIN')
+
+# Use boto3 for S3 operations
+AWS_S3_USE_SSL = True
+AWS_DEFAULT_ACL = None
 
 # Logging configuration for better debugging
 LOGGING = {
