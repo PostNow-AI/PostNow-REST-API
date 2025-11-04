@@ -13,13 +13,13 @@ except ImportError:
 import base64
 
 from django.contrib.auth.models import User
-from django.db import connection
 
-from ..models import ChatHistory
 from .base_ai_service import BaseAIService
 from .prompt_service import PromptService
+from .s3_chat_history_service import S3ChatHistoryService
 
 prompt_service = PromptService()
+s3_chat_history = S3ChatHistoryService()
 
 
 def extract_base64_image(data_url: str) -> bytes:
@@ -172,23 +172,10 @@ class GeminiService(BaseAIService):
                     print("⚠️ Could not deduct credits - AIModelService not available")
 
         try:
-            # Fetch existing conversation history from database for image generation
+            # Fetch existing conversation history from S3 bucket
             chat_history_data = []
             if user:
-                try:
-                    chat_history_obj = ChatHistory.objects.get(user=user)
-                    chat_history_data = chat_history_obj.get_history()
-                except ChatHistory.DoesNotExist:
-                    # No existing history, start fresh
-                    pass
-
-            # ⚠️ CRITICAL: Close database connection before long AI operation
-            # Free-tier cloud databases (like Aiven) timeout connections after 5-30 seconds
-            # Image generation takes 30-60+ seconds, so we close the connection proactively
-            # Django will automatically create a fresh connection when needed for saving
-            connection.close()
-            print(
-                "🔌 Closed database connection before long AI image generation operation")
+                chat_history_data = s3_chat_history.get_history(user)
 
             # Try different model names for image generation with fallbacks
             model_names = [
@@ -255,28 +242,34 @@ class GeminiService(BaseAIService):
                     response = chat.send_message(message_parts)
 
                     # Check if response has image data
-                    compressed_data = self._handle_compression(
+                    image_bytes = self._extract_image_bytes(
                         response, model_name, post_data)
 
                     # Final safety check
-                    if compressed_data:
-                        # Deduct credits for successful image generation
-                        deduct_credits_for_image(" (chat session)")
+                    if image_bytes:
+                        # Save image to S3 and get URL
+                        image_url = self._save_image_to_s3(
+                            image_bytes, user, post_data)
 
-                        # Save updated conversation history
-                        if user:
-                            updated_history = chat.history
-                            serializable_history = self._convert_history_to_serializable(
-                                updated_history)
-                            chat_history_obj, created = ChatHistory.objects.get_or_create(
-                                user=user)
-                            chat_history_obj.append_interaction(
-                                serializable_history)
+                        if image_url:
+                            # Deduct credits for successful image generation
+                            deduct_credits_for_image(" (chat session)")
 
-                        return compressed_data
+                            # Save updated conversation history to S3
+                            if user:
+                                updated_history = chat.history
+                                serializable_history = self._convert_history_to_serializable(
+                                    updated_history)
+                                s3_chat_history.append_interaction(
+                                    user, serializable_history)
+
+                            return image_url
+                        else:
+                            print(
+                                f"❌ Failed to save image to S3 for model: {model_name}")
                     else:
                         print(
-                            f"❌ Final compressed_data is empty for model: {model_name}")
+                            f"❌ No image bytes extracted for model: {model_name}")
 
                 except Exception as e:
                     error_str = str(e)
@@ -338,7 +331,8 @@ class GeminiService(BaseAIService):
             # For other errors, provide generic message
             raise Exception(f"Falha na geração de imagem: {error_str}")
 
-    def _handle_compression(self, response, model_name: str, post_data: dict):
+    def _extract_image_bytes(self, response, model_name: str, post_data: dict) -> bytes:
+        """Extract raw image bytes from Gemini response."""
         print(
             f"🖼️ Model {model_name} returned {len(response.candidates)} candidates")
         if response.candidates and len(response.candidates) > 0:
@@ -346,22 +340,71 @@ class GeminiService(BaseAIService):
             if hasattr(candidate, 'content') and candidate.content:
                 for part in candidate.content.parts:
                     if hasattr(part, 'inline_data') and part.inline_data:
-                        # Compress and optimize image data
-                        compressed_data = self._compress_image_data(
-                            part.inline_data.data, post_data)
-                        if compressed_data:
-                            return compressed_data
-                        else:
-                            print(
-                                f"⚠️ Failed to compress image data from model: {model_name}")
+                        # Return raw image bytes
+                        return part.inline_data.data
                     # Also check for text that might contain image references
                     if hasattr(part, 'text') and part.text:
                         print(
                             f"📝 Model {model_name} returned text: {part.text[:100]}...")
 
-        # Return empty string if no image data found
+        # Return empty bytes if no image data found
         print(f"❌ No image data found in response from model: {model_name}")
-        return ""
+        return b""
+
+    def _save_image_to_s3(self, image_bytes: bytes, user: User = None, post_data: dict = None) -> str:
+        """Save image bytes to S3 bucket and return the public URL."""
+        try:
+            import time
+            import uuid
+
+            import boto3
+            from botocore.exceptions import ClientError, NoCredentialsError
+
+            # Get S3 bucket name from environment
+            image_bucket = os.getenv('AWS_S3_IMAGE_BUCKET')
+
+            # Initialize S3 client
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
+            )
+
+            # Generate unique filename
+            unique_id = str(uuid.uuid4())
+            user_prefix = f"user_{user.id}_" if user else ""
+            filename = f"{user_prefix}generated_image_{unique_id}.png"
+
+            # Upload to S3
+            s3_client.put_object(
+                Bucket=image_bucket,
+                Key=filename,
+                Body=image_bytes,
+                ContentType='image/png',
+                Metadata={
+                    'user_id': str(user.id) if user else 'anonymous',
+                    'generated_at': str(time.time()),
+                    'post_type': post_data.get('type', 'unknown') if post_data else 'unknown'
+                }
+            )
+
+            # Generate public URL
+            region = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
+            image_url = f"https://{image_bucket}.s3.{region}.amazonaws.com/{filename}"
+
+            print(f"🖼️ Successfully saved image to S3: {image_url}")
+            return image_url
+
+        except NoCredentialsError:
+            print("❌ AWS credentials not found for image upload")
+            return ""
+        except ClientError as e:
+            print(f"❌ S3 error saving image: {e}")
+            return ""
+        except Exception as e:
+            print(f"❌ Unexpected error saving image to S3: {e}")
+            return ""
 
     def _enhance_image_prompt(self, base_prompt: str, post_data: dict = None, idea_content: str = None) -> str:
         """Enhance the image generation prompt with post data and idea content."""
@@ -548,23 +591,10 @@ class GeminiService(BaseAIService):
         genai.configure(api_key=api_key)
 
         try:
-            # Fetch existing conversation history from database
+            # Fetch existing conversation history from S3 bucket
             chat_history_data = []
             if user:
-                try:
-                    chat_history_obj = ChatHistory.objects.get(user=user)
-                    chat_history_data = chat_history_obj.get_history()
-                except ChatHistory.DoesNotExist:
-                    # No existing history, start fresh
-                    pass
-
-            # ⚠️ CRITICAL: Close database connection before long AI operation
-            # Free-tier cloud databases (like Aiven) timeout connections after 5-30 seconds
-            # Content generation can take 30-60+ seconds, so we close the connection proactively
-            # Django will automatically create a fresh connection when needed for saving
-            connection.close()
-            print(
-                "🔌 Closed database connection before long AI content generation operation")
+                chat_history_data = s3_chat_history.get_history(user)
 
             # Start a chat session with the fetched history
             chat = self.model.start_chat(history=chat_history_data)
@@ -579,15 +609,13 @@ class GeminiService(BaseAIService):
                 response = chat.send_message(prompt)
 
                 if response.text:
-                    # Save the updated history back to database
+                    # Save the updated history back to S3 bucket
                     if user:
                         updated_history = chat.history
                         serializable_history = self._convert_history_to_serializable(
                             updated_history)
-                        chat_history_obj, created = ChatHistory.objects.get_or_create(
-                            user=user)
-                        chat_history_obj.append_interaction(
-                            serializable_history)
+                        s3_chat_history.append_interaction(
+                            user, serializable_history)
 
                     return response.text
                 else:
@@ -638,14 +666,13 @@ class GeminiService(BaseAIService):
                     analysis_data)
                 content_gen_res = chat.send_message(updated_prompt)
 
-                # Save the analysis interaction to chat history
+                # Save the analysis interaction to S3 chat history
                 if user:
                     updated_history = chat.history
                     serializable_history = self._convert_history_to_serializable(
                         updated_history)
-                    chat_history_obj, created = ChatHistory.objects.get_or_create(
-                        user=user)
-                    chat_history_obj.append_interaction(serializable_history)
+                    s3_chat_history.append_interaction(
+                        user, serializable_history)
 
                 return content_gen_res.text
             else:

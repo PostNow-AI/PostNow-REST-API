@@ -365,6 +365,18 @@ MAX_CONCURRENT_USERS = int(os.environ.get('MAX_CONCURRENT_USERS', '10'))
 CONTENT_GENERATION_TIMEOUT = int(
     os.environ.get('CONTENT_GENERATION_TIMEOUT', '300'))
 
+# AWS S3 Configuration for Chat History Storage
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
+AWS_S3_CHAT_HISTORY_BUCKET = os.getenv(
+    'AWS_S3_CHAT_HISTORY_BUCKET', 'postnow-history-bucket')
+AWS_S3_CUSTOM_DOMAIN = os.getenv('AWS_S3_CUSTOM_DOMAIN')
+
+# Use boto3 for S3 operations
+AWS_S3_USE_SSL = True
+AWS_DEFAULT_ACL = None
+
 # Logging configuration for better debugging
 LOGGING = {
     'version': 1,

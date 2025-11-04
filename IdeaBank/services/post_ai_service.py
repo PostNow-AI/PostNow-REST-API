@@ -430,11 +430,13 @@ class PostAIService(BaseAIService):
         Returns:
             Dictionary containing the regenerated content
         """
+        # Store user and post_data for profile access
+        self.user = user
+        self._current_post_data = post_data
+
+        # Set provider and model with defaults
         provider = ai_provider or self.default_provider
         model = ai_model or self.default_model
-
-        # Set user on prompt service for profile access
-        self.prompt_service.user = user
 
         # Build the regeneration prompt
         if user_prompt:
