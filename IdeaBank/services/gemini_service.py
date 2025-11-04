@@ -13,6 +13,7 @@ except ImportError:
 import base64
 
 from django.contrib.auth.models import User
+from django.db import connection
 
 from ..models import ChatHistory
 from .base_ai_service import BaseAIService
@@ -81,14 +82,16 @@ class GeminiService(BaseAIService):
 
         return True
 
-    def _get_quota_error_message(self, error_str: str) -> str:
-        """Generate user-friendly error message for quota issues."""
-        if 'billing details' in error_str:
-            return "Your Gemini API quota has been exceeded. Please check your Google Cloud billing and upgrade your plan at: https://console.cloud.google.com/billing"
-        elif '429' in error_str:
-            return "Gemini API rate limit exceeded. The system will automatically retry with appropriate delays."
+    def _get_block_reason_error_message(self, error_str: str) -> str:
+        """Generate user-friendly error message for Gemini block reasons."""
+        if 'block_reason: OTHER' in error_str:
+            return "O conteúdo solicitado foi bloqueado pelos filtros de segurança do Gemini. Isso pode acontecer com certos tipos de conteúdo. Tente reformular sua solicitação ou usar termos mais neutros."
+        elif 'block_reason: SAFETY' in error_str:
+            return "O conteúdo solicitado foi considerado inseguro pelos filtros de segurança do Gemini. Por favor, revise sua solicitação para evitar conteúdo potencialmente prejudicial."
+        elif 'block_reason:' in error_str:
+            return "O conteúdo solicitado foi bloqueado pelos filtros de segurança do Gemini. Tente uma abordagem diferente ou reformule sua solicitação."
         else:
-            return "Gemini API quota temporarily exceeded. The system will try alternative models or retry automatically."
+            return "Erro de segurança na geração de conteúdo. Tente reformular sua solicitação."
 
     def _convert_history_to_serializable(self, history):
         """Convert Gemini Content objects to serializable dictionaries."""
@@ -178,6 +181,14 @@ class GeminiService(BaseAIService):
                 except ChatHistory.DoesNotExist:
                     # No existing history, start fresh
                     pass
+
+            # ⚠️ CRITICAL: Close database connection before long AI operation
+            # Free-tier cloud databases (like Aiven) timeout connections after 5-30 seconds
+            # Image generation takes 30-60+ seconds, so we close the connection proactively
+            # Django will automatically create a fresh connection when needed for saving
+            connection.close()
+            print(
+                "🔌 Closed database connection before long AI image generation operation")
 
             # Try different model names for image generation with fallbacks
             model_names = [
@@ -303,8 +314,29 @@ class GeminiService(BaseAIService):
             return ""
 
         except Exception as e:
-            print(f"❌ General exception in generate_image: {str(e)}")
-            return ""
+            error_str = str(e)
+            print(f"❌ General exception in generate_image: {error_str}")
+
+            # Check for block reason errors (safety filters)
+            if 'block_reason:' in error_str:
+                user_friendly_message = self._get_block_reason_error_message(
+                    error_str)
+                print(
+                    f"🛡️ Image generation blocked by Gemini safety filters: {user_friendly_message}")
+                raise Exception(
+                    f"Geração de imagem bloqueada pelos filtros de segurança: {user_friendly_message}")
+
+            # Check for quota/rate limit errors
+            if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+                user_friendly_message = self._get_quota_error_message(
+                    error_str)
+                print(
+                    f"⚠️ Image generation quota/rate limit error: {user_friendly_message}")
+                raise Exception(
+                    f"Erro de quota da API na geração de imagem: {user_friendly_message}")
+
+            # For other errors, provide generic message
+            raise Exception(f"Falha na geração de imagem: {error_str}")
 
     def _handle_compression(self, response, model_name: str, post_data: dict):
         print(
@@ -526,6 +558,14 @@ class GeminiService(BaseAIService):
                     # No existing history, start fresh
                     pass
 
+            # ⚠️ CRITICAL: Close database connection before long AI operation
+            # Free-tier cloud databases (like Aiven) timeout connections after 5-30 seconds
+            # Content generation can take 30-60+ seconds, so we close the connection proactively
+            # Django will automatically create a fresh connection when needed for saving
+            connection.close()
+            print(
+                "🔌 Closed database connection before long AI content generation operation")
+
             # Start a chat session with the fetched history
             chat = self.model.start_chat(history=chat_history_data)
 
@@ -554,7 +594,28 @@ class GeminiService(BaseAIService):
                     raise Exception("Empty response from Gemini API")
 
         except Exception as e:
-            raise Exception(f"Falha na comunicação com Gemini: {str(e)}")
+            error_str = str(e)
+            print(f"❌ Gemini API error: {error_str}")
+
+            # Check for block reason errors (safety filters)
+            if 'block_reason:' in error_str:
+                user_friendly_message = self._get_block_reason_error_message(
+                    error_str)
+                print(
+                    f"🛡️ Content blocked by Gemini safety filters: {user_friendly_message}")
+                raise Exception(
+                    f"Conteúdo bloqueado pelos filtros de segurança: {user_friendly_message}")
+
+            # Check for quota/rate limit errors
+            if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+                user_friendly_message = self._get_quota_error_message(
+                    error_str)
+                print(f"⚠️ Quota/rate limit error: {user_friendly_message}")
+                raise Exception(
+                    f"Erro de quota da API: {user_friendly_message}")
+
+            # For other errors, provide generic message
+            raise Exception(f"Falha na comunicação com Gemini: {error_str}")
 
     def _handle_campaign_generation_flow(self, chat, user: User, post_data: dict = None) -> str:
         """Handle campaign generation flow with historical analysis."""
@@ -591,4 +652,26 @@ class GeminiService(BaseAIService):
                 raise Exception("Empty response from historical analysis")
 
         except Exception as e:
-            raise Exception(f"Failed in campaign generation flow: {str(e)}")
+            error_str = str(e)
+            print(f"❌ Campaign generation error: {error_str}")
+
+            # Check for block reason errors (safety filters)
+            if 'block_reason:' in error_str:
+                user_friendly_message = self._get_block_reason_error_message(
+                    error_str)
+                print(
+                    f"🛡️ Campaign content blocked by Gemini safety filters: {user_friendly_message}")
+                raise Exception(
+                    f"Conteúdo da campanha bloqueado pelos filtros de segurança: {user_friendly_message}")
+
+            # Check for quota/rate limit errors
+            if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+                user_friendly_message = self._get_quota_error_message(
+                    error_str)
+                print(
+                    f"⚠️ Campaign quota/rate limit error: {user_friendly_message}")
+                raise Exception(
+                    f"Erro de quota da API na geração da campanha: {user_friendly_message}")
+
+            # For other errors, provide generic message
+            raise Exception(f"Failed in campaign generation flow: {error_str}")

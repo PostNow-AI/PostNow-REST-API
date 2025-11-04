@@ -149,7 +149,13 @@ DATABASES = {
         'OPTIONS': {
             'charset': 'utf8mb4',
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            'connect_timeout': 60,  # Increase connection timeout
         },
+        # For free-tier cloud databases (Aiven): disable connection pooling
+        # Free-tier databases have aggressive connection timeouts (5-30 seconds)
+        # Connection pooling can cause "MySQL server has gone away" errors
+        # Setting CONN_MAX_AGE=0 forces Django to create fresh connections for each request
+        'CONN_MAX_AGE': 0,  # No connection pooling (forces fresh connections)
     }
 }
 
