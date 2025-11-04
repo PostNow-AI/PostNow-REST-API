@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('IdeaBank', '0015_aggregate_chat_history'),
+        ('IdeaBank', '0014_postidea_image_description'),
     ]
 
     operations = [
