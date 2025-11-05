@@ -203,3 +203,5 @@ coverage.xml
 .env.development
 .env.test
 .env.production
+
+/debug_chat_history

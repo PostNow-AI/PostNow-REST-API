@@ -1,4 +1,7 @@
+import json
 import os
+import re
+import time
 
 try:
     import google.generativeai as genai
@@ -8,13 +11,15 @@ except ImportError:
     genai = None
 
 import base64
-import re
-import time
 
 from django.contrib.auth.models import User
 
-from ..models import ChatHistory
 from .base_ai_service import BaseAIService
+from .prompt_service import PromptService
+from .s3_chat_history_service import S3ChatHistoryService
+
+prompt_service = PromptService()
+s3_chat_history = S3ChatHistoryService()
 
 
 def extract_base64_image(data_url: str) -> bytes:
@@ -32,6 +37,62 @@ def extract_base64_image(data_url: str) -> bytes:
 
 
 class GeminiService(BaseAIService):
+    def _parse_retry_delay(self, error_str: str) -> float:
+        """Parse retry delay from Gemini API error message."""
+        try:
+            # Look for retry_delay in the error message
+            retry_delay_match = re.search(
+                r'retry_delay\s*\{\s*seconds:\s*(\d+)', error_str)
+            if retry_delay_match:
+                return float(retry_delay_match.group(1))
+
+            # Look for "Please retry in X seconds" pattern
+            retry_match = re.search(r'Please retry in (\d+\.?\d*)s', error_str)
+            if retry_match:
+                return float(retry_match.group(1))
+
+            # Default delays for common errors
+            if '429' in error_str:
+                return 30.0  # 30 seconds for rate limits
+            elif 'quota' in error_str.lower():
+                return 60.0  # 1 minute for quota issues
+
+        except Exception:
+            pass
+
+        return 5.0  # Default 5 second delay
+
+    def _should_retry_quota_error(self, error_str: str, attempt: int, max_attempts: int = 3) -> bool:
+        """Determine if we should retry after a quota error."""
+        # Don't retry on the last attempt
+        if attempt >= max_attempts - 1:
+            return False
+
+        # Check for permanent quota exhaustion (billing issues)
+        permanent_quota_indicators = [
+            'billing details',
+            'payment required',
+            'insufficient funds',
+            'account suspended'
+        ]
+
+        if any(indicator in error_str.lower() for indicator in permanent_quota_indicators):
+            print("⚠️ Permanent quota/billing issue detected - not retrying")
+            return False
+
+        return True
+
+    def _get_block_reason_error_message(self, error_str: str) -> str:
+        """Generate user-friendly error message for Gemini block reasons."""
+        if 'block_reason: OTHER' in error_str:
+            return "O conteúdo solicitado foi bloqueado pelos filtros de segurança do Gemini. Isso pode acontecer com certos tipos de conteúdo. Tente reformular sua solicitação ou usar termos mais neutros."
+        elif 'block_reason: SAFETY' in error_str:
+            return "O conteúdo solicitado foi considerado inseguro pelos filtros de segurança do Gemini. Por favor, revise sua solicitação para evitar conteúdo potencialmente prejudicial."
+        elif 'block_reason:' in error_str:
+            return "O conteúdo solicitado foi bloqueado pelos filtros de segurança do Gemini. Tente uma abordagem diferente ou reformule sua solicitação."
+        else:
+            return "Erro de segurança na geração de conteúdo. Tente reformular sua solicitação."
+
     def _convert_history_to_serializable(self, history):
         """Convert Gemini Content objects to serializable dictionaries."""
         serializable_history = []
@@ -76,7 +137,7 @@ class GeminiService(BaseAIService):
 
         return serializable_history
 
-    def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None, conversation_id: str = 'default') -> str:
+    def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using Gemini's chat API with conversation history support."""
         compressed_data = ""
         if not GEMINI_AVAILABLE:
@@ -111,27 +172,21 @@ class GeminiService(BaseAIService):
                     print("⚠️ Could not deduct credits - AIModelService not available")
 
         try:
-            # Fetch existing conversation history from database for image generation
+            # Fetch existing conversation history from S3 bucket
             chat_history_data = []
             if user:
-                try:
-                    chat_history_obj = ChatHistory.objects.get(
-                        user=user, conversation_id=conversation_id)
-                    chat_history_data = chat_history_obj.get_history()
-                except ChatHistory.DoesNotExist:
-                    # No existing history, start fresh
-                    pass
+                chat_history_data = s3_chat_history.get_history(user)
 
             # Try different model names for image generation with fallbacks
             model_names = [
                 'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image-preview',
                 'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image-preview',
                 'gemini-2.5-flash-image',
+                'gemini-2.5-flash-image-preview',
                 'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image',
-
+                'gemini-2.5-flash-image-preview',
             ]
 
             for model_name in model_names:
@@ -142,6 +197,17 @@ class GeminiService(BaseAIService):
 
                     # Prepare message content
                     message_parts = [enhanced_prompt]
+
+                    creator_profile_data = prompt_service.get_creator_profile_data()
+                    logo = creator_profile_data.get('logo_image', None)
+                    if logo:
+                        logo_bytes = extract_base64_image(logo)
+                        message_parts.append({
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": logo_bytes
+                            }
+                        })
 
                     # Add current image if provided
                     if current_image:
@@ -176,28 +242,34 @@ class GeminiService(BaseAIService):
                     response = chat.send_message(message_parts)
 
                     # Check if response has image data
-                    compressed_data = self._handle_compression(
+                    image_bytes = self._extract_image_bytes(
                         response, model_name, post_data)
 
                     # Final safety check
-                    if compressed_data:
-                        # Deduct credits for successful image generation
-                        deduct_credits_for_image(" (chat session)")
+                    if image_bytes:
+                        # Save image to S3 and get URL
+                        image_url = self._save_image_to_s3(
+                            image_bytes, user, post_data)
 
-                        # Save updated conversation history
-                        if user:
-                            updated_history = chat.history
-                            serializable_history = self._convert_history_to_serializable(
-                                updated_history)
-                            chat_history_obj, created = ChatHistory.objects.get_or_create(
-                                user=user, conversation_id=conversation_id)
-                            chat_history_obj.set_history(serializable_history)
-                            chat_history_obj.save()
+                        if image_url:
+                            # Deduct credits for successful image generation
+                            deduct_credits_for_image(" (chat session)")
 
-                        return compressed_data
+                            # Save updated conversation history to S3
+                            if user:
+                                updated_history = chat.history
+                                serializable_history = self._convert_history_to_serializable(
+                                    updated_history)
+                                s3_chat_history.append_interaction(
+                                    user, serializable_history)
+
+                            return image_url
+                        else:
+                            print(
+                                f"❌ Failed to save image to S3 for model: {model_name}")
                     else:
                         print(
-                            f"❌ Final compressed_data is empty for model: {model_name}")
+                            f"❌ No image bytes extracted for model: {model_name}")
 
                 except Exception as e:
                     error_str = str(e)
@@ -205,25 +277,62 @@ class GeminiService(BaseAIService):
 
                     # Check for specific quota exhaustion errors
                     if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
-                        print(
-                            f"⚠️ Quota exhausted for model {model_name}, waiting before trying next model...")
-                        # Wait 2 seconds before trying next model
-                        time.sleep(2)
+                        if self._should_retry_quota_error(error_str, model_names.index(model_name), len(model_names)):
+                            retry_delay = self._parse_retry_delay(error_str)
+                            print(
+                                f"⚠️ Quota exhausted for model {model_name}, waiting {retry_delay:.1f}s before trying next model...")
+                            time.sleep(retry_delay)
+                        else:
+                            print(
+                                f"⚠️ Skipping model {model_name} due to quota exhaustion")
                     elif 'not found' in error_str.lower() or 'invalid' in error_str.lower():
                         print(
                             f"⚠️ Model {model_name} not available, trying next model...")
+                    else:
+                        # For other errors, add a small delay
+                        time.sleep(1)
 
                     continue
 
             # If we reach here, no models worked
             print("❌ All models failed to generate image")
+
+            # Check if the last error was quota-related and provide helpful message
+            if 'error_str' in locals() and ('429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower()):
+                user_message = self._get_quota_error_message(error_str)
+                print(f"💡 {user_message}")
+                # Could raise a specific exception here for the UI to handle
+                # raise QuotaExceededException(user_message)
+
             return ""
 
         except Exception as e:
-            print(f"❌ General exception in generate_image: {str(e)}")
-            return ""
+            error_str = str(e)
+            print(f"❌ General exception in generate_image: {error_str}")
 
-    def _handle_compression(self, response, model_name: str, post_data: dict):
+            # Check for block reason errors (safety filters)
+            if 'block_reason:' in error_str:
+                user_friendly_message = self._get_block_reason_error_message(
+                    error_str)
+                print(
+                    f"🛡️ Image generation blocked by Gemini safety filters: {user_friendly_message}")
+                raise Exception(
+                    f"Geração de imagem bloqueada pelos filtros de segurança: {user_friendly_message}")
+
+            # Check for quota/rate limit errors
+            if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+                user_friendly_message = self._get_quota_error_message(
+                    error_str)
+                print(
+                    f"⚠️ Image generation quota/rate limit error: {user_friendly_message}")
+                raise Exception(
+                    f"Erro de quota da API na geração de imagem: {user_friendly_message}")
+
+            # For other errors, provide generic message
+            raise Exception(f"Falha na geração de imagem: {error_str}")
+
+    def _extract_image_bytes(self, response, model_name: str, post_data: dict) -> bytes:
+        """Extract raw image bytes from Gemini response."""
         print(
             f"🖼️ Model {model_name} returned {len(response.candidates)} candidates")
         if response.candidates and len(response.candidates) > 0:
@@ -231,29 +340,78 @@ class GeminiService(BaseAIService):
             if hasattr(candidate, 'content') and candidate.content:
                 for part in candidate.content.parts:
                     if hasattr(part, 'inline_data') and part.inline_data:
-                        # Compress and optimize image data
-                        compressed_data = self._compress_image_data(
-                            part.inline_data.data, post_data)
-                        if compressed_data:
-                            return compressed_data
-                        else:
-                            print(
-                                f"⚠️ Failed to compress image data from model: {model_name}")
+                        # Return raw image bytes
+                        return part.inline_data.data
                     # Also check for text that might contain image references
                     if hasattr(part, 'text') and part.text:
                         print(
                             f"📝 Model {model_name} returned text: {part.text[:100]}...")
 
-        # Return empty string if no image data found
+        # Return empty bytes if no image data found
         print(f"❌ No image data found in response from model: {model_name}")
-        return ""
+        return b""
+
+    def _save_image_to_s3(self, image_bytes: bytes, user: User = None, post_data: dict = None) -> str:
+        """Save image bytes to S3 bucket and return the public URL."""
+        try:
+            import time
+            import uuid
+
+            import boto3
+            from botocore.exceptions import ClientError, NoCredentialsError
+
+            # Get S3 bucket name from environment
+            image_bucket = os.getenv('AWS_S3_IMAGE_BUCKET')
+
+            # Initialize S3 client
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
+            )
+
+            # Generate unique filename
+            unique_id = str(uuid.uuid4())
+            user_prefix = f"user_{user.id}_" if user else ""
+            filename = f"{user_prefix}generated_image_{unique_id}.png"
+
+            # Upload to S3
+            s3_client.put_object(
+                Bucket=image_bucket,
+                Key=filename,
+                Body=image_bytes,
+                ContentType='image/png',
+                Metadata={
+                    'user_id': str(user.id) if user else 'anonymous',
+                    'generated_at': str(time.time()),
+                    'post_type': post_data.get('type', 'unknown') if post_data else 'unknown'
+                }
+            )
+
+            # Generate public URL
+            region = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
+            image_url = f"https://{image_bucket}.s3.{region}.amazonaws.com/{filename}"
+
+            print(f"🖼️ Successfully saved image to S3: {image_url}")
+            return image_url
+
+        except NoCredentialsError:
+            print("❌ AWS credentials not found for image upload")
+            return ""
+        except ClientError as e:
+            print(f"❌ S3 error saving image: {e}")
+            return ""
+        except Exception as e:
+            print(f"❌ Unexpected error saving image to S3: {e}")
+            return ""
 
     def _enhance_image_prompt(self, base_prompt: str, post_data: dict = None, idea_content: str = None) -> str:
         """Enhance the image generation prompt with post data and idea content."""
         enhanced_parts = [
             f"Gere uma imagem de alta qualidade com base nesta descrição: {base_prompt}"]
 
-        if post_data:
+        if post_data.get('type') and post_data.get('type') != 'campaign':
             if post_data.get('objective'):
                 enhanced_parts.append(
                     f"Objetivo do post: {post_data['objective']}")
@@ -263,7 +421,7 @@ class GeminiService(BaseAIService):
                 enhanced_parts.append(
                     f"Detalhes adicionais: {post_data['further_details']}")
 
-        if idea_content:
+        if post_data.get('type') and post_data.get('type') != 'campaign' and idea_content:
             # Extract key themes from idea content for visual inspiration
             enhanced_parts.append(
                 f"Contexto do conteúdo: {idea_content}...")
@@ -423,7 +581,7 @@ class GeminiService(BaseAIService):
         # Fallback estimation: roughly 4 characters per token
         return len(prompt) // 4
 
-    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, conversation_id: str = 'default') -> str:
+    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, post_data: dict = None) -> str:
         """Make the actual AI API request to Gemini with conversation history support."""
         # Configure API key
         api_key = api_key or self.default_api_key
@@ -433,36 +591,114 @@ class GeminiService(BaseAIService):
         genai.configure(api_key=api_key)
 
         try:
-            # Fetch existing conversation history from database
+            # Fetch existing conversation history from S3 bucket
             chat_history_data = []
             if user:
-                try:
-                    chat_history_obj = ChatHistory.objects.get(
-                        user=user, conversation_id=conversation_id)
-                    chat_history_data = chat_history_obj.get_history()
-                except ChatHistory.DoesNotExist:
-                    # No existing history, start fresh
-                    pass
+                chat_history_data = s3_chat_history.get_history(user)
+
             # Start a chat session with the fetched history
             chat = self.model.start_chat(history=chat_history_data)
 
-            # Send the prompt as the message
-            response = chat.send_message(prompt)
+            # Handle special conversation flows
+            is_campaign = post_data and post_data.get(
+                'type', '').lower() == 'campaign'
+            if is_campaign:
+                return self._handle_campaign_generation_flow(chat, user, post_data)
+            else:
+                # Default flow - send the prompt as the message
+                response = chat.send_message(prompt)
+
+                if response.text:
+                    # Save the updated history back to S3 bucket
+                    if user:
+                        updated_history = chat.history
+                        serializable_history = self._convert_history_to_serializable(
+                            updated_history)
+                        s3_chat_history.append_interaction(
+                            user, serializable_history)
+
+                    return response.text
+                else:
+                    raise Exception("Empty response from Gemini API")
+
+        except Exception as e:
+            error_str = str(e)
+            print(f"❌ Gemini API error: {error_str}")
+
+            # Check for block reason errors (safety filters)
+            if 'block_reason:' in error_str:
+                user_friendly_message = self._get_block_reason_error_message(
+                    error_str)
+                print(
+                    f"🛡️ Content blocked by Gemini safety filters: {user_friendly_message}")
+                raise Exception(
+                    f"Conteúdo bloqueado pelos filtros de segurança: {user_friendly_message}")
+
+            # Check for quota/rate limit errors
+            if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+                user_friendly_message = self._get_quota_error_message(
+                    error_str)
+                print(f"⚠️ Quota/rate limit error: {user_friendly_message}")
+                raise Exception(
+                    f"Erro de quota da API: {user_friendly_message}")
+
+            # For other errors, provide generic message
+            raise Exception(f"Falha na comunicação com Gemini: {error_str}")
+
+    def _handle_campaign_generation_flow(self, chat, user: User, post_data: dict = None) -> str:
+        """Handle campaign generation flow with historical analysis."""
+        try:
+            # Import prompt service
+
+            # Call special prompt for historical analysis
+            analysis_prompt = prompt_service.build_historical_analysis_prompt(
+                post_data)
+            response = chat.send_message(analysis_prompt)
 
             if response.text:
-                # Save the updated history back to database
+                # Parse the JSON response
+                try:
+                    analysis_data = response.text.strip('`')
+                except json.JSONDecodeError as e:
+                    raise Exception(f"Failed to parse analysis JSON: {str(e)}")
+
+                updated_prompt = prompt_service.build_automatic_post_prompt(
+                    analysis_data)
+                content_gen_res = chat.send_message(updated_prompt)
+
+                # Save the analysis interaction to S3 chat history
                 if user:
                     updated_history = chat.history
                     serializable_history = self._convert_history_to_serializable(
                         updated_history)
-                    chat_history_obj, created = ChatHistory.objects.get_or_create(
-                        user=user, conversation_id=conversation_id)
-                    chat_history_obj.set_history(serializable_history)
-                    chat_history_obj.save()
+                    s3_chat_history.append_interaction(
+                        user, serializable_history)
 
-                return response.text
+                return content_gen_res.text
             else:
-                raise Exception("Empty response from Gemini API")
+                raise Exception("Empty response from historical analysis")
 
         except Exception as e:
-            raise Exception(f"Falha na comunicação com Gemini: {str(e)}")
+            error_str = str(e)
+            print(f"❌ Campaign generation error: {error_str}")
+
+            # Check for block reason errors (safety filters)
+            if 'block_reason:' in error_str:
+                user_friendly_message = self._get_block_reason_error_message(
+                    error_str)
+                print(
+                    f"🛡️ Campaign content blocked by Gemini safety filters: {user_friendly_message}")
+                raise Exception(
+                    f"Conteúdo da campanha bloqueado pelos filtros de segurança: {user_friendly_message}")
+
+            # Check for quota/rate limit errors
+            if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+                user_friendly_message = self._get_quota_error_message(
+                    error_str)
+                print(
+                    f"⚠️ Campaign quota/rate limit error: {user_friendly_message}")
+                raise Exception(
+                    f"Erro de quota da API na geração da campanha: {user_friendly_message}")
+
+            # For other errors, provide generic message
+            raise Exception(f"Failed in campaign generation flow: {error_str}")

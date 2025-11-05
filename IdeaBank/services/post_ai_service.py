@@ -52,7 +52,7 @@ class PostAIService(BaseAIService):
         except ImportError:
             return len(prompt) // 4
 
-    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, conversation_id: str = 'default') -> str:
+    def _make_ai_request(self, prompt: str, model_name: str, api_key: str = None, user: User = None, post_data: dict = None) -> str:
         """Make AI request using the AI service factory."""
         # Force to use only supported model
         if model_name != 'gemini-2.5-flash':
@@ -65,7 +65,7 @@ class PostAIService(BaseAIService):
                 f"AI service not available for provider: {self.default_provider}")
 
         # Make the request
-        return ai_service._make_ai_request(prompt, model_name, api_key, user, conversation_id)
+        return ai_service._make_ai_request(prompt, model_name, api_key, user, post_data)
 
     def generate_post_content(
         self,
@@ -116,7 +116,7 @@ class PostAIService(BaseAIService):
         try:
             # Use the AI service's direct method
             content = self._generate_content_with_ai(
-                ai_service, prompt, 'post_generation')
+                ai_service, prompt, post_data)
 
             # Deduct credits after successful generation (skip for unauthenticated users)
             if user and user.is_authenticated:
@@ -165,7 +165,6 @@ class PostAIService(BaseAIService):
 
         # Build the prompt for campaign generation
         prompt = self.prompt_service.build_content_prompt(post_data)
-
         # Validate credits before generating (skip for unauthenticated users)
         if user and user.is_authenticated:
             estimated_tokens = self._estimate_tokens(prompt, model)
@@ -181,7 +180,7 @@ class PostAIService(BaseAIService):
         try:
             # Generate content using the AI service
             full_content = self._generate_content_with_ai(
-                ai_service, prompt, 'campaign_generation')
+                ai_service, prompt,  post_data)
 
             # Deduct credits after successful generation (skip for unauthenticated users)
             if user and user.is_authenticated:
@@ -191,20 +190,45 @@ class PostAIService(BaseAIService):
                     user, actual_tokens, model, f"Geração de campanha - {post_data.get('name', 'Campaign')}")
 
             # Parse the AI response into 3 separate contents
-            parsed_content = self._parse_campaign_response(full_content)
+            parsed_content = self._parse_campaign_response(
+                full_content.strip('`').strip('json'))
+
+            # Extract image description for feed post
+            feed_image_description = parsed_content.get(
+                "feed_image_description", "")
 
             # Create 3 Post objects with their respective PostIdea objects
             created_posts = []
             with transaction.atomic():
                 for post_type, content in parsed_content.items():
-                    # Clean and validate HTML for each content section
-                    content = self._clean_and_validate_html(content)
+                    # Skip the image description - it's not a post type
+                    if post_type == "feed_image_description":
+                        continue
+
+                    # Skip if content is empty
+                    if not content or not content.strip():
+                        continue
+
+                    # Initialize image_url for this post
+                    image_url = None
+
+                    # Generate image for feed post if description is available
+                    if post_type == "feed" and feed_image_description:
+                        try:
+                            print(
+                                f"Generating image for feed post with description: {feed_image_description[:100]}...")
+                            image_url = self._generate_image_from_description(
+                                ai_service, feed_image_description, user, post_data, content)
+                        except Exception as e:
+                            print(
+                                f"Failed to generate image for campaign feed post: {str(e)}")
+
                     # Create Post object
                     post = Post.objects.create(
                         user=user,
                         name=f"{post_data.get('name', 'Campaign')} - {post_type.title()}",
                         objective=post_data.get('objective', ''),
-                        type=post_type,
+                        type=post_type.lower().strip('_html'),
                         further_details=post_data.get('further_details', ''),
                         include_image=post_data.get('include_image', False),
                         is_automatically_generated=post_data.get(
@@ -212,28 +236,12 @@ class PostAIService(BaseAIService):
                         is_active=post_data.get('is_active', True)
                     )
 
-                    # Generate image for feed posts
-                    image_url = None
-                    if post_type == 'feed':
-                        image_description = self._extract_image_description_from_content(
-                            content)
-                        if image_description:
-                            try:
-                                image_url = self._generate_image_from_description(
-                                    ai_service, image_description, user, post_data, content)
-                                # Remove image description from content after successful generation
-                                content = self._remove_image_description_from_content(
-                                    content, image_description)
-                            except Exception as e:
-                                # Log image generation error but don't fail the entire request
-                                print(
-                                    f"Failed to generate image for campaign feed post: {str(e)}")
-
                     # Create PostIdea object
                     post_idea = PostIdea.objects.create(
                         post=post,
                         content=content,
-                        image_url=image_url or ''
+                        image_url=image_url or '',
+                        image_description=feed_image_description if post_type == "feed" else None
                     )
 
                     post_result = {
@@ -263,79 +271,50 @@ class PostAIService(BaseAIService):
         """
         Parse the AI response into separate contents for feed, reels, and stories.
         """
-        parsed = {'feed': '', 'reels': '', 'story': ''}
+        parsed = {'feed': '', 'reels': '',
+                  'story': '', "feed_image_description": ""}
 
         try:
-            # Split content by sections
-            content = full_content.strip()
+            import json
 
-            # Look for Feed content (section 1)
-            feed_start = content.find('🧩 1. Conteúdo de Feed')
-            stories_start = content.find('🎥 2. Ideias de Stories')
-            reels_start = content.find('🎬 3. Ideia de Roteiro para Reels')
+            # Remove markdown code block markers if present
+            content_str = full_content.strip()
+            if content_str.startswith('```json'):
+                content_str = content_str[7:]  # Remove ```json
+            elif content_str.startswith('```'):
+                content_str = content_str[3:]  # Remove ```
 
-            if feed_start != -1:
-                feed_end = stories_start if stories_start != - \
-                    1 else len(content)
-                parsed['feed'] = content[feed_start:feed_end].strip()
+            if content_str.endswith('```'):
+                content_str = content_str[:-3]  # Remove trailing ```
 
-            # Look for Stories content (section 2)
-            if stories_start != -1:
-                stories_end = reels_start if reels_start != - \
-                    1 else len(content)
-                parsed['story'] = content[stories_start:stories_end].strip()
+            content_str = content_str.strip()
 
-            # Look for Reels content (section 3)
-            if reels_start != -1:
-                parsed['reels'] = content[reels_start:].strip()
+            # Parse JSON
+            content = json.loads(content_str)
 
-            # Fallback: if sections not found, try to split by numbered sections
-            if not any(parsed.values()):
-                lines = content.split('\n')
-                current_section = None
-                current_content = []
+            # Extract fields
+            parsed['feed'] = content.get('feed_html', '')
+            parsed['reels'] = content.get('reels_html', '')
+            parsed['story'] = content.get('story_html', '')
+            parsed["feed_image_description"] = content.get(
+                'feed_image_description', '')
 
-                for line in lines:
-                    line = line.strip()
-                    if '1.' in line and 'feed' in line.lower():
-                        current_section = 'feed'
-                        current_content = [line]
-                    elif '2.' in line and ('stories' in line.lower() or 'story' in line.lower()):
-                        if current_section == 'feed':
-                            parsed['feed'] = '\n'.join(current_content)
-                        current_section = 'story'
-                        current_content = [line]
-                    elif '3.' in line and 'reel' in line.lower():
-                        if current_section == 'story':
-                            parsed['story'] = '\n'.join(current_content)
-                        current_section = 'reels'
-                        current_content = [line]
-                    elif current_section:
-                        current_content.append(line)
-
-                # Add the last section
-                if current_section == 'reels' and current_content:
-                    parsed['reels'] = '\n'.join(current_content)
-                elif current_section == 'story' and current_content:
-                    parsed['story'] = '\n'.join(current_content)
-                elif current_section == 'feed' and current_content:
-                    parsed['feed'] = '\n'.join(current_content)
-
-            # Ensure all sections have content, use full content as fallback
-            for key in parsed:
-                if not parsed[key].strip():
-                    parsed[key] = full_content
-                else:
-                    # Clean and validate HTML for each section
-                    parsed[key] = self._clean_and_validate_html(parsed[key])
-
-        except Exception:
-            # If parsing fails, return the full content for all types
-            cleaned_full_content = self._clean_and_validate_html(full_content)
+        except json.JSONDecodeError:
+            # If parsing fails, return empty
             parsed = {
-                'feed': cleaned_full_content,
-                'reels': cleaned_full_content,
-                'story': cleaned_full_content
+                'feed': '',
+                'reels': '',
+                'story': '',
+                'feed_image_description': ''
+            }
+        except Exception as e:
+            print(f"Error parsing campaign response: {str(e)}")
+            # If parsing fails, return empty
+            parsed = {
+                'feed': '',
+                'reels': '',
+                'story': '',
+                'feed_image_description': ''
             }
 
         return parsed
@@ -414,10 +393,10 @@ class PostAIService(BaseAIService):
         try:
             if current_image is not None:
                 image_url = ai_service.generate_image(
-                    prompt, current_image, user, post_data, content, conversation_id='image_generation')
+                    prompt, current_image, user, post_data, content)
             else:
                 image_url = ai_service.generate_image(
-                    prompt, '', user, post_data, content, conversation_id='image_generation')
+                    prompt, '', user, post_data, content)
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
 
@@ -451,11 +430,13 @@ class PostAIService(BaseAIService):
         Returns:
             Dictionary containing the regenerated content
         """
+        # Store user and post_data for profile access
+        self.user = user
+        self._current_post_data = post_data
+
+        # Set provider and model with defaults
         provider = ai_provider or self.default_provider
         model = ai_model or self.default_model
-
-        # Set user on prompt service for profile access
-        self.prompt_service.user = user
 
         # Build the regeneration prompt
         if user_prompt:
@@ -480,7 +461,7 @@ class PostAIService(BaseAIService):
 
         try:
             content = self._generate_content_with_ai(
-                ai_service, prompt, 'post_generation')
+                ai_service, prompt, post_data)
 
             # Clean and validate HTML content
             content = self._clean_and_validate_html(content)
@@ -584,27 +565,22 @@ class PostAIService(BaseAIService):
             # If cleaning fails, return original content
             return content
 
-    def _generate_content_with_ai(self, ai_service, prompt: str, conversation_id: str) -> str:
+    def _generate_content_with_ai(self, ai_service, prompt: str, post_data: dict = None) -> str:
         """Generate content using the AI service with direct API request."""
         try:
             # Use the AI service's direct _make_ai_request method with our sophisticated prompt
             response_text = ai_service._make_ai_request(
-                prompt, ai_service.model_name, user=self.user, conversation_id=conversation_id)
+                prompt, ai_service.model_name, user=self.user, post_data=post_data)
 
             if response_text and response_text.strip():
-                cleaned_content = self._clean_and_validate_html(
-                    response_text.strip())
+                cleaned_content = response_text.strip()
                 return cleaned_content
             else:
                 raise Exception("Empty response from AI service")
 
-        except Exception:
-            # Fallback: return a simple response
-            return """Título: Conteúdo Gerado por IA
-
-Texto: Este é um conteúdo gerado automaticamente. Por favor, personalize conforme necessário.
-
-Chamada para ação no post/carrossel: Saiba mais!"""
+        except Exception as e:
+            raise Exception(
+                f"Error generating content with AI service: {type(e).__name__}: {str(e)}")
 
     def _extract_image_description_from_content(self, content: str) -> str:
         """
@@ -1195,7 +1171,7 @@ Chamada para ação no post/carrossel: Saiba mais!"""
 
             # Generate image using the AI service
             image_url = ai_service.generate_image(
-                image_description, '', user, post_data, content, conversation_id='image_generation')
+                image_description, '', user, post_data, content)
 
             if not image_url:
                 raise Exception("Failed to generate image - no URL returned")
