@@ -159,17 +159,11 @@ class PostAIService(BaseAIService):
         """
         Special handler for campaign type - generates 3 posts (feed, reels, stories) from single AI response.
         """
-
         # Set user on prompt service for profile access
         self.prompt_service.user = user
 
         # Build the prompt for campaign generation
         prompt = self.prompt_service.build_content_prompt(post_data)
-        # Validate credits before generating (skip for unauthenticated users)
-        if user and user.is_authenticated:
-            estimated_tokens = self._estimate_tokens(prompt, model)
-            if not self._validate_credits(user, estimated_tokens, model):
-                raise Exception("Créditos insuficientes para gerar conteúdo")
 
         # Create AI service
         ai_service = AIServiceFactory.create_service('google', model)
@@ -222,6 +216,10 @@ class PostAIService(BaseAIService):
                         except Exception as e:
                             print(
                                 f"Failed to generate image for campaign feed post: {str(e)}")
+                            # For campaign generation, image generation failure is critical
+                            # Raise exception to fail the entire campaign generation
+                            raise Exception(
+                                f"Image generation failed for campaign feed post: {str(e)}")
 
                     # Create Post object
                     post = Post.objects.create(

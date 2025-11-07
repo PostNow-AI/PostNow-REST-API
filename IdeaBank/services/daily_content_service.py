@@ -279,7 +279,7 @@ class DailyContentService:
             post_objective = random.choice(PostObjective.choices)
             result = await self._generate_content_for_user(user, creator_profile, 'campaign', post_objective)
 
-            if result:
+            if result and result.get('status') != 'error':
                 # Handle campaign mode result
                 if result.get('campaign_mode', False):
                     return {
@@ -299,7 +299,7 @@ class DailyContentService:
                 return {
                     'user_id': user_id,
                     'status': 'failed',
-                    'reason': 'no_content_generated'
+                    'reason': result.get('error', 'content_generation_failed') if result else 'no_content_generated'
                 }
 
         except Exception as e:

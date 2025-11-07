@@ -1,16 +1,18 @@
+import base64
 import json
 import os
 import re
 import time
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     GEMINI_AVAILABLE = True
 except ImportError:
-    GEMINI_AVAILABLE = False
     genai = None
+    types = None
+    GEMINI_AVAILABLE = False
 
-import base64
 
 from django.contrib.auth.models import User
 
@@ -93,6 +95,24 @@ class GeminiService(BaseAIService):
         else:
             return "Erro de segurança na geração de conteúdo. Tente reformular sua solicitação."
 
+    def _get_quota_error_message(self, error_str: str) -> str:
+        """Generate user-friendly error message for quota/rate limit errors."""
+        if '429' in error_str:
+            return "Limite de taxa da API atingido. Tente novamente em alguns minutos."
+        elif 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+            return "Quota da API esgotada. Verifique seu plano de uso ou tente novamente mais tarde."
+        else:
+            return "Erro de limite da API. Tente novamente em alguns minutos."
+
+    def _get_overload_error_message(self, error_str: str) -> str:
+        """Generate user-friendly error message for server overload (503) errors."""
+        if '503' in error_str or 'unavailable' in error_str.lower():
+            return "O modelo de IA está temporariamente sobrecarregado. Tente novamente em alguns minutos."
+        elif 'overloaded' in error_str.lower():
+            return "O serviço de IA está sobrecarregado no momento. Aguarde alguns minutos e tente novamente."
+        else:
+            return "Serviço temporariamente indisponível. Tente novamente em alguns minutos."
+
     def _convert_history_to_serializable(self, history):
         """Convert Gemini Content objects to serializable dictionaries."""
         serializable_history = []
@@ -137,15 +157,22 @@ class GeminiService(BaseAIService):
 
         return serializable_history
 
+    def extract_base64_image(data_url: str) -> bytes:
+        """
+        Extracts and decodes base64 image data from a data URL.
+        Returns image bytes suitable for Gemini.
+        """
+        # Example data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+        match = re.match(r"^data:image/(png|jpeg);base64,(.*)$", data_url)
+        if match:
+            base64_str = match.group(2)
+            return base64.b64decode(base64_str)
+        # If not a data URL, assume it's plain base64
+        return base64.b64decode(data_url)
+
     def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using Gemini's chat API with conversation history support."""
         compressed_data = ""
-        if not GEMINI_AVAILABLE:
-            return ""
-
-        api_key = self.default_api_key
-        if not api_key:
-            return ""
 
         # Enhance prompt with post data and idea content
         enhanced_prompt = self._enhance_image_prompt(
@@ -172,10 +199,6 @@ class GeminiService(BaseAIService):
                     print("⚠️ Could not deduct credits - AIModelService not available")
 
         try:
-            # Fetch existing conversation history from S3 bucket
-            chat_history_data = []
-            if user:
-                chat_history_data = s3_chat_history.get_history(user)
 
             # Try different model names for image generation with fallbacks
             model_names = [
@@ -191,85 +214,88 @@ class GeminiService(BaseAIService):
 
             for model_name in model_names:
                 try:
-                    # Create model and start chat session with history
-                    model = genai.GenerativeModel(model_name)
-                    chat = model.start_chat(history=chat_history_data)
-
-                    # Prepare message content
-                    message_parts = [enhanced_prompt]
-
+                    client = genai.Client(
+                        api_key=os.environ.get("GEMINI_API_KEY"),
+                    )
                     creator_profile_data = prompt_service.get_creator_profile_data()
                     logo = creator_profile_data.get('logo_image', None)
-                    if logo:
-                        logo_bytes = extract_base64_image(logo)
-                        message_parts.append({
-                            "inline_data": {
-                                "mime_type": "image/png",
-                                "data": logo_bytes
-                            }
-                        })
 
-                    # Add current image if provided
-                    if current_image:
-                        image_bytes = extract_base64_image(current_image)
-                        message_parts.append({
-                            "inline_data": {
-                                "mime_type": "image/png",
-                                "data": image_bytes
-                            }
-                        })
-                    else:
-                        # Create empty canvas image for context
-                        if post_data and post_data.get('type') in ['story', 'reel']:
-                            image_bytes = self._create_empty_vertical_image(
-                                1080, 1920)
-                        elif post_data and post_data.get('type') in ['post', 'campaign']:
-                            image_bytes = self._create_empty_vertical_image(
-                                1080, 1350)
+                    aspect_ratio = "9:16" if post_data and post_data.get('type') in [
+                        'story', 'reel'] else "4:5"
+
+                    contents = [
+                        types.Content(
+                            role="user",
+                            parts=[
+                                part for part in [
+                                    types.Part.from_bytes(
+                                        mime_type="image/jpeg",
+                                        data=base64.b64decode(logo),
+                                    ) if logo else None,
+                                    types.Part.from_bytes(
+                                        mime_type="image/jpeg",
+                                        data=base64.b64decode(
+                                            extract_base64_image(current_image)),
+                                    ) if current_image else None,
+                                    types.Part.from_text(text=prompt),
+                                ] if part is not None
+                            ],
+                        ),
+                    ]
+
+                    generate_content_config = types.GenerateContentConfig(
+                        response_modalities=[
+                            "IMAGE",
+                            "TEXT",
+                        ],
+                        image_config=types.ImageConfig(
+                            aspect_ratio=aspect_ratio,
+                            image_size="1K",
+                        ),
+                    )
+
+                    file_index = 0
+                    for chunk in client.models.generate_content_stream(
+                        model=model_name,
+                        contents=contents,
+                        config=generate_content_config,
+                    ):
+                        # Skip if chunk is not a response object with candidates
+                        if not hasattr(chunk, 'candidates') or chunk.candidates is None:
+                            continue
+                        if (
+                            len(chunk.candidates) == 0
+                            or chunk.candidates[0].content is None
+                            or chunk.candidates[0].content.parts is None
+                            or len(chunk.candidates[0].content.parts) == 0
+                        ):
+                            continue
+                        part = chunk.candidates[0].content.parts[0]
+                        if hasattr(part, 'inline_data') and part.inline_data and hasattr(part.inline_data, 'data') and part.inline_data.data:
+                            file_index += 1
+                            inline_data = part.inline_data
+                            # Use the image bytes directly
+                            image_bytes = inline_data.data
+
+                            # Final safety check
+                            if image_bytes:
+                                # Save image to S3 and get URL
+                                image_url = self._save_image_to_s3(
+                                    image_bytes, user, post_data)
+
+                                if image_url:
+                                    # Deduct credits for successful image generation
+                                    deduct_credits_for_image(" (chat session)")
+
+                                    return image_url
+                                else:
+                                    print(
+                                        f"❌ Failed to save image to S3 for model: {model_name}")
+                            else:
+                                print(
+                                    f"❌ No image bytes extracted for model: {model_name}")
                         else:
-                            image_bytes = self._create_empty_vertical_image(
-                                1080, 1080)
-
-                        if image_bytes:
-                            message_parts.append({
-                                "inline_data": {
-                                    "mime_type": "image/png",
-                                    "data": image_bytes
-                                }
-                            })
-
-                    # Send message through chat session
-                    response = chat.send_message(message_parts)
-
-                    # Check if response has image data
-                    image_bytes = self._extract_image_bytes(
-                        response, model_name, post_data)
-
-                    # Final safety check
-                    if image_bytes:
-                        # Save image to S3 and get URL
-                        image_url = self._save_image_to_s3(
-                            image_bytes, user, post_data)
-
-                        if image_url:
-                            # Deduct credits for successful image generation
-                            deduct_credits_for_image(" (chat session)")
-
-                            # Save updated conversation history to S3
-                            if user:
-                                updated_history = chat.history
-                                serializable_history = self._convert_history_to_serializable(
-                                    updated_history)
-                                s3_chat_history.append_interaction(
-                                    user, serializable_history)
-
-                            return image_url
-                        else:
-                            print(
-                                f"❌ Failed to save image to S3 for model: {model_name}")
-                    else:
-                        print(
-                            f"❌ No image bytes extracted for model: {model_name}")
+                            print(chunk.text)
 
                 except Exception as e:
                     error_str = str(e)
@@ -545,9 +571,9 @@ class GeminiService(BaseAIService):
         # Get default API key from environment
         self.default_api_key = os.getenv('GEMINI_API_KEY', '')
 
-        # Initialize without API key - will be set per request
-        genai.configure(api_key="")
-        self.model = genai.GenerativeModel(model_name)
+        # Note: API key will be set per request, not globally
+        # genai.configure(api_key="")  # This method doesn't exist in the new API
+        self.model = None  # Will be initialized per request
 
     def _validate_credits(self, user: User, estimated_tokens: int, model_name: str) -> bool:
         """Validate if user has sufficient credits for the AI operation."""
@@ -588,7 +614,8 @@ class GeminiService(BaseAIService):
         if not api_key:
             raise ValueError("API key is required for Gemini requests")
 
-        genai.configure(api_key=api_key)
+        # Create client with API key
+        client = genai.Client(api_key=api_key)
 
         try:
             # Fetch existing conversation history from S3 bucket
@@ -596,8 +623,29 @@ class GeminiService(BaseAIService):
             if user:
                 chat_history_data = s3_chat_history.get_history(user)
 
-            # Start a chat session with the fetched history
-            chat = self.model.start_chat(history=chat_history_data)
+            # Convert serializable history to Content objects for the new API
+            history_contents = []
+            if chat_history_data:
+                for content_dict in chat_history_data:
+                    parts = []
+                    for part_dict in content_dict.get('parts', []):
+                        if 'text' in part_dict:
+                            parts.append(types.Part.from_text(
+                                text=part_dict['text']))
+                        elif 'inline_data' in part_dict:
+                            # Handle inline data if needed
+                            pass
+                    if parts:
+                        history_contents.append(types.Content(
+                            role=content_dict.get('role', 'user'),
+                            parts=parts
+                        ))
+
+            # Create a chat session with the fetched history
+            chat = client.chats.create(
+                model=model_name,
+                history=history_contents if history_contents else None
+            )
 
             # Handle special conversation flows
             is_campaign = post_data and post_data.get(
@@ -611,7 +659,7 @@ class GeminiService(BaseAIService):
                 if response.text:
                     # Save the updated history back to S3 bucket
                     if user:
-                        updated_history = chat.history
+                        updated_history = chat.get_history()
                         serializable_history = self._convert_history_to_serializable(
                             updated_history)
                         s3_chat_history.append_interaction(
@@ -642,6 +690,14 @@ class GeminiService(BaseAIService):
                 raise Exception(
                     f"Erro de quota da API: {user_friendly_message}")
 
+            # Check for server overload errors (503)
+            if '503' in error_str or 'unavailable' in error_str.lower() or 'overloaded' in error_str.lower():
+                user_friendly_message = self._get_overload_error_message(
+                    error_str)
+                print(f"⚠️ Server overload error: {user_friendly_message}")
+                raise Exception(
+                    f"Serviço temporariamente sobrecarregado: {user_friendly_message}")
+
             # For other errors, provide generic message
             raise Exception(f"Falha na comunicação com Gemini: {error_str}")
 
@@ -668,7 +724,7 @@ class GeminiService(BaseAIService):
 
                 # Save the analysis interaction to S3 chat history
                 if user:
-                    updated_history = chat.history
+                    updated_history = chat.get_history()
                     serializable_history = self._convert_history_to_serializable(
                         updated_history)
                     s3_chat_history.append_interaction(
@@ -699,6 +755,15 @@ class GeminiService(BaseAIService):
                     f"⚠️ Campaign quota/rate limit error: {user_friendly_message}")
                 raise Exception(
                     f"Erro de quota da API na geração da campanha: {user_friendly_message}")
+
+            # Check for server overload errors (503)
+            if '503' in error_str or 'unavailable' in error_str.lower() or 'overloaded' in error_str.lower():
+                user_friendly_message = self._get_overload_error_message(
+                    error_str)
+                print(
+                    f"⚠️ Campaign server overload error: {user_friendly_message}")
+                raise Exception(
+                    f"Serviço sobrecarregado na geração da campanha: {user_friendly_message}")
 
             # For other errors, provide generic message
             raise Exception(f"Failed in campaign generation flow: {error_str}")
