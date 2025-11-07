@@ -19,6 +19,7 @@ google-auth==2.40.3
 google-auth-oauthlib==1.2.2
 google-api-python-client==2.178.0
 google-generativeai==0.8.5
+google-genai==1.49.0
 
 # AI Services
 openai==1.102.0
