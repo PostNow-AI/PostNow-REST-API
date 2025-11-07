@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 
 from asgiref.sync import sync_to_async
 from CreatorProfile.models import CreatorProfile
-from CreditSystem.services.credit_service import CreditService
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
@@ -14,7 +13,8 @@ from IdeaBank.models import Post, PostIdea, PostObjective
 from IdeaBank.services.mail_service import MailService
 from IdeaBank.utils.mail_templates.daily_content import daily_content_template
 
-from .post_ai_service import PostAIService
+from .content_generation_service import ContentGenerationService
+from .credit_validation_service import CreditValidationService
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -22,8 +22,9 @@ logger = logging.getLogger(__name__)
 
 class DailyContentService:
     def __init__(self):
-        self.ai_service = PostAIService()
-        self.credit_service = CreditService()
+        self.content_service = ContentGenerationService()
+        self.credit_service = CreditValidationService()
+        self.mail_service = MailService()
         self.max_concurrent_users = os.getenv('MAX_CONCURRENT_USERS', 50)
 
     async def mail_all_generated_content(self) -> Dict[str, Any]:
@@ -362,7 +363,7 @@ class DailyContentService:
                     'is_active': False
                 })
 
-                generated_content = self.ai_service.generate_post_content(
+                generated_content = self.content_service.generate_content(
                     user, post_data=post_data)
 
                 # Handle campaign mode (creates multiple posts) vs regular mode

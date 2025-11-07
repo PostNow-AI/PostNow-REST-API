@@ -9,18 +9,27 @@ from django.db import transaction
 from IdeaBank.models import Post, PostIdea
 
 from .ai_service_factory import AIServiceFactory
-from .base_ai_service import BaseAIService
+from .content_generation_service import ContentGenerationService
+from .credit_validation_service import CreditValidationService
+from .gemini_content_service import GeminiContentService
+from .gemini_image_service import GeminiImageService
+from .image_generation_service import ImageGenerationService
 from .prompt_service import PromptService
 
 
-class PostAIService(BaseAIService):
+class PostAIService:
     """Service for generating post ideas using AI models."""
 
     def __init__(self):
-        super().__init__("gemini-2.5-flash")  # Initialize parent with default model
+        self.ai_service_factory = AIServiceFactory()
+        self.content_service = ContentGenerationService()
+        self.image_service = ImageGenerationService()
+        self.gemini_content_service = GeminiContentService()
+        self.gemini_image_service = GeminiImageService()
+        self.credit_service = CreditValidationService()
+        self.prompt_service = PromptService()
         self.default_provider = 'google'
         self.default_model = 'gemini-2.5-flash'
-        self.prompt_service = PromptService()
 
     def _validate_credits(self, user: User, estimated_tokens: int, model_name: str) -> bool:
         """Validate if user has sufficient credits for the AI operation."""
@@ -95,67 +104,13 @@ class PostAIService(BaseAIService):
 
         # Special handling for campaign type - generate 3 posts
         if post_data.get('type', '').lower() == 'campaign':
-            return self._generate_campaign_content(user, post_data, provider, model)
+            return self.gemini_content_service.handle_campaign_generation_flow(user, post_data)
 
-        # Build the prompt for content generation
-        prompt = self.prompt_service.build_content_prompt(post_data)
-
-        # Validate credits before generating (skip for unauthenticated users)
-        if user and user.is_authenticated:
-            estimated_tokens = self._estimate_tokens(prompt, model)
-            if not self._validate_credits(user, estimated_tokens, model):
-                raise Exception("Créditos insuficientes para gerar conteúdo")
-
-        # Create AI service
-        ai_service = AIServiceFactory.create_service('google', model)
-        if not ai_service:
-            raise Exception(
-                f"AI service not available for provider: {provider}")
-
-        # Generate content using the AI service
-        try:
-            # Use the AI service's direct method
-            content = self._generate_content_with_ai(
-                ai_service, prompt, post_data)
-
-            # Deduct credits after successful generation (skip for unauthenticated users)
-            if user and user.is_authenticated:
-                actual_tokens = self._estimate_tokens(prompt + content, model)
-                self._deduct_credits(
-                    user, actual_tokens, model, f"Geração de conteúdo - {post_data.get('name', 'Post')}")
-
-            # Special handling for feed posts - generate image if description is found
-            image_url = None
-            if post_data.get('type', '').lower() == 'feed':
-                image_description = self._extract_image_description_from_content(
-                    content)
-                if image_description:
-                    try:
-                        image_url = self._generate_image_from_description(
-                            ai_service, image_description, user, post_data, content)
-                        # Remove image description from content after successful generation
-                        content = self._remove_image_description_from_content(
-                            content, image_description)
-                    except Exception as e:
-                        # Log image generation error but don't fail the entire request
-                        print(
-                            f"Failed to generate image for feed post: {str(e)}")
-
-            response = {
-                'content': content,
-                'ai_provider': provider,
-                'ai_model': model,
-                'status': 'success'
-            }
-
-            if image_url:
-                response['image_url'] = image_url
-
-            return response
-        except Exception as e:
-            raise Exception(f"Failed to generate content: {str(e)}")
-
-    def _generate_campaign_content(self, user: User, post_data: Dict, provider: str, model: str) -> Dict:
+        # Use ContentGenerationService for regular content generation
+        return self.content_generation_service.generate_content(
+            user=user,
+            post_data=post_data
+        )
         """
         Special handler for campaign type - generates 3 posts (feed, reels, stories) from single AI response.
         """

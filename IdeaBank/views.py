@@ -11,6 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from .models import Post, PostIdea, PostObjective, PostType
@@ -29,16 +30,21 @@ from .services.post_ai_service import PostAIService
 
 logger = logging.getLogger(__name__)
 
-# Post management views
+
+class StandardResultsSetPagination(PageNumberPagination):
+    """Standard pagination class for consistent pagination across the API."""
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 
 class PostListView(generics.ListCreateAPIView):
-    """List and create posts."""
+    """List and create posts with pagination."""
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = PostSerializer
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        return Post.objects.filter(user=self.request.user)
+        return Post.objects.filter(user=self.request.user).order_by('-created_at')
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -48,6 +54,18 @@ class PostListView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def create(self, request, *args, **kwargs):
+        """Override create to provide consistent response format."""
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(
+                f"Error creating post for user {request.user.id}: {str(e)}")
+            return Response(
+                {'error': 'Erro ao criar post', 'details': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update and delete posts."""
@@ -56,6 +74,30 @@ class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Post.objects.filter(user=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        """Override update to provide consistent response format."""
+        try:
+            return super().update(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(
+                f"Error updating post {kwargs.get('pk')} for user {request.user.id}: {str(e)}")
+            return Response(
+                {'error': 'Erro ao atualizar post', 'details': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def destroy(self, request, *args, **kwargs):
+        """Override destroy to provide consistent response format."""
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(
+                f"Error deleting post {kwargs.get('pk')} for user {request.user.id}: {str(e)}")
+            return Response(
+                {'error': 'Erro ao deletar post', 'details': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class PostWithIdeasView(generics.RetrieveAPIView):
@@ -67,18 +109,18 @@ class PostWithIdeasView(generics.RetrieveAPIView):
         return Post.objects.filter(user=self.request.user).prefetch_related('ideas')
 
 
-# Post Idea management views
 class PostIdeaListView(generics.ListAPIView):
-    """List post ideas for a specific post."""
+    """List post ideas for a specific post with pagination."""
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = PostIdeaSerializer
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         post_id = self.kwargs.get('post_id')
         return PostIdea.objects.filter(
             post_id=post_id,
             post__user=self.request.user
-        )
+        ).order_by('-created_at')
 
 
 class PostIdeaDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -89,29 +131,52 @@ class PostIdeaDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return PostIdea.objects.filter(post__user=self.request.user)
 
+    def update(self, request, *args, **kwargs):
+        """Override update to provide consistent response format."""
+        try:
+            return super().update(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(
+                f"Error updating post idea {kwargs.get('pk')} for user {request.user.id}: {str(e)}")
+            return Response(
+                {'error': 'Erro ao atualizar ideia', 'details': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-# AI-powered post generation views
+    def destroy(self, request, *args, **kwargs):
+        """Override destroy to provide consistent response format."""
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(
+                f"Error deleting post idea {kwargs.get('pk')} for user {request.user.id}: {str(e)}")
+            return Response(
+                {'error': 'Erro ao deletar ideia', 'details': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def generate_post_idea(request):
     """Generate a post idea using AI based on post specifications."""
-
     serializer = PostGenerationRequestSerializer(data=request.data)
     if not serializer.is_valid():
+        logger.warning(
+            f"Invalid data for post generation by user {request.user.id}: {serializer.errors}")
         return Response(
             {'error': 'Dados inválidos', 'details': serializer.errors},
             status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
-        # Create the post first
         post_data = serializer.validated_data
         include_image = post_data.get('include_image', False)
 
         # Create the post
         post = Post.objects.create(user=request.user, **post_data)
 
-        # Generate content using AI
+        # Generate content using AI service
         post_ai_service = PostAIService()
         result = post_ai_service.generate_post_content(
             user=request.user,
@@ -127,7 +192,6 @@ def generate_post_idea(request):
         # Generate image if requested
         if include_image:
             try:
-                # Add the created post ID and post_idea ID to post_data for image generation
                 post_data_with_ids = {
                     **post_data,
                     'post_id': post.id,
@@ -145,13 +209,16 @@ def generate_post_idea(request):
                 post_idea.image_url = image_url
                 post_idea.save()
             except Exception as image_error:
-                print(f"Warning: Failed to generate image: {image_error}")
+                logger.warning(
+                    f"Failed to generate image for post {post.id}: {image_error}")
                 # Continue without image - don't fail the entire request
 
         # Serialize the response
         post_serializer = PostSerializer(post)
         idea_serializer = PostIdeaSerializer(post_idea)
 
+        logger.info(
+            f"Successfully generated post and idea for user {request.user.id}")
         return Response({
             'message': 'Post e ideia gerados com sucesso!',
             'post': post_serializer.data,
@@ -159,8 +226,10 @@ def generate_post_idea(request):
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
+        logger.error(
+            f"Error generating post idea for user {request.user.id}: {str(e)}")
         return Response(
-            {'error': f'Erro na geração do post: {str(e)}'},
+            {'error': 'Erro na geração do post', 'details': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -168,15 +237,15 @@ def generate_post_idea(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def generate_image_for_idea(request, idea_id):
-    """Generate an image for an existing post idea using DALL-E."""
-
-    # Get the post idea
+    """Generate an image for an existing post idea."""
     try:
         post_idea = PostIdea.objects.get(
             id=idea_id,
             post__user=request.user
         )
     except PostIdea.DoesNotExist:
+        logger.warning(
+            f"Post idea {idea_id} not found for user {request.user.id}")
         return Response(
             {'error': 'Ideia não encontrada'},
             status=status.HTTP_404_NOT_FOUND
@@ -184,16 +253,16 @@ def generate_image_for_idea(request, idea_id):
 
     serializer = ImageGenerationRequestSerializer(data=request.data)
     if not serializer.is_valid():
+        logger.warning(
+            f"Invalid data for image generation by user {request.user.id}: {serializer.errors}")
         return Response(
             {'error': 'Dados inválidos', 'details': serializer.errors},
             status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
-        # Get the custom prompt or use default
         custom_prompt = serializer.validated_data.get('prompt')
 
-        # Prepare post data for image generation with IDs
         post_data = {
             'name': post_idea.post.name,
             'objective': post_idea.post.objective,
@@ -205,7 +274,6 @@ def generate_image_for_idea(request, idea_id):
             'post': post_idea.post
         }
 
-        # Generate image
         post_ai_service = PostAIService()
         image_url = post_ai_service.generate_image_for_post(
             user=request.user,
@@ -215,10 +283,11 @@ def generate_image_for_idea(request, idea_id):
             regenerate=False
         )
 
-        # Update the post idea with the image URL
         post_idea.image_url = image_url
         post_idea.save()
 
+        logger.info(
+            f"Successfully generated image for idea {idea_id} by user {request.user.id}")
         return Response({
             'message': 'Imagem gerada com sucesso!',
             'image_url': image_url,
@@ -226,8 +295,10 @@ def generate_image_for_idea(request, idea_id):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        logger.error(
+            f"Error generating image for idea {idea_id} by user {request.user.id}: {str(e)}")
         return Response(
-            {'error': f'Erro na geração da imagem: {str(e)}'},
+            {'error': 'Erro na geração da imagem', 'details': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -236,14 +307,14 @@ def generate_image_for_idea(request, idea_id):
 @permission_classes([permissions.IsAuthenticated])
 def edit_post_idea(request, idea_id):
     """Edit/regenerate a post idea with optional AI assistance."""
-
-    # Get the post idea
     try:
         post_idea = PostIdea.objects.get(
             id=idea_id,
             post__user=request.user
         )
     except PostIdea.DoesNotExist:
+        logger.warning(
+            f"Post idea {idea_id} not found for user {request.user.id}")
         return Response(
             {'error': 'Ideia não encontrada'},
             status=status.HTTP_404_NOT_FOUND
@@ -251,6 +322,8 @@ def edit_post_idea(request, idea_id):
 
     serializer = PostIdeaEditRequestSerializer(data=request.data)
     if not serializer.is_valid():
+        logger.warning(
+            f"Invalid data for idea edit by user {request.user.id}: {serializer.errors}")
         return Response(
             {'error': 'Dados inválidos', 'details': serializer.errors},
             status=status.HTTP_400_BAD_REQUEST
@@ -263,7 +336,6 @@ def edit_post_idea(request, idea_id):
         ai_model = serializer.validated_data.get(
             'preferred_model', 'gemini-2.5-flash')
 
-        # Prepare post data
         post_data = {
             'name': post_idea.post.name,
             'objective': post_idea.post.objective,
@@ -272,7 +344,6 @@ def edit_post_idea(request, idea_id):
             'include_image': post_idea.post.include_image,
         }
 
-        # Regenerate content
         post_ai_service = PostAIService()
         result = post_ai_service.regenerate_post_content(
             user=request.user,
@@ -283,18 +354,21 @@ def edit_post_idea(request, idea_id):
             ai_model=ai_model
         )
 
-        # Update the post idea
         post_idea.content = result['content']
         post_idea.save()
 
+        logger.info(
+            f"Successfully edited idea {idea_id} by user {request.user.id}")
         return Response({
             'message': 'Ideia editada com sucesso!',
             'idea': PostIdeaSerializer(post_idea).data
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        logger.error(
+            f"Error editing idea {idea_id} by user {request.user.id}: {str(e)}")
         return Response(
-            {'error': f'Erro na edição da ideia: {str(e)}'},
+            {'error': 'Erro na edição da ideia', 'details': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -303,14 +377,14 @@ def edit_post_idea(request, idea_id):
 @permission_classes([permissions.IsAuthenticated])
 def regenerate_image_for_idea(request, idea_id):
     """Regenerate the image for a post idea with optional custom prompt."""
-
-    # Get the post idea
     try:
         post_idea = PostIdea.objects.get(
             id=idea_id,
             post__user=request.user
         )
     except PostIdea.DoesNotExist:
+        logger.warning(
+            f"Post idea {idea_id} not found for user {request.user.id}")
         return Response(
             {'error': 'Ideia não encontrada'},
             status=status.HTTP_404_NOT_FOUND
@@ -318,6 +392,8 @@ def regenerate_image_for_idea(request, idea_id):
 
     serializer = ImageGenerationRequestSerializer(data=request.data)
     if not serializer.is_valid():
+        logger.warning(
+            f"Invalid data for image regeneration by user {request.user.id}: {serializer.errors}")
         return Response(
             {'error': 'Dados inválidos', 'details': serializer.errors},
             status=status.HTTP_400_BAD_REQUEST
@@ -326,7 +402,6 @@ def regenerate_image_for_idea(request, idea_id):
     try:
         custom_prompt = serializer.validated_data.get('prompt')
 
-        # Prepare post data with IDs for image regeneration
         post_data = {
             'name': post_idea.post.name,
             'objective': post_idea.post.objective,
@@ -338,7 +413,6 @@ def regenerate_image_for_idea(request, idea_id):
             'post': post_idea.post
         }
 
-        # Regenerate image
         post_ai_service = PostAIService()
         image_url = post_ai_service.generate_image_for_post(
             user=request.user,
@@ -348,10 +422,11 @@ def regenerate_image_for_idea(request, idea_id):
             regenerate=True
         )
 
-        # Update the post idea with new image
         post_idea.image_url = image_url
         post_idea.save()
 
+        logger.info(
+            f"Successfully regenerated image for idea {idea_id} by user {request.user.id}")
         return Response({
             'message': 'Imagem regenerada com sucesso!',
             'image_url': image_url,
@@ -359,38 +434,45 @@ def regenerate_image_for_idea(request, idea_id):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        logger.error(
+            f"Error regenerating image for idea {idea_id} by user {request.user.id}: {str(e)}")
         return Response(
-            {'error': f'Erro na regeneração da imagem: {str(e)}'},
+            {'error': 'Erro na regeneração da imagem', 'details': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
-# Helper endpoints
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_post_options(request):
     """Get available options for post creation."""
+    try:
+        options = {
+            'objectives': [
+                {'value': choice[0], 'label': choice[1]}
+                for choice in PostObjective.choices
+            ],
+            'types': [
+                {'value': choice[0], 'label': choice[1]}
+                for choice in PostType.choices
+            ]
+        }
 
-    options = {
-        'objectives': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in PostObjective.choices
-        ],
-        'types': [
-            {'value': choice[0], 'label': choice[1]}
-            for choice in PostType.choices
-        ]
-    }
-
-    serializer = PostOptionsSerializer(options)
-    return Response(serializer.data)
+        serializer = PostOptionsSerializer(options)
+        return Response(serializer.data)
+    except Exception as e:
+        logger.error(
+            f"Error getting post options for user {request.user.id}: {str(e)}")
+        return Response(
+            {'error': 'Erro ao buscar opções', 'details': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_user_posts_with_ideas(request):
     """Get all user posts with their ideas."""
-
     try:
         posts = Post.objects.filter(
             user=request.user).prefetch_related('ideas')
@@ -402,8 +484,10 @@ def get_user_posts_with_ideas(request):
             'total_ideas': sum(post.ideas.count() for post in posts)
         })
     except Exception as e:
+        logger.error(
+            f"Error getting user posts with ideas for user {request.user.id}: {str(e)}")
         return Response(
-            {'error': f'Erro ao buscar posts: {str(e)}'},
+            {'error': 'Erro ao buscar posts', 'details': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -412,7 +496,6 @@ def get_user_posts_with_ideas(request):
 @permission_classes([permissions.IsAuthenticated])
 def get_post_stats(request):
     """Get statistics about user's posts and ideas."""
-
     try:
         total_posts = Post.objects.filter(user=request.user).count()
         total_ideas = PostIdea.objects.filter(post__user=request.user).count()
@@ -431,8 +514,10 @@ def get_post_stats(request):
             'post_types_distribution': post_types
         })
     except Exception as e:
+        logger.error(
+            f"Error getting post stats for user {request.user.id}: {str(e)}")
         return Response(
-            {'error': f'Erro ao buscar estatísticas: {str(e)}'},
+            {'error': 'Erro ao buscar estatísticas', 'details': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -449,15 +534,15 @@ def vercel_cron_daily_content_generation(request):
     expected_auth = f"Bearer {settings.CRON_SECRET}"
 
     if auth_header != expected_auth:
+        logger.warning("Unauthorized attempt to access cron endpoint")
         return JsonResponse({
             'error': 'Unauthorized'
         }, status=401)
 
     try:
-        # Get batch number from query params (default to 1)
         batch_number = int(request.GET.get('batch', 1))
         batch_size = 5  # Process 5 users per batch, to avoid vercel timeouts
-        # Run async processing
+
         service = DailyContentService()
 
         # Use asyncio to run the async function
@@ -471,6 +556,8 @@ def vercel_cron_daily_content_generation(request):
         finally:
             loop.close()
 
+        logger.info(
+            f"Successfully processed batch {batch_number} for daily content generation")
         return JsonResponse(result, status=200)
 
     except Exception as e:
@@ -500,12 +587,14 @@ def manual_trigger_daily_generation(request):
         finally:
             loop.close()
 
+        logger.info("Successfully completed manual daily content generation")
         return JsonResponse({
             'message': 'Daily content generation completed',
             'result': result
         }, status=200)
 
     except Exception as e:
+        logger.error(f"Failed to generate daily content: {str(e)}")
         return JsonResponse({
             'error': 'Failed to generate daily content',
             'details': str(e)
@@ -529,12 +618,14 @@ def mail_all_generated_content(request):
         finally:
             loop.close()
 
+        logger.info("Successfully completed emailing of generated content")
         return JsonResponse({
             'message': 'Emailing of generated content completed',
             'result': result
         }, status=200)
 
     except Exception as e:
+        logger.error(f"Failed to email generated content: {str(e)}")
         return JsonResponse({
             'error': 'Failed to email generated content',
             'details': str(e)

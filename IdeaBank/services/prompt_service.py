@@ -1,9 +1,24 @@
+"""
+Prompt Service for building AI prompts for different content types.
+"""
+
+import logging
 from typing import Dict
+
+from django.contrib.auth.models import User
+
+logger = logging.getLogger(__name__)
 
 
 class PromptService:
+    """Service for building AI prompts for different content types."""
+
     def __init__(self):
-        self.user = None
+        self.user = None  # Will be set by calling service
+
+    def set_user(self, user: User) -> None:
+        """Set the user context for prompt building."""
+        self.user = user
 
     def build_content_prompt(self, post_data: Dict) -> str:
         """Build the prompt for content generation based on post type."""
