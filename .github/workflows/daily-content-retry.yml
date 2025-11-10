@@ -1,0 +1,25 @@
+name: Daily Content Generation - Retry Failed Users
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # Run once at 8:00 AM UTC
+  workflow_dispatch:
+
+jobs:
+  retry-failed-users:
+    runs-on: ubuntu-latest
+    environment: Production
+
+    steps:
+      - name: Debug URL
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/retry-failed-users/"
+
+      - name: Call Vercel API to retry failed users
+        run: |
+          echo "Retrying failed users from yesterday's generation"
+          curl -X GET \
+            "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/retry-failed-users/" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -w "HTTP Status: %{http_code}\n" \
+            -s

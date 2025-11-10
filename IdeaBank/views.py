@@ -539,3 +539,74 @@ def mail_all_generated_content(request):
             'error': 'Failed to email generated content',
             'details': str(e)
         }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def vercel_cron_retry_failed_users(request):
+    """
+    Vercel Cron endpoint for retrying failed daily content generation
+    Called automatically by Vercel at 8:00 AM UTC
+    """
+    # Verify it's from Vercel (security check)
+    auth_header = request.headers.get('Authorization', '')
+    expected_auth = f"Bearer {settings.CRON_SECRET}"
+
+    if auth_header != expected_auth:
+        return JsonResponse({
+            'error': 'Unauthorized'
+        }, status=401)
+
+    try:
+        service = DailyContentService()
+
+        # Use asyncio to run the async function
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            result = loop.run_until_complete(
+                service.retry_failed_users_async()
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse(result, status=200)
+
+    except Exception as e:
+        logger.error(f"Vercel retry cron job failed: {str(e)}")
+        return JsonResponse({
+            'error': 'Internal server error',
+            'details': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def manual_trigger_retry_failed(request):
+    """
+    Manual trigger for retrying failed users (for testing)
+    """
+    try:
+        service = DailyContentService()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            result = loop.run_until_complete(
+                service.retry_failed_users_async()
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse({
+            'message': 'Retry failed users completed',
+            'result': result
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({
+            'error': 'Failed to retry failed users',
+            'details': str(e)
+        }, status=500)

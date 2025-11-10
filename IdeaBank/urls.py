@@ -40,8 +40,12 @@ urlpatterns = [
     # Cron endpoints
     path('cron/daily-content-generation/', views.vercel_cron_daily_content_generation,
          name='vercel_cron_daily_generation'),
+    path('cron/retry-failed-users/', views.vercel_cron_retry_failed_users,
+         name='vercel_cron_retry_failed_users'),
     path('admin/manual-daily-generation/', views.manual_trigger_daily_generation,
          name='manual_daily_generation'),
+    path('admin/manual-retry-failed/', views.manual_trigger_retry_failed,
+         name='manual_retry_failed'),
     path('cron/mail-automatic-posts/',
          views.mail_all_generated_content, name='mail_automatic_posts'),
 ]
