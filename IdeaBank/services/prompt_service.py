@@ -5,6 +5,92 @@ class PromptService:
     def __init__(self):
         self.user = None
 
+    def text_characteristics(self) -> Dict:
+        return {
+            "feed_image_text": {
+                "title": {
+                    "text": "[TEXTO DO TÍTULO - impactante e conciso, máximo 5 palavras]",
+                    "position": {
+                        "top": "[POSIÇÃO EM px - considere hierarquia visual, mínimo 20px]",
+                        "left": "[POSIÇÃO EM px - mínimo 20px da borda]",
+                        "right": "[POSIÇÃO EM px - mínimo 20px da borda]",
+                        "bottom": "[POSIÇÃO EM px - espaçamento adequado para próximo elemento]"
+                    },
+                    "typography": {
+                        "font_family": "[Fonte premium: Montserrat, Playfair Display, Inter, Poppins, Roboto ou similar elegante]",
+                        "font_size": "[Tamanho em px - título principal impactante, entre 32-48px]",
+                        "font_weight": "[bold, 700, 800 ou 900 para máximo impacto visual]",
+                        "line_height": "[Altura da linha - ex: 1.2 ou 120% para legibilidade]",
+                        "letter_spacing": "[Espaçamento entre letras - ex: 0.5px, -0.5px ou 1px]"
+                    },
+                    "color": "[COR PRINCIPAL EM HEX - alto contraste com fundo para legibilidade]",
+                    "text_align": "[center, left ou right - baseado no layout e composição]",
+                    "text_transform": "[uppercase para impacto, capitalize para elegância, ou none]",
+                    "effects": {
+                        "text_shadow": "[Sombra do texto - ex: 2px 2px 4px rgba(0,0,0,0.5) para destaque]",
+                        "background": "[Fundo do texto se necessário - ex: rgba(255,255,255,0.9) ou gradiente]",
+                        "border": "[Borda se aplicável - ex: 2px solid #ffffff]",
+                        "border_radius": "[Raio da borda - ex: 8px para suavidade]",
+                        "backdrop_filter": "[Filtro de fundo - ex: blur(10px) para glassmorphism]",
+                        "opacity": "[Opacidade - ex: 1.0 para total ou 0.9 para suavidade]"
+                    }
+                },
+                "subtitle": {
+                    "text": "[TEXTO DO SUBTÍTULO - complementar, elegante e informativo]",
+                    "position": {
+                        "top": "[POSIÇÃO EM px - abaixo do título com espaçamento de 15-30px]",
+                        "left": "[POSIÇÃO EM px - alinhado harmoniosamente com título]",
+                        "right": "[POSIÇÃO EM px - margem direita consistente]",
+                        "bottom": "[POSIÇÃO EM px - espaço para CTA abaixo]"
+                    },
+                    "typography": {
+                        "font_family": "[Fonte complementar ou igual ao título - mantém consistência]",
+                        "font_size": "[Tamanho menor que título - entre 16-24px para hierarquia]",
+                        "font_weight": "[300, 400, 500 ou 600 - mais leve que título para contraste]",
+                        "line_height": "[Altura da linha - ex: 1.4 para facilitar leitura]",
+                        "letter_spacing": "[Espaçamento - ex: 0.3px para refinamento]"
+                    },
+                    "color": "[COR SECUNDÁRIA EM HEX - harmônica com título, pode ser mais suave]",
+                    "text_align": "[Alinhamento consistente com título para coesão visual]",
+                    "text_transform": "[lowercase, capitalize ou none - mais sutil que título]",
+                    "effects": {
+                        "text_shadow": "[Sombra mais sutil - ex: 1px 1px 2px rgba(0,0,0,0.3)]",
+                        "background": "[Fundo se necessário - mais transparente que título]",
+                        "opacity": "[Opacidade - ex: 0.9 para suavidade visual]",
+                        "border": "[Borda sutil se aplicável]"
+                    }
+                },
+                "cta": {
+                    "text": "[TEXTO DO CTA - chamada para ação clara, atrativa e urgente]",
+                    "position": {
+                        "top": "[POSIÇÃO EM px - área de destaque, geralmente terço inferior]",
+                        "left": "[POSIÇÃO EM px - centralizado ou estratégicamente posicionado]",
+                        "right": "[POSIÇÃO EM px - margem equilibrada]",
+                        "bottom": "[POSIÇÃO EM px - margem inferior adequada, mínimo 30px]"
+                    },
+                    "typography": {
+                        "font_family": "[Fonte que destaque o CTA - pode ser diferente para chamar atenção]",
+                        "font_size": "[Tamanho médio-grande - entre 18-28px para visibilidade]",
+                        "font_weight": "[600, 700 ou bold para destaque e autoridade]",
+                        "line_height": "[Altura da linha - ex: 1.3]",
+                        "letter_spacing": "[Espaçamento - ex: 0.5px para clareza]"
+                    },
+                    "color": "[COR CONTRASTANTE EM HEX - que chame máxima atenção, ex: branco se fundo escuro]",
+                    "text_align": "[center recomendado para CTAs, ou conforme design]",
+                    "text_transform": "[uppercase recomendado para máximo impacto e urgência]",
+                    "effects": {
+                        "background": "[Fundo colorido para destaque - ex: gradiente, cor sólida vibrante]",
+                        "padding": "[Espaçamento interno - ex: 12px 24px para área clicável]",
+                        "border_radius": "[Raio das bordas - ex: 25px para botão moderno, 8px para elegante]",
+                        "text_shadow": "[Sombra do texto - ex: 1px 1px 2px rgba(0,0,0,0.8)]",
+                        "box_shadow": "[Sombra do botão - ex: 0 4px 15px rgba(0,0,0,0.3) para profundidade]",
+                        "border": "[Borda - ex: 2px solid #ffffff para definição]",
+                        "hover_effects": "[Efeitos de interação - ex: scale(1.05) para responsividade]",
+                        "gradient": "[Gradiente de fundo - ex: linear-gradient(45deg, #ff6b6b, #ff8e8e)]"
+                    }
+                }
+            }}
+
     def build_content_prompt(self, post_data: Dict) -> str:
         """Build the prompt for content generation based on post type."""
         post_type = post_data.get('type', '').lower()
@@ -200,6 +286,9 @@ Subtítulo: [Frase complementar breve e envolvente – formato sempre variado]
 
 CTA: [Chamada clara e coerente com o objetivo do post – alternada a cada campanha]
 
+Ao trazer a sugestão de texto para escrever na imagem, traga também a localização de cada elemento (título, subtítulo e CTA) na imagem, para facilitar a aplicação pelo designer. Traga-os em formato de css, com os valores de top, left, bottom, right, font-size e color.
+
+
 📅 CONTEXTO DE USO:
 
 Esse prompt será usado para gerar apenas o texto do post de Feed, sem necessidade de ideias de imagem, Stories ou Reels.
@@ -213,6 +302,13 @@ Refletir as tendências atuais do tema;
 Manter variação diária de título, subtítulo e CTA;
 
 Entregar um resultado de alta qualidade, digno de uma marca profissional.
+
+⚙️ FORMATO DE SAÍDA (OBRIGATÓRIO):
+A resposta deve ser entregue estritamente em formato JSON, seguindo exatamente esta estrutura:
+{{
+  "text": "[TEXTO COMPLETO DA COPY – fluido, natural, escaneável e com média de 5 emojis. Incluir Título, CTA e Subtítulo na copy. Trazer formatado em HTML com parágrafos <p> e quebras de linha <br> onde necessário.]",
+  "image_text": {self.text_characteristics()},
+}}
 
 """
         return prompt.strip()
@@ -622,7 +718,7 @@ O resultado visual deve ser tão bom que pareça criado por um designer de elite
 
 ----------- SAÍDA OBRIGATÓRIA -----------:
 
-Crie uma imagem de marketing profissional e visualmente atraente, adequada para redes sociais, no formato vertical Tamanho: 1080 x 1350 px (Proporção: 4:5 (vertical – formato de post para Feed), utilizando a imagem anexada como canvas base para a arte. 
+Crie uma imagem de marketing profissional e visualmente atraente, adequada para redes sociais, no formato vertical Tamanho: 1080 x 1350 px (Proporção: 4:5 (vertical – formato de post para Feed), utilizando a imagem anexada como canvas base para a arte.
 
 NÃO DEIXE BORDAS BRANCAS AO REDOR DA IMAGEM, PREENCHA TODO O ESPAÇO, E NEM ADICIONE TEXTOS NA IMAGEM. NÃO QUEREMOS TEXTO E NEM BORDA BRANCA, APENAS A IMAGEM NO FORMATO 4:5, 1080X1350 PX
 
@@ -635,45 +731,45 @@ NÃO DEIXE BORDAS BRANCAS AO REDOR DA IMAGEM, PREENCHA TODO O ESPAÇO, E NEM ADI
         objective = post_data.get('objective', '')
         further_details = post_data.get('further_details', '')
         prompt = f"""
-Você é um especialista em design para marketing digital e redes sociais.  
-Sua missão é criar capas de Reels profissionais, modernas e impactantes, que chamem a atenção do público já no primeiro contato.  
-A capa deve ser clara, objetiva e reforçar a ideia central do conteúdo, sem excesso de elementos ou textos longos.  
+Você é um especialista em design para marketing digital e redes sociais.
+Sua missão é criar capas de Reels profissionais, modernas e impactantes, que chamem a atenção do público já no primeiro contato.
+A capa deve ser clara, objetiva e reforçar a ideia central do conteúdo, sem excesso de elementos ou textos longos.
 
 ### DADOS DE ENTRADA:
-- Assunto do post: {name}  
-- Objetivo do post: {objective}  
-- Tipo do post: Capa de Reel  
-- Mais detalhes: {further_details}  
+- Assunto do post: {name}
+- Objetivo do post: {objective}
+- Tipo do post: Capa de Reel
+- Mais detalhes: {further_details}
 
 ---
 
 ### REGRAS PARA A CAPA:
 
-1. Formato: **vertical 1080x1920 px**, otimizado para Reels.  
+1. Formato: **vertical 1080x1920 px**, otimizado para Reels.
 
-2. A capa deve conter **uma chamada curta e impactante**, em forma de título, que incentive o clique no vídeo.  
-    - Exemplo: “Energia no pós-bariátrico 💧”, “O segredo do emagrecimento saudável ✨”.  
-    - Nunca usar blocos longos de texto.  
+2. A capa deve conter **uma chamada curta e impactante**, em forma de título, que incentive o clique no vídeo.
+    - Exemplo: “Energia no pós-bariátrico 💧”, “O segredo do emagrecimento saudável ✨”.
+    - Nunca usar blocos longos de texto.
 
-3. O design deve ser limpo, moderno e profissional, com hierarquia visual clara:  
-    - Título curto em destaque.  
-    - Elementos visuais que remetam ao tema.  
+3. O design deve ser limpo, moderno e profissional, com hierarquia visual clara:
+    - Título curto em destaque.
+    - Elementos visuais que remetam ao tema.
 
-4. Usar **cores, tipografia e estilo compatíveis com a identidade visual da marca** (quando fornecida).  
+4. Usar **cores, tipografia e estilo compatíveis com a identidade visual da marca** (quando fornecida).
 
-5. Se apropriado, incluir elementos visuais sutis que conectem ao tema (ex.: gotas d’água para soroterapia, coração para saúde, ícones de energia, etc.).  
+5. Se apropriado, incluir elementos visuais sutis que conectem ao tema (ex.: gotas d’água para soroterapia, coração para saúde, ícones de energia, etc.).
 
-6. Evitar poluição visual e excesso de informações. A capa deve ser simples, mas altamente chamativa.  
+6. Evitar poluição visual e excesso de informações. A capa deve ser simples, mas altamente chamativa.
 
-7. Comunicação sempre ética e positiva, sem sensacionalismo ou exageros.  
+7. Comunicação sempre ética e positiva, sem sensacionalismo ou exageros.
 
 8. Utilize a imagem anexada como um canvas para a geração de todas as imagens que eu te pedir. Elas devem ser criadas no formato 9:16 para serem postadas no instagram
 ---
 
 ### SAÍDA ESPERADA:
-- **Uma imagem final no formato de capa para Reel (1080x1920 px)**.  
-- O design deve conter apenas **um título curto e impactante**, sem blocos longos de texto.  
-- A arte deve estar finalizada, pronta para uso como capa do Reel.  
+- **Uma imagem final no formato de capa para Reel (1080x1920 px)**.
+- O design deve conter apenas **um título curto e impactante**, sem blocos longos de texto.
+- A arte deve estar finalizada, pronta para uso como capa do Reel.
 
 
 
@@ -836,38 +932,38 @@ O resultado deve ser um design sofisticado, envolvente e visualmente atrativo, p
         """Build the prompt for content regeneration with user feedback."""
 
         prompt = f"""
-Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.  
-Sua missão é editar o material já criado (copy) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.  
+Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.
+Sua missão é editar o material já criado (copy) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.
 
 ### DADOS DE ENTRADA:
-- Conteúdo original: {current_content}  
+- Conteúdo original: {current_content}
 - Alterações solicitadas: {user_prompt}
 
 ---
 
 ### REGRAS PARA EDIÇÃO:
 
-1. **Mantenha toda a identidade visual e estilística do conteúdo original**:  
-    - Paleta de cores  
-    - Tipografia  
-    - Layout  
-    - Tom de voz e estilo da copy  
-    - Estrutura do design ou texto  
+1. **Mantenha toda a identidade visual e estilística do conteúdo original**:
+    - Paleta de cores
+    - Tipografia
+    - Layout
+    - Tom de voz e estilo da copy
+    - Estrutura do design ou texto
 
-2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.  
+2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.
 
-3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a mesma estrutura, tom e parágrafos curtos.  
+3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a mesma estrutura, tom e parágrafos curtos.
 
-4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.  
+4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.
 
-5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.  
+5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.
 
 ---
 
 ### SAÍDA ESPERADA:
-- Versão revisada do conteúdo (copy), com **as alterações solicitadas aplicadas**.  
-- Todo o restante deve permanecer idêntico ao original.  
-- Material final pronto para publicação.  
+- Versão revisada do conteúdo (copy), com **as alterações solicitadas aplicadas**.
+- Todo o restante deve permanecer idêntico ao original.
+- Material final pronto para publicação.
 
 """
 
@@ -876,37 +972,37 @@ Sua missão é editar o material já criado (copy) mantendo sua identidade visua
     def build_variation_prompt(self, current_content: str) -> str:
         """Build the prompt for creating a variation of existing content."""
         prompt = f"""
-Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.  
-Sua missão é editar o material já criado (copy) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.  
+Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.
+Sua missão é editar o material já criado (copy) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.
 
 ### DADOS DE ENTRADA:
-- Conteúdo original: {current_content}  
+- Conteúdo original: {current_content}
 
 ---
 
 ### REGRAS PARA EDIÇÃO:
 
-1. **Mantenha toda a identidade visual e estilística do conteúdo original**:  
-    - Paleta de cores  
-    - Tipografia  
-    - Layout  
-    - Tom de voz e estilo da copy  
-    - Estrutura do design ou texto  
+1. **Mantenha toda a identidade visual e estilística do conteúdo original**:
+    - Paleta de cores
+    - Tipografia
+    - Layout
+    - Tom de voz e estilo da copy
+    - Estrutura do design ou texto
 
-2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.  
+2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.
 
-3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a mesma estrutura, tom e parágrafos curtos.  
+3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a mesma estrutura, tom e parágrafos curtos.
 
-4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.  
+4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.
 
-5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.  
+5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.
 
 ---
 
 ### SAÍDA ESPERADA:
-- Versão revisada do conteúdo (copy), com **as alterações solicitadas aplicadas**.  
-- Todo o restante deve permanecer idêntico ao original.  
-- Material final pronto para publicação.  
+- Versão revisada do conteúdo (copy), com **as alterações solicitadas aplicadas**.
+- Todo o restante deve permanecer idêntico ao original.
+- Material final pronto para publicação.
 
 
 """
@@ -918,8 +1014,8 @@ Sua missão é editar o material já criado (copy) mantendo sua identidade visua
 
         # If no current image is found, we need to create a new image based on the user's request
         prompt = f"""
-Você é um especialista em design digital e edição de imagens para marketing.  
-Sua missão é editar a imagem já criada, mantendo **100% da identidade visual, layout, estilo, cores e elementos originais**, alterando **apenas o que for solicitado**.  
+Você é um especialista em design digital e edição de imagens para marketing.
+Sua missão é editar a imagem já criada, mantendo **100% da identidade visual, layout, estilo, cores e elementos originais**, alterando **apenas o que for solicitado**.
 
 ### DADOS DE ENTRADA:
 - Imagem original: [IMAGEM ANEXADA]
@@ -929,26 +1025,26 @@ Sua missão é editar a imagem já criada, mantendo **100% da identidade visual,
 
 ### REGRAS PARA EDIÇÃO:
 
-1. **Nunca recrie a imagem do zero.**  
-    - O design, estilo, paleta de cores, tipografia, elementos gráficos e identidade visual devem permanecer exatamente iguais à arte original.  
+1. **Nunca recrie a imagem do zero.**
+    - O design, estilo, paleta de cores, tipografia, elementos gráficos e identidade visual devem permanecer exatamente iguais à arte original.
 
-2. **Aplique apenas as mudanças solicitadas.**  
-    - Exemplo: se o pedido for “mudar o título para X”, altere somente o texto do título, mantendo a fonte, cor, tamanho e posicionamento original.  
-    - Se o pedido for “trocar a cor do fundo”, altere apenas essa cor, mantendo todos os demais elementos intactos.  
+2. **Aplique apenas as mudanças solicitadas.**
+    - Exemplo: se o pedido for “mudar o título para X”, altere somente o texto do título, mantendo a fonte, cor, tamanho e posicionamento original.
+    - Se o pedido for “trocar a cor do fundo”, altere apenas essa cor, mantendo todos os demais elementos intactos.
 
-3. **Não adicione novos elementos** que não foram solicitados.  
-    - O layout deve permanecer idêntico.  
+3. **Não adicione novos elementos** que não foram solicitados.
+    - O layout deve permanecer idêntico.
 
-4. **Respeite sempre a logomarca oficial** caso já esteja aplicada na arte.  
+4. **Respeite sempre a logomarca oficial** caso já esteja aplicada na arte.
 
-5. O resultado deve parecer exatamente a mesma imagem original, com apenas os pontos ajustados conforme solicitado.  
+5. O resultado deve parecer exatamente a mesma imagem original, com apenas os pontos ajustados conforme solicitado.
 
 ---
 
 ### SAÍDA ESPERADA:
-- **A mesma imagem original, com apenas as alterações solicitadas aplicadas.**  
-- Nada além do que foi pedido deve ser modificado.  
-- O design final deve estar pronto para uso, fiel ao original.  
+- **A mesma imagem original, com apenas as alterações solicitadas aplicadas.**
+- Nada além do que foi pedido deve ser modificado.
+- O design final deve estar pronto para uso, fiel ao original.
 
 
 
@@ -1049,7 +1145,7 @@ Gere a resposta exatamente neste formato:
 
 Como sugestão para escrever na imagem:
 
-Título: [Frase curta e chamativa — até 8 palavras — diferente das anteriores , sem usar as palavras 'Conteúdo Diário' ou 'Dica do Dia' ou relacionados] 
+Título: [Frase curta e chamativa — até 8 palavras — diferente das anteriores , sem usar as palavras 'Conteúdo Diário' ou 'Dica do Dia' ou relacionados]
 
 Subtítulo: [Frase complementar breve e criativa — formato sempre variado]
 
@@ -1210,6 +1306,8 @@ Como sugestão para escrever na imagem:
 - Subtítulo: inspirado em new_subtitle — complementar, empático e inédito.
 - CTA: inspirada em new_cta — natural, coerente e sem repetições.
 
+Ao trazer a sugestão de texto para escrever na imagem, traga também a localização de cada elemento (título, subtítulo e CTA) na imagem, para facilitar a aplicação pelo designer. Traga-os em formato de css, com os valores de top, left, bottom, right, font-size e color.
+
 Descrição para gerar a imagem (sem texto):
 - Crie uma imagem moderna e realista que traduza visualmente o tema do post, mostrando cenas, ambientes ou ações autênticas que representem o assunto.
 - Exemplo:
@@ -1264,10 +1362,11 @@ Ao gerar o conteúdo:
 ⚙️ FORMATO DE SAÍDA (OBRIGATÓRIO):
 A resposta deve ser entregue estritamente em formato JSON, seguindo exatamente esta estrutura:
 {{
-  "feed_html": "",
-  "feed_image_description": "",
-  "story_html": "",
-  "reels_html": "",
+  "feed_html": "[ Trazer formatado em HTML com parágrafos <p> e quebras de linha <br> onde necessário.]",
+  "feed_image_description": "[Descrição da imagem do feed]",
+  "feed_image_text": {self.text_characteristics()},
+  "story_html": "[ Trazer formatado em HTML com parágrafos <p> e quebras de linha <br> onde necessário.]",
+  "reels_html": "[ Trazer formatado em HTML com parágrafos <p> e quebras de linha <br> onde necessário.]",
 }}
 
 Apenas os campos "feed_html", "story_html" e "reels_html" devem vir formatados como HTML, deixando sempre tópicos e títulos em negrito para melhorar a UI, OBRIGATORIAMENTE.

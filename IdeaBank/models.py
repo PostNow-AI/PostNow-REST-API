@@ -93,6 +93,11 @@ class PostIdea(models.Model):
         null=True,
         help_text="Descrição da imagem usada para geração (opcional)"
     )
+    image_text = models.JSONField(
+        blank=True,
+        null=True,
+        help_text="Texto sugerido para a imagem com texto, posições e estilos"
+    )
 
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)

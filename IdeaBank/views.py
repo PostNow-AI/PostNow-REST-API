@@ -121,7 +121,8 @@ def generate_post_idea(request):
         # Create the post idea with generated content
         post_idea = PostIdea.objects.create(
             post=post,
-            content=result['content']
+            content=result['content'],
+            image_text=result.get('image_text', None)
         )
 
         # Generate image if requested

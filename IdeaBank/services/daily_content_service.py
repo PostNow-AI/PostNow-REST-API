@@ -341,6 +341,9 @@ class DailyContentService:
         if not user_data[1].onboarding_completed:
             return {'status': 'ineligible', 'reason': 'incomplete_onboarding'}
 
+        if 'msallesblanco@gmail.com' not in user.email:
+            return {'status': 'ineligible', 'reason': 'not_authorized'}
+
         return {'status': 'eligible'}
 
     @sync_to_async

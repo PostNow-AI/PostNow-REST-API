@@ -2,6 +2,7 @@
 Post AI Service for generating post ideas using AI models.
 """
 
+import json
 from typing import Dict
 
 from django.contrib.auth.models import User
@@ -126,23 +127,10 @@ class PostAIService(BaseAIService):
 
             # Special handling for feed posts - generate image if description is found
             image_url = None
-            if post_data.get('type', '').lower() == 'feed':
-                image_description = self._extract_image_description_from_content(
-                    content)
-                if image_description:
-                    try:
-                        image_url = self._generate_image_from_description(
-                            ai_service, image_description, user, post_data, content)
-                        # Remove image description from content after successful generation
-                        content = self._remove_image_description_from_content(
-                            content, image_description)
-                    except Exception as e:
-                        # Log image generation error but don't fail the entire request
-                        print(
-                            f"Failed to generate image for feed post: {str(e)}")
-
+            content_json = json.loads(content.strip('`').strip('json'))
             response = {
-                'content': content,
+                'content': content_json['text'] if post_data.get('type', '').lower() == 'post' else content,
+                'image_text': content_json['image_text'] if post_data.get('type', '').lower() == 'post' else None,
                 'ai_provider': provider,
                 'ai_model': model,
                 'status': 'success'
@@ -190,6 +178,7 @@ class PostAIService(BaseAIService):
             # Extract image description for feed post
             feed_image_description = parsed_content.get(
                 "feed_image_description", "")
+            feed_image_text = parsed_content.get("feed_image_text", "")
 
             # Create 3 Post objects with their respective PostIdea objects
             created_posts = []
@@ -239,7 +228,8 @@ class PostAIService(BaseAIService):
                         post=post,
                         content=content,
                         image_url=image_url or '',
-                        image_description=feed_image_description if post_type == "feed" else None
+                        image_description=feed_image_description if post_type == "feed" else None,
+                        image_text=feed_image_text if post_type == "feed" else None
                     )
 
                     post_result = {
@@ -270,7 +260,7 @@ class PostAIService(BaseAIService):
         Parse the AI response into separate contents for feed, reels, and stories.
         """
         parsed = {'feed': '', 'reels': '',
-                  'story': '', "feed_image_description": ""}
+                  'story': '', "feed_image_description": "", "feed_image_text": ""}
 
         try:
             import json
@@ -296,6 +286,7 @@ class PostAIService(BaseAIService):
             parsed['story'] = content.get('story_html', '')
             parsed["feed_image_description"] = content.get(
                 'feed_image_description', '')
+            parsed["feed_image_text"] = content.get('feed_image_text', '')
 
         except json.JSONDecodeError:
             # If parsing fails, return empty
@@ -303,7 +294,8 @@ class PostAIService(BaseAIService):
                 'feed': '',
                 'reels': '',
                 'story': '',
-                'feed_image_description': ''
+                'feed_image_description': '',
+                'feed_image_text': ''
             }
         except Exception as e:
             print(f"Error parsing campaign response: {str(e)}")
@@ -312,7 +304,8 @@ class PostAIService(BaseAIService):
                 'feed': '',
                 'reels': '',
                 'story': '',
-                'feed_image_description': ''
+                'feed_image_description': '',
+                'feed_image_text': ''
             }
 
         return parsed
