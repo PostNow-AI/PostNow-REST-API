@@ -40,7 +40,7 @@ class PromptService:
                     "text_transform": "[uppercase para impacto, capitalize para elegância, ou none]",
                     "effects": {
                         "text_shadow": "[SOMBRA PROFISSIONAL SUTIL: 0 2px 8px rgba(0,0,0,0.3) - NÃO usar sombras muito escuras ou grossas que parecem amadoras]",
-                        "background": "[FUNDO GLASSMORPHISM PROFISSIONAL: rgba(255,255,255,0.1) com backdrop-filter: blur(10px) - FUNDO QUASE IMPERCEPTÍVEL, apenas para criar hierarquia visual]",
+                        "background": "[FUNDO GLASSMORPHISM ULTRA SUTIL: rgba(255,255,255,0.05) com backdrop-filter: blur(8px) - FUNDO QUASE INVISÍVEL, apenas uma leve neblina para legibilidade]",
                         "padding": "[PADDING SISTEMA 8px: Use 16px 24px (múltiplos de 8) para espaçamento interno profissional e consistente]",
                         "border": "[BORDA SUTIL OPCIONAL: 1px solid rgba(255,255,255,0.2) apenas se necessário para definição]",
                         "border_radius": "[RAIO CONSISTENTE: 12px para modernidade ou 8px para conservadorismo - MANTER CONSISTÊNCIA em todos elementos]",
@@ -68,7 +68,7 @@ class PromptService:
                     "text_transform": "[lowercase, capitalize ou none - mais sutil que título]",
                     "effects": {
                         "text_shadow": "[Sombra OBRIGATÓRIA - ex: 2px 2px 4px rgba(0,0,0,0.6) para garantir contraste]",
-                        "background": "[FUNDO SUTIL OBRIGATÓRIO - Use APENAS rgba(0,0,0,0.25) para textos em fundos claros ou rgba(255,255,255,0.25) para textos em fundos escuros - DEVE ser MUITO DISCRETO e TRANSPARENTE, apenas uma leve sombra para legibilidade]",
+                        "background": "[FUNDO ULTRA SUTIL OBRIGATÓRIO - Use APENAS rgba(0,0,0,0.15) para textos em fundos claros ou rgba(255,255,255,0.15) para textos em fundos escuros - DEVE ser QUASE INVISÍVEL, apenas uma leve neblina para legibilidade]",
                         "padding": "[Espaçamento interno MÍNIMO - máximo 6px 10px para área de leitura SEM criar blocos visíveis]",
                         "border_radius": "[Raio da borda - ex: 6px para suavidade]",
                         "backdrop_filter": "[Filtro blur SEMPRE OBRIGATÓRIO - mínimo blur(10px) para glassmorphism - CRÍTICO para legibilidade]",
@@ -80,9 +80,9 @@ class PromptService:
                     "text": "[TEXTO DO CTA - chamada para ação clara, atrativa e urgente]",
                     "position": {
                         "top": "[POSIÇÃO EM px - OBRIGATÓRIO: posicione no terço inferior, com espaçamento mínimo de 60-100px da posição bottom do subtítulo, nunca sobrepor textos]",
-                        "left": "[POSIÇÃO EM px - centralizado ou estratégicamente posicionado, mínimo 20px da borda]",
-                        "right": "[POSIÇÃO EM px - margem equilibrada, mínimo 20px da borda]",
-                        "bottom": "[POSIÇÃO EM px - margem inferior segura, mínimo 40px da borda inferior da imagem]"
+                        "left": "[POSIÇÃO EM px - MARGENS GENEROSAS OBRIGATÓRIAS: mínimo 60px da borda esquerda para respiração visual adequada - NUNCA menos de 60px]",
+                        "right": "[POSIÇÃO EM px - MARGENS GENEROSAS OBRIGATÓRIAS: mínimo 60px da borda direita para evitar cortes em dispositivos móveis - NUNCA menos de 60px]",
+                        "bottom": "[POSIÇÃO EM px - margem inferior segura, mínimo 60px da borda inferior da imagem para compatibilidade mobile]"
                     },
                     "typography": {
                         "font_family": "[MESMA FAMÍLIA para consistência - EVITAR fontes diferentes que quebram coerência visual]",
@@ -110,13 +110,15 @@ class PromptService:
                 "sistema_espacamento_8px": "SISTEMA DE ESPAÇAMENTO PROFISSIONAL: Use SEMPRE múltiplos de 8px (16, 24, 32, 40, 48, 56, 64px) para criar consistência visual matemática",
                 "hierarquia_vertical": "HIERARQUIA VISUAL PROFISSIONAL: Título (topo, dominante) → Subtítulo (meio, suporte) → CTA (base, ação) com espaçamentos proporcionais",
                 "regra_tercos": "REGRA DOS TERÇOS: Distribua elementos nos terços da imagem - título no terço superior, subtítulo no meio, CTA no terço inferior",
-                "margens_profissionais": "MARGENS GENEROSAS: Mínimo 40px de todas as bordas (equivalente a 5 unidades do sistema 8px) para respiração visual",
+                "margens_profissionais": "MARGENS GENEROSAS OBRIGATÓRIAS: Mínimo 60px de todas as bordas para CTA, 40px para títulos e subtítulos. NUNCA encostar elementos nas bordas - sempre manter respiração visual adequada para dispositivos móveis",
                 "alinhamento_grid": "ALINHAMENTO PRECISO: Todos elementos devem seguir uma grade invisível - alinhamentos à esquerda, centro ou direita consistentes",
                 "contraste_acessibilidade": "CONTRASTE ACESSÍVEL: Mínimo 4.5:1 para texto normal, 3:1 para texto grande - usar ferramentas de contraste para validar",
                 "tipografia_escala": "ESCALA TIPOGRÁFICA HARMONIOSA: Proporção 1.25 (título 32px → subtítulo 24px → CTA 16px) para hierarquia matemática",
                 "efeitos_sutis": "EFEITOS PROFISSIONAIS: Sombras leves (0 2px 8px rgba(0,0,0,0.1)), blur glassmorphism (10px), bordas consistentes (8px ou 12px)",
                 "paleta_restrita": f"PALETA PROFISSIONAL: Use SEMPRE as cores da paleta do cliente ({self.get_creator_profile_data().get('color_palette', 'Não definida')}) como base. Máximo 3 cores + neutros (branco/cinza/preto) - usar ferramenta de cores para harmonia",
-                "consistencia_visual": "CONSISTÊNCIA ABSOLUTA: Mesmo sistema de cores, tipografia, espaçamentos e efeitos em todos elementos para criar identidade coesa"
+                "consistencia_visual": "CONSISTÊNCIA ABSOLUTA: Mesmo sistema de cores, tipografia, espaçamentos e efeitos em todos elementos para criar identidade coesa",
+                "mobile_first_positioning": "POSICIONAMENTO MOBILE-FIRST: Todos elementos devem ter margens seguras para visualização móvel - CTA centralizado com 60px de margem, textos com 40px mínimo das bordas",
+                "safe_area_compliance": "ÁREA SEGURA OBRIGATÓRIA: Reserve 60px das bordas para CTAs, 40px para títulos/subtítulos. NUNCA posicione elementos importantes próximos às bordas"
             },
             "🚫 ERROS DE DESIGN A EVITAR": {
                 "padding_inconsistente": "❌ EVITAR: Paddings aleatórios (7px, 13px, 19px) ✅ USAR: Sistema 8px (8, 16, 24, 32px)",
@@ -126,7 +128,10 @@ class PromptService:
                 "espacos_apertados": "❌ EVITAR: Elementos colados (10px entre título/subtítulo) ✅ USAR: Espaçamento generoso (40-60px)",
                 "all_caps_excessivo": "❌ EVITAR: TODO TEXTO EM MAIÚSCULA ✅ USAR: Apenas CTA em maiúscula para destaque",
                 "bordas_grossas": "❌ EVITAR: Bordas espessas (5px solid) ✅ USAR: Bordas finas (1px) ou nenhuma borda",
-                "gradientes_chamativos": "❌ EVITAR: Gradientes rainbow multicoloridos ✅ USAR: Gradientes sutis de 2 cores harmônicas"
+                "gradientes_chamativos": "❌ EVITAR: Gradientes rainbow multicoloridos ✅ USAR: Gradientes sutis de 2 cores harmônicas",
+                "cta_grudado_borda": "❌ EVITAR: CTA colado nas bordas (menos de 60px) ✅ USAR: CTA centralizado com margens generosas de pelo menos 60px",
+                "fundos_muito_visiveis": "❌ EVITAR: Fundos de texto muito opacos ou coloridos ✅ USAR: Fundos quase transparentes (rgba com opacidade máxima 0.2)",
+                "elementos_sobrepostos": "❌ EVITAR: Textos sobrepostos ou muito próximos ✅ USAR: Espaçamento vertical generoso (mínimo 48px entre elementos)"
             }}
 
     def build_json_text_prompt(self, content: str = None) -> Dict:
