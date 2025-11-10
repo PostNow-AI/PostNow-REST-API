@@ -29,13 +29,111 @@ def extract_base64_image(data_url: str) -> bytes:
     Extracts and decodes base64 image data from a data URL.
     Returns image bytes suitable for Gemini.
     """
-    # Example data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
-    match = re.match(r"^data:image/(png|jpeg);base64,(.*)$", data_url)
-    if match:
-        base64_str = match.group(2)
+    def fix_base64_padding(base64_str: str) -> str:
+        """Fix base64 string padding to make it valid."""
+        # Remove any whitespace
+        base64_str = base64_str.strip()
+        # Add padding if needed (base64 length must be multiple of 4)
+        missing_padding = len(base64_str) % 4
+        if missing_padding:
+            base64_str += '=' * (4 - missing_padding)
+        return base64_str
+
+    try:
+        # Example data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+        match = re.match(
+            r"^data:image/(png|jpeg|jpg|webp);base64,(.*)$", data_url)
+        if match:
+            base64_str = match.group(2)
+            base64_str = fix_base64_padding(base64_str)
+            return base64.b64decode(base64_str)
+
+        # If not a data URL, assume it's plain base64
+        base64_str = fix_base64_padding(data_url)
         return base64.b64decode(base64_str)
-    # If not a data URL, assume it's plain base64
-    return base64.b64decode(data_url)
+
+    except Exception as e:
+        print(f"❌ Error decoding base64 image: {str(e)}")
+        # Return empty bytes if decoding fails
+        return b""
+
+
+def safe_base64_decode(base64_string: str) -> bytes:
+    """
+    Safely decode base64 string with proper padding.
+    Returns decoded bytes or raises ValueError if invalid.
+    """
+    if not base64_string:
+        raise ValueError("Empty base64 string")
+
+    # Remove any whitespace
+    base64_string = base64_string.strip()
+
+    # Add padding if necessary
+    missing_padding = len(base64_string) % 4
+    if missing_padding:
+        base64_string += '=' * (4 - missing_padding)
+
+    try:
+        return base64.b64decode(base64_string)
+    except Exception as e:
+        raise ValueError(f"Invalid base64 string: {str(e)}")
+
+
+def download_image_from_url(url: str) -> bytes:
+    """
+    Download image from URL and return image bytes.
+    Handles both HTTP/HTTPS URLs and S3 URLs.
+    """
+    try:
+        import requests
+
+        # Validate URL
+        if not url or not isinstance(url, str):
+            raise ValueError("Invalid URL provided")
+
+        # Check if it's a valid URL
+        if not (url.startswith('http://') or url.startswith('https://')):
+            raise ValueError("URL must start with http:// or https://")
+
+        # Download the image
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()  # Raises an HTTPError for bad responses
+
+        # Validate content type
+        content_type = response.headers.get('content-type', '').lower()
+        if not content_type.startswith('image/'):
+            print(
+                f"⚠️ Warning: Content type is {content_type}, expected image/*")
+
+        return response.content
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error downloading image from URL: {str(e)}")
+        raise ValueError(f"Failed to download image: {str(e)}")
+    except Exception as e:
+        print(f"❌ Unexpected error downloading image: {str(e)}")
+        raise ValueError(f"Unexpected error: {str(e)}")
+
+
+def get_image_data(image_input: str) -> bytes:
+    """
+    Get image data from either a URL or base64 string.
+    Returns image bytes suitable for Gemini.
+    """
+    try:
+        # Check if it's a URL
+        if image_input.startswith(('http://', 'https://')):
+            print(f"🌐 Downloading image from URL: {image_input[:50]}...")
+            return download_image_from_url(image_input)
+        else:
+            # Assume it's base64 data
+            print("🔢 Decoding base64 image data...")
+            return extract_base64_image(image_input)
+
+    except Exception as e:
+        print(f"❌ Error getting image data: {str(e)}")
+        return b""
 
 
 class GeminiService(BaseAIService):
@@ -157,31 +255,100 @@ class GeminiService(BaseAIService):
 
         return serializable_history
 
-    def extract_base64_image(data_url: str) -> bytes:
-        """
-        Extracts and decodes base64 image data from a data URL.
-        Returns image bytes suitable for Gemini.
-        """
-        # Example data_url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
-        match = re.match(r"^data:image/(png|jpeg);base64,(.*)$", data_url)
-        if match:
-            base64_str = match.group(2)
-            return base64.b64decode(base64_str)
-        # If not a data URL, assume it's plain base64
-        return base64.b64decode(data_url)
+    def generate_text_for_image(self, prompt: str, user: User = None, existing_image: str = None, ) -> str:
+        """Generate descriptive text for an image using Gemini's chat API."""
+        compressed_data = ""
+
+        # Validate credits before generation
+        if user and user.is_authenticated:
+            model_name = 'gemini-2.5-flash'
+            if not self._validate_credits(user, model_name, 1):
+                raise ValueError("Créditos insuficientes para gerar texto")
+
+        # Flag to track if we should deduct credits
+        should_deduct_credits = user and user.is_authenticated
+
+        # Helper function to deduct credits after successful generation
+        def deduct_credits_for_text(description_suffix=""):
+            if should_deduct_credits:
+                try:
+                    self._deduct_credits(
+                        user, 'gemini-2.5-flash', 1, f"Gemini text generation{description_suffix} - {prompt[:50]}...")
+                except ImportError:
+                    print("⚠️ Could not deduct credits - AIModelService not available")
+
+        try:
+            # Validate existing_image before processing
+            if not existing_image:
+                raise ValueError("Imagem é obrigatória para geração de texto")
+
+            # Get image data (handles both URLs and base64)
+            image_data = get_image_data(existing_image)
+            if not image_data:
+                raise ValueError(
+                    "Falha ao obter dados da imagem (URL ou base64)")
+
+            client = genai.Client(
+                api_key=os.environ.get("GEMINI_API_KEY"),
+            )
+
+            contents = [
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_text(text=prompt),
+                        types.Part.from_bytes(
+                            mime_type="image/jpeg",
+                            data=image_data,
+                        )
+                    ],
+                ),
+            ]
+
+            generate_content_config = types.GenerateContentConfig(
+                response_modalities=[
+                    "TEXT",
+                ],
+            )
+
+            for chunk in client.models.generate_content_stream(
+                model='gemini-2.5-flash',
+                contents=contents,
+                config=generate_content_config,
+            ):
+                # Skip if chunk is not a response object with candidates
+                if not hasattr(chunk, 'candidates') or chunk.candidates is None:
+                    continue
+                if (
+                    len(chunk.candidates) == 0
+                    or chunk.candidates[0].content is None
+                    or chunk.candidates[0].content.parts is None
+                    or len(chunk.candidates[0].content.parts) == 0
+                ):
+                    continue
+                part = chunk.candidates[0].content.parts[0]
+                if hasattr(part, 'text') and part.text:
+                    compressed_data += part.text
+
+            if compressed_data:
+                # Deduct credits for successful text generation
+                deduct_credits_for_text(" (image description)")
+
+                return compressed_data
+            else:
+                print("❌ No text generated from Gemini")
+        except Exception as e:
+            error_str = str(e)
+            print(f"❌ Exception in text generation: {error_str}")
 
     def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using Gemini's chat API with conversation history support."""
         compressed_data = ""
 
-        # Enhance prompt with post data and idea content
-        enhanced_prompt = self._enhance_image_prompt(
-            prompt, post_data, idea_content)
-
         # Validate credits before generation
         if user and user.is_authenticated:
             from .ai_model_service import AIModelService
-            model_name = 'gemini-imagen'
+            model_name = 'gemini-2.5-flash'
             if not AIModelService.validate_image_credits(user, model_name, 1):
                 raise ValueError("Créditos insuficientes para gerar imagem")
 
@@ -194,7 +361,7 @@ class GeminiService(BaseAIService):
                 try:
                     from .ai_model_service import AIModelService
                     AIModelService.deduct_image_credits(
-                        user, 'gemini-imagen', 1, f"Gemini image generation{description_suffix} - {prompt[:50]}...")
+                        user, 'gemini-2.5-flash', 1, f"Gemini image generation{description_suffix} - {prompt[:50]}...")
                 except ImportError:
                     print("⚠️ Could not deduct credits - AIModelService not available")
 
@@ -223,25 +390,44 @@ class GeminiService(BaseAIService):
                     aspect_ratio = "9:16" if post_data and post_data.get('type') in [
                         'story', 'reel'] else "4:5"
 
+                    # Prepare image parts with error handling
+                    image_parts = []
+
+                    # Add logo if available
+                    if logo:
+                        try:
+                            logo_data = safe_base64_decode(logo)
+                            image_parts.append(types.Part.from_bytes(
+                                mime_type="image/jpeg",
+                                data=logo_data,
+                            ))
+                        except ValueError as e:
+                            print(f"⚠️ Failed to decode logo base64: {e}")
+
+                    # Add current image if available
+                    if current_image:
+                        try:
+                            current_image_data = extract_base64_image(
+                                current_image)
+                            image_parts.append(types.Part.from_bytes(
+                                mime_type="image/jpeg",
+                                data=current_image_data,
+                            ))
+                        except ValueError as e:
+                            print(
+                                f"⚠️ Failed to decode current image base64: {e}")
+
+                    # Add text prompt
+                    image_parts.append(types.Part.from_text(text=prompt))
+
                     contents = [
                         types.Content(
                             role="user",
-                            parts=[
-                                part for part in [
-                                    types.Part.from_bytes(
-                                        mime_type="image/jpeg",
-                                        data=base64.b64decode(logo),
-                                    ) if logo else None,
-                                    types.Part.from_bytes(
-                                        mime_type="image/jpeg",
-                                        data=base64.b64decode(
-                                            extract_base64_image(current_image)),
-                                    ) if current_image else None,
-                                    types.Part.from_text(text=prompt),
-                                ] if part is not None
-                            ],
+                            parts=image_parts,
                         ),
                     ]
+
+                    print(prompt)
 
                     generate_content_config = types.GenerateContentConfig(
                         response_modalities=[

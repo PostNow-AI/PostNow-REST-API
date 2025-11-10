@@ -127,7 +127,11 @@ class PostAIService(BaseAIService):
 
             # Special handling for feed posts - generate image if description is found
             image_url = None
-            content_json = json.loads(content.strip('`').strip('json'))
+            # Handle content type - could be string or already parsed dict
+            if isinstance(content, str):
+                content_json = json.loads(content.strip('`').strip('json'))
+            else:
+                content_json = content
             response = {
                 'content': content_json['text'] if post_data.get('type', '').lower() == 'post' else content,
                 'image_text': content_json['image_text'] if post_data.get('type', '').lower() == 'post' else None,
@@ -166,14 +170,17 @@ class PostAIService(BaseAIService):
 
             # Deduct credits after successful generation (skip for unauthenticated users)
             if user and user.is_authenticated:
+                # Handle token estimation for both string and dict content
+                content_for_tokens = full_content if isinstance(
+                    full_content, str) else str(full_content)
                 actual_tokens = self._estimate_tokens(
-                    prompt + full_content, model)
+                    prompt + content_for_tokens, model)
                 self._deduct_credits(
                     user, actual_tokens, model, f"Geração de campanha - {post_data.get('name', 'Campaign')}")
 
             # Parse the AI response into 3 separate contents
-            parsed_content = self._parse_campaign_response(
-                full_content.strip('`').strip('json'))
+            # The _parse_campaign_response method now handles both string and dict inputs
+            parsed_content = self._parse_campaign_response(full_content)
 
             # Extract image description for feed post
             feed_image_description = parsed_content.get(
@@ -255,7 +262,7 @@ class PostAIService(BaseAIService):
         except Exception as e:
             raise Exception(f"Failed to generate campaign content: {str(e)}")
 
-    def _parse_campaign_response(self, full_content: str) -> Dict[str, str]:
+    def _parse_campaign_response(self, full_content) -> Dict[str, str]:
         """
         Parse the AI response into separate contents for feed, reels, and stories.
         """
@@ -265,20 +272,28 @@ class PostAIService(BaseAIService):
         try:
             import json
 
-            # Remove markdown code block markers if present
-            content_str = full_content.strip()
-            if content_str.startswith('```json'):
-                content_str = content_str[7:]  # Remove ```json
-            elif content_str.startswith('```'):
-                content_str = content_str[3:]  # Remove ```
+            # Handle both dict and string inputs
+            if isinstance(full_content, dict):
+                content = full_content
+            elif isinstance(full_content, str):
+                # Remove markdown code block markers if present
+                content_str = full_content.strip()
+                if content_str.startswith('```json'):
+                    content_str = content_str[7:]  # Remove ```json
+                elif content_str.startswith('```'):
+                    content_str = content_str[3:]  # Remove ```
 
-            if content_str.endswith('```'):
-                content_str = content_str[:-3]  # Remove trailing ```
+                if content_str.endswith('```'):
+                    content_str = content_str[:-3]  # Remove trailing ```
 
-            content_str = content_str.strip()
+                content_str = content_str.strip()
 
-            # Parse JSON
-            content = json.loads(content_str)
+                # Parse JSON
+                content = json.loads(content_str)
+            else:
+                # Try to convert to string and parse
+                content_str = str(full_content).strip()
+                content = json.loads(content_str)
 
             # Extract fields
             parsed['feed'] = content.get('feed_html', '')
@@ -556,16 +571,23 @@ class PostAIService(BaseAIService):
             # If cleaning fails, return original content
             return content
 
-    def _generate_content_with_ai(self, ai_service, prompt: str, post_data: dict = None) -> str:
+    def _generate_content_with_ai(self, ai_service, prompt: str, post_data: dict = None):
         """Generate content using the AI service with direct API request."""
         try:
             # Use the AI service's direct _make_ai_request method with our sophisticated prompt
             response_text = ai_service._make_ai_request(
                 prompt, ai_service.model_name, user=self.user, post_data=post_data)
 
-            if response_text and response_text.strip():
+            # Handle both string and dict responses
+            if isinstance(response_text, dict):
+                # If the AI service returned a dict, return it as-is
+                return response_text
+            elif isinstance(response_text, str) and response_text.strip():
                 cleaned_content = response_text.strip()
                 return cleaned_content
+            elif response_text is not None:
+                # Try to convert to string if it's not None
+                return str(response_text).strip()
             else:
                 raise Exception("Empty response from AI service")
 

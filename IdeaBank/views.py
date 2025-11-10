@@ -25,7 +25,9 @@ from .serializers import (
     PostWithIdeasSerializer,
 )
 from .services.daily_content_service import DailyContentService
+from .services.gemini_service import GeminiService
 from .services.post_ai_service import PostAIService
+from .services.prompt_service import PromptService
 
 logger = logging.getLogger(__name__)
 
@@ -109,21 +111,24 @@ def generate_post_idea(request):
         include_image = post_data.get('include_image', False)
 
         # Create the post
-        post = Post.objects.create(user=request.user, **post_data)
 
         # Generate content using AI
         post_ai_service = PostAIService()
+        gemini_service = GeminiService()
         result = post_ai_service.generate_post_content(
             user=request.user,
             post_data=post_data,
         )
 
+        post = Post.objects.create(user=request.user, **post_data)
         # Create the post idea with generated content
         post_idea = PostIdea.objects.create(
             post=post,
             content=result['content'],
-            image_text=result.get('image_text', None)
+            # image_text=result.get('image_text', None)
         )
+
+        prompt_service = PromptService()
 
         # Generate image if requested
         if include_image:
@@ -145,6 +150,28 @@ def generate_post_idea(request):
                 )
                 post_idea.image_url = image_url
                 post_idea.save()
+
+                print(f"Generated image URL: {post_idea.content}")
+
+                image_text_prompt = prompt_service.build_json_text_prompt(
+                    content=post_idea.content)
+
+                print(f"Generated image text prompt: {image_text_prompt}")
+
+                # Generate image text using Gemini
+                image_text_result = gemini_service.generate_text_for_image(
+                    user=request.user,
+                    prompt=image_text_prompt,
+                    existing_image=image_url
+                )
+
+                print(f"Generated image text: {image_text_result.strip(
+                    '`').strip('json')}")
+
+                post_idea.image_text = image_text_result.strip(
+                    '`').strip('json')
+                post_idea.save()
+
             except Exception as image_error:
                 print(f"Warning: Failed to generate image: {image_error}")
                 # Continue without image - don't fail the entire request
