@@ -11,197 +11,115 @@ class PromptService:
             'color_palette', 'Não definida')
         return {
             "🎨 DIRETRIZES DE DESIGN PROFISSIONAL (OBRIGATÓRIO)": {
-                "visual_hierarchy": "HIERARQUIA VISUAL CLARA: Título grande e dominante → Subtítulo médio → CTA pequeno mas visível",
-                "spacing_system": "SISTEMA DE ESPAÇAMENTO PROFISSIONAL: Use múltiplos de 8px (8, 16, 24, 32, 40px) para paddings e margins consistentes",
-                "typography_scale": "ESCALA TIPOGRÁFICA HARMONIOSA: Título (28-36px) → Subtítulo (18-24px) → CTA (14-18px) com proporções matemáticas",
-                "color_psychology": "PALETA PROFISSIONAL: Use OBRIGATORIAMENTE as cores da paleta do cliente como base principal. Máximo 3 cores principais + neutros (branco/preto/cinzas). Evitar cores muito saturadas ou conflitantes",
-                "whitespace_breathing": "ESPAÇO EM BRANCO GENEROSO: 40-60px entre elementos principais, 20-30px entre seções relacionadas",
-                "consistency_rules": "CONSISTÊNCIA VISUAL: Mesma família tipográfica, bordas com raios iguais (8px ou 12px), alinhamentos precisos",
-                "professional_effects": "EFEITOS SUTIS: Sombras leves (0 2px 8px rgba(0,0,0,0.1)), bordas suaves, gradientes discretos",
-                "brand_coherence": "COERÊNCIA DE MARCA: Elementos visuais devem criar uma identidade consistente e confiável"
+                "layout_system": "SISTEMA DE LAYOUT FLEXBOX: Use 'display: flex' com 'flex-direction: column' para organizar os elementos (título, subtítulo, CTA) de forma limpa e alinhada. Use 'justify-content' e 'align-items' para um posicionamento perfeito.",
+                "visual_hierarchy": "HIERARQUIA VISUAL CLARA: Título grande e dominante → Subtítulo médio → CTA pequeno mas visível. Use font-size e font-weight para criar essa hierarquia.",
+                "spacing_system": "SISTEMA DE ESPAÇAMENTO PROFISSIONAL: Use múltiplos de 8px (8, 16, 24, 32px) para paddings e margins para consistência.",
+                "typography_scale": "ESCALA TIPOGRÁFICA HARMONIOSA: Use uma escala consistente (ex: 32px, 20px, 16px) para uma aparência profissional.",
+                "color_psychology": f"PALETA PROFISSIONAL: Use OBRIGATORIAMENTE as cores da paleta do cliente ({color_palette}) como base. Use cores de alto contraste para o texto para garantir a legibilidade.",
+                "whitespace_breathing": "ESPAÇO EM BRANCO GENEROSO: Use padding no container principal (ex: '40px') e 'gap' (ex: '16px') entre os elementos de texto para criar um design limpo e arejado.",
+                "professional_effects": "EFEITOS SUTIS E MODERNOS: Use 'box-shadow' suave para o container ou 'text-shadow' delicado para o texto. Gradientes sutis no fundo do container são bem-vindos.",
             },
-            "🚨 INSTRUÇÃO_CRÍTICA_POSICIONAMENTO": "NUNCA SOBREPONHA TEXTOS! Cada elemento (título, subtítulo, CTA) deve ter posicionamento único e espaçamento adequado. TÍTULO: posição fixa no topo (40-80px), SUBTÍTULO: sempre 120-160px ABAIXO do título, CTA: sempre 80-120px ABAIXO do subtítulo. CALCULE matemáticamente as posições para evitar sobreposição.",
-            "🚨 INSTRUÇÃO_CRÍTICA_TEXTO_COMPLETO": "TODOS OS TEXTOS DEVEM SER RENDERIZADOS COMPLETOS E INTEIROS! NUNCA corte palavras no meio, NUNCA deixe texto incompleto, NUNCA fragmente frases. Se o texto for longo, diminua o font-size mas mantenha o texto completo e legível.",
-            "🚨 INSTRUÇÃO_CRÍTICA_LEGIBILIDADE": "TODOS OS TEXTOS DEVEM SER 100% LEGÍVEIS SEM fundos visíveis! Use APENAS text-shadow forte para legibilidade. PROIBIDO criar qualquer fundo, caixa, bloco ou área colorida atrás do texto. O texto deve aparecer diretamente sobre a imagem com sombras fortes para contraste.",
-            "🚨 INSTRUÇÃO_ANTI_CAIXAS": "NUNCA CRIAR CAIXAS, BLOCOS, FUNDOS OU ÁREAS COLORIDAS! O texto deve aparecer limpo sobre a imagem, usando apenas sombras para legibilidade. Qualquer fundo visible é PROIBIDO.",
+            "🚨 INSTRUÇÃO_CRÍTICA_LEGIBILIDADE": "GARANTA 100% DE LEGIBILIDADE. O texto DEVE ser fácil de ler. Use um fundo de container (cor sólida com transparência ou gradiente sutil) para separar o texto da imagem de fundo e garantir o contraste.",
+            "🚨 INSTRUÇÃO_CRÍTICA_LAYOUT": "NÃO SOBREPONHA TEXTOS. Use um único container com layout flexbox ('display: flex', 'flex-direction: column') para empilhar os elementos de texto verticalmente com espaçamento adequado ('gap').",
             "feed_image_text": {
-                "title": {
-                    "text": "[TEXTO DO TÍTULO - impactante e conciso, máximo 3-4 palavras por linha, máximo 2 linhas. Exemplo: 'KOTLIN:' na primeira linha, 'DESENVOLVIMENTO ÁGIL' na segunda linha]",
+                "main_container": {
+                    "comment": "Este é o container principal que envolve todos os elementos de texto. Use-o para posicionar o bloco de texto na imagem e aplicar um fundo para legibilidade.",
                     "position": {
-                        "top": "[POSIÇÃO FIXA: 60px do topo da imagem - NUNCA menos que 40px, NUNCA mais que 80px]",
-                        "left": "[POSIÇÃO FIXA: 40px da borda esquerda - margem consistente e segura]",
-                        "right": "[POSIÇÃO FIXA: 40px da borda direita - margem consistente e segura]",
-                        "bottom": "[CALCULADO AUTOMATICAMENTE: top + font-size + line-height + 40px de margem inferior = posição onde o subtítulo deve começar]"
+                        "top": "40px",
+                        "left": "40px",
+                        "right": "40px",
+                        "bottom": "auto"
                     },
-                    "typography": {
-                        "font_family": "[FONTES PROFISSIONAIS PREMIUM: Inter (corporativo), Roboto (clean), Montserrat (moderno), Poppins (friendly), Open Sans (legível) - EVITAR fontes decorativas como Dancing Script para títulos principais]",
-                        "font_size": "[ESCALA PROFISSIONAL: 28-36px para títulos principais - usar números pares (28, 30, 32, 34, 36)]",
-                        "font_weight": "[PESO BALANCEADO: 600-700 para elegância profissional - EVITAR 800-900 que parecem agressivos]",
-                        "line_height": "[ALTURA OTIMIZADA: 1.1-1.3 para títulos (condensado mas legível)]",
-                        "letter_spacing": "[ESPAÇAMENTO REFINADO: -0.5px a 0.5px - valores sutis para elegância]"
+                    "style": {
+                        "display": "flex",
+                        "flex-direction": "column",
+                        "align-items": "flex-start",
+                        "gap": "12px",
+                        "padding": "24px",
+                        "background": "rgba(0, 0, 0, 0.45)",
+                        "border-radius": "12px",
+                        "box-shadow": "0 6px 24px rgba(0, 0, 0, 0.25)",
+                        "backdrop-filter": "blur(10px)"
                     },
-                    "color": "[COR PRINCIPAL EM HEX - alto contraste com fundo para legibilidade]",
-                    "text_align": "[center, left ou right - baseado no layout e composição]",
-                    "text_transform": "[uppercase para impacto, capitalize para elegância, ou none]",
-                    "effects": {
-                        "text_shadow": "[SOMBRA FORTE PARA LEGIBILIDADE: 2px 2px 8px rgba(0,0,0,0.8), 0px 0px 4px rgba(0,0,0,0.6) - múltiplas sombras para máximo contraste SEM fundos visíveis]",
-                        "background": "[FUNDO INVISÍVEL: NENHUM fundo sólido ou visible - apenas text-shadow para legibilidade. Se absolutamente necessário, use rgba(0,0,0,0.02) - QUASE TRANSPARENTE]",
-                        "padding": "[PROIBIDO: Não usar padding - isso cria caixas visíveis. Texto deve ser renderizado sem área de fundo]",
-                        "border": "[BORDA SUTIL OPCIONAL: 1px solid rgba(255,255,255,0.2) apenas se necessário para definição]",
-                        "border_radius": "[PROIBIDO: Não usar border-radius - indica presença de caixa/fundo. Texto deve ser limpo]",
-                        "backdrop_filter": "[PROIBIDO: Não usar backdrop-filter - apenas text-shadow para legibilidade]",
-                        "opacity": "[OPACIDADE BALANCEADA: 0.95-1.0 para visibilidade sem perder sutileza]"
-                    }
-                },
-                "subtitle": {
-                    "text": "[TEXTO DO SUBTÍTULO - frase completa e informativa, máximo 8-10 palavras, deve caber em 1-2 linhas sem fragmentação]",
-                    "position": {
-                        "top": "[POSIÇÃO CALCULADA: Título top (60px) + título font-size (32px) + título line-height + 120px de espaçamento = aproximadamente 220px do topo]",
-                        "left": "[POSIÇÃO CONSISTENTE: 40px da borda esquerda - igual ao título]",
-                        "right": "[POSIÇÃO CONSISTENTE: 40px da borda direita - igual ao título]",
-                        "bottom": "[CALCULADO: top do subtítulo + font-size + line-height + 80px de margem para o CTA]"
-                    },
-                    "typography": {
-                        "font_family": "[MESMA FAMÍLIA DO TÍTULO para consistência tipográfica profissional]",
-                        "font_size": "[ESCALA HARMONIOSA: 18-24px (sempre 6-12px menor que título) - usar números pares]",
-                        "font_weight": "[PESO EQUILIBRADO: 400-500 para subtítulo legível mas não competitivo com título]",
-                        "line_height": "[LEGIBILIDADE OTIMIZADA: 1.4-1.5 para leitura confortável de texto secundário]",
-                        "letter_spacing": "[REFINAMENTO SUTIL: 0px a 0.3px - menos espaçamento que título]"
-                    },
-                    "color": "[COR SECUNDÁRIA EM HEX - harmônica com título, pode ser mais suave]",
-                    "text_align": "[Alinhamento consistente com título para coesão visual]",
-                    "text_transform": "[lowercase, capitalize ou none - mais sutil que título]",
-                    "effects": {
-                        "text_shadow": "[SOMBRA FORTE OBRIGATÓRIA: 2px 2px 6px rgba(0,0,0,0.8), 0px 0px 3px rgba(0,0,0,0.7) - múltiplas sombras para compensar a ausência de fundo]",
-                        "background": "[FUNDO INVISÍVEL: NENHUM fundo sólido - apenas text-shadow forte para legibilidade. Se obrigatório, use rgba(0,0,0,0.03) - IMPERCEPTÍVEL]",
-                        "padding": "[PROIBIDO: Não usar padding - isso cria caixas. Texto limpo sem área de fundo]",
-                        "border_radius": "[PROIBIDO: Não usar - indica caixa. Texto limpo apenas]",
-                        "backdrop_filter": "[PROIBIDO: Não usar backdrop-filter - text-shadow é suficiente para legibilidade]",
-                        "opacity": "[Opacidade - 1.0 recomendado para máxima visibilidade]",
-                        "border": "[Borda opcional - ex: 1px solid rgba(255,255,255,0.2) para definição]"
-                    }
-                },
-                "cta": {
-                    "text": "[TEXTO DO CTA - chamada para ação clara, atrativa e urgente]",
-                    "position": {
-                        "top": "[POSIÇÃO EM px - OBRIGATÓRIO: posicione no terço inferior, com espaçamento mínimo de 60-100px da posição bottom do subtítulo, nunca sobrepor textos]",
-                        "left": "[POSIÇÃO EM px - MARGENS GENEROSAS OBRIGATÓRIAS: mínimo 60px da borda esquerda para respiração visual adequada - NUNCA menos de 60px]",
-                        "right": "[POSIÇÃO EM px - MARGENS GENEROSAS OBRIGATÓRIAS: mínimo 60px da borda direita para evitar cortes em dispositivos móveis - NUNCA menos de 60px]",
-                        "bottom": "[POSIÇÃO EM px - margem inferior segura, mínimo 60px da borda inferior da imagem para compatibilidade mobile]"
-                    },
-                    "typography": {
-                        "font_family": "[MESMA FAMÍLIA para consistência - EVITAR fontes diferentes que quebram coerência visual]",
-                        "font_size": "[TAMANHO BOTÃO PROFISSIONAL: 14-18px - grande o suficiente para ser clicável, pequeno o suficiente para ser elegante]",
-                        "font_weight": "[PESO BALANCEADO: 500-600 para autoridade sem agressividade]",
-                        "line_height": "[ALTURA COMPACTA: 1.0-1.2 para botões bem proporcionados]",
-                        "letter_spacing": "[ESPAÇAMENTO BOTÃO: 0.5px-1px para legibilidade em maiúsculas]"
-                    },
-                    "color": "[COR CONTRASTANTE EM HEX - que chame máxima atenção, ex: branco se fundo escuro]",
-                    "text_align": "[center recomendado para CTAs, ou conforme design]",
-                    "text_transform": "[uppercase recomendado para máximo impacto e urgência]",
-                    "effects": {
-                        "background": "[BOTÃO PROFISSIONAL: Gradiente sutil (linear-gradient(135deg, #667eea 0%, #764ba2 100%)) ou cor sólida elegante - EVITAR cores muito saturadas ou chamativas]",
-                        "padding": "[PADDING SISTEMA: 12px 32px (múltiplos de 8) para botão bem proporcionado e clicável]",
-                        "border_radius": "[RAIO MODERNO CONSISTENTE: 8px ou 12px (mesmo valor dos outros elementos) para coerência visual]",
-                        "text_shadow": "[SOMBRA MÍNIMA: 0 1px 2px rgba(0,0,0,0.1) - apenas para definição sutil]",
-                        "box_shadow": "[SOMBRA PROFISSIONAL: 0 4px 12px rgba(0,0,0,0.15) para elevação sutil - EVITAR sombras muito escuras]",
-                        "border": "[BORDA SUTIL OPCIONAL: 1px solid rgba(255,255,255,0.2) apenas se necessário]",
-                        "hover_effects": "[Efeitos de interação - ex: scale(1.05) para responsividade]",
-                        "gradient": "[Gradiente de fundo - ex: linear-gradient(45deg, #ff6b6b, #ff8e8e)]"
-                    }
+                    "children": [
+                        {
+                            "element": "title",
+                            "text": "[TEXTO DO TÍTULO - impactante e conciso, 2-5 palavras]",
+                            "style": {
+                                "font-family": "Inter, Roboto, sans-serif",
+                                "font_size": "32px",
+                                "font_weight": "700",
+                                "color": "#FFFFFF",
+                                "text-align": "left",
+                                "line-height": "1.2",
+                                "text-shadow": "0 2px 4px rgba(0,0,0,0.5)"
+                            }
+                        },
+                        {
+                            "element": "subtitle",
+                            "text": "[TEXTO DO SUBTÍTULO - frase de suporte, 8-12 palavras]",
+                            "style": {
+                                "font_family": "Inter, Roboto, sans-serif",
+                                "font_size": "18px",
+                                "font_weight": "400",
+                                "color": "#E0E0E0",
+                                "text-align": "left",
+                                "line-height": "1.5",
+                                "text-shadow": "0 1px 3px rgba(0,0,0,0.4)"
+                            }
+                        },
+                        {
+                            "element": "cta",
+                            "text": "[TEXTO DO CTA - chamada para ação clara, 2-4 palavras]",
+                            "style": {
+                                "font_family": "Inter, Roboto, sans-serif",
+                                "font_size": "16px",
+                                "font_weight": "600",
+                                "color": "#FFFFFF",
+                                "text-align": "center",
+                                "text-transform": "uppercase",
+                                "letter-spacing": "0.5px",
+                                "background": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                                "padding": "12px 24px",
+                                "border-radius": "8px",
+                                "margin-top": "16px",
+                                "align-self": "flex-start",
+                                "box-shadow": "0 4px 12px rgba(0,0,0,0.3)"
+                            }
+                        }
+                    ]
                 }
             },
-            "LAYOUT_GUIDELINES_PROFISSIONAL": {
-                "sistema_espacamento_8px": "SISTEMA DE ESPAÇAMENTO PROFISSIONAL: Use SEMPRE múltiplos de 8px (16, 24, 32, 40, 48, 56, 64px) para criar consistência visual matemática",
-                "hierarquia_vertical": "HIERARQUIA VISUAL PROFISSIONAL: Título (topo, dominante) → Subtítulo (meio, suporte) → CTA (base, ação) com espaçamentos proporcionais",
-                "regra_tercos": "REGRA DOS TERÇOS: Distribua elementos nos terços da imagem - título no terço superior, subtítulo no meio, CTA no terço inferior",
-                "margens_profissionais": "MARGENS GENEROSAS OBRIGATÓRIAS: Mínimo 60px de todas as bordas para CTA, 40px para títulos e subtítulos. NUNCA encostar elementos nas bordas - sempre manter respiração visual adequada para dispositivos móveis",
-                "alinhamento_grid": "ALINHAMENTO PRECISO: Todos elementos devem seguir uma grade invisível - alinhamentos à esquerda, centro ou direita consistentes",
-                "contraste_acessibilidade": "CONTRASTE ACESSÍVEL: Mínimo 4.5:1 para texto normal, 3:1 para texto grande - usar ferramentas de contraste para validar",
-                "tipografia_escala": "ESCALA TIPOGRÁFICA HARMONIOSA: Proporção 1.25 (título 32px → subtítulo 24px → CTA 16px) para hierarquia matemática",
-                "efeitos_sutis": "EFEITOS PROFISSIONAIS: Sombras leves (0 2px 8px rgba(0,0,0,0.1)), blur glassmorphism (10px), bordas consistentes (8px ou 12px)",
-                "paleta_restrita": f"PALETA PROFISSIONAL: Use SEMPRE as cores da paleta do cliente ({color_palette}) como base. Máximo 3 cores + neutros (branco/cinza/preto) - usar ferramenta de cores para harmonia",
-                "consistencia_visual": "CONSISTÊNCIA ABSOLUTA: Mesmo sistema de cores, tipografia, espaçamentos e efeitos em todos elementos para criar identidade coesa",
-                "mobile_first_positioning": "POSICIONAMENTO MOBILE-FIRST: Todos elementos devem ter margens seguras para visualização móvel - CTA centralizado com 60px de margem, textos com 40px mínimo das bordas",
-                "safe_area_compliance": "ÁREA SEGURA OBRIGATÓRIA: Reserve 60px das bordas para CTAs, 40px para títulos/subtítulos. NUNCA posicione elementos importantes próximos às bordas",
-                "text_rendering_perfection": "RENDERIZAÇÃO DE TEXTO PERFEITA: TODOS os textos devem aparecer completos, sem cortes, sem fragmentação, sem sobreposição. Se um texto não couber, diminua o font-size ou ajuste o line-height, mas NUNCA deixe texto incompleto",
-                "positioning_mathematics": "MATEMÁTICA DE POSICIONAMENTO: TÍTULO em 60px do topo, SUBTÍTULO em 220px do topo, CTA em 420px do topo. Use estas posições fixas para evitar sobreposições"
-            },
             "🚫 ERROS DE DESIGN A EVITAR": {
-                "padding_inconsistente": "❌ EVITAR: Paddings aleatórios (7px, 13px, 19px) ✅ USAR: Sistema 8px (8, 16, 24, 32px)",
-                "fontes_conflitantes": "❌ EVITAR: Misturar 3+ famílias tipográficas ✅ USAR: Máximo 2 famílias (1 principal + 1 accent)",
-                "cores_saturadas": f"❌ EVITAR: Cores neon, muito brilhantes (#FF0000, #00FF00) ✅ USAR: Cores da paleta do cliente ({color_palette}) e cores corporativas equilibradas",
-                "sombras_exageradas": "❌ EVITAR: Sombras escuras grossas (5px 5px 20px rgba(0,0,0,0.8)) ✅ USAR: Sombras sutis (0 2px 8px rgba(0,0,0,0.1))",
-                "espacos_apertados": "❌ EVITAR: Elementos colados (10px entre título/subtítulo) ✅ USAR: Espaçamento generoso (40-60px)",
-                "all_caps_excessivo": "❌ EVITAR: TODO TEXTO EM MAIÚSCULA ✅ USAR: Apenas CTA em maiúscula para destaque",
-                "bordas_grossas": "❌ EVITAR: Bordas espessas (5px solid) ✅ USAR: Bordas finas (1px) ou nenhuma borda",
-                "gradientes_chamativos": "❌ EVITAR: Gradientes rainbow multicoloridos ✅ USAR: Gradientes sutis de 2 cores harmônicas",
-                "cta_grudado_borda": "❌ EVITAR: CTA colado nas bordas (menos de 60px) ✅ USAR: CTA centralizado com margens generosas de pelo menos 60px",
-                "fundos_visiveis_proibidos": "❌ EVITAR: QUALQUER fundo, caixa, bloco ou área colorida atrás do texto ✅ USAR: APENAS text-shadow forte para legibilidade",
-                "elementos_sobrepostos": "❌ EVITAR: Textos sobrepostos ou muito próximos ✅ USAR: Espaçamento vertical generoso (mínimo 48px entre elementos)",
-                "texto_fragmentado": "❌ EVITAR: Texto cortado, incompleto ou fragmentado ✅ USAR: Texto completo e legível, ajustando font-size se necessário",
-                "posicionamento_caotico": "❌ EVITAR: Posições aleatórias que causam sobreposição ✅ USAR: Sistema de grid fixo (60px, 220px, 420px para título, subtítulo, CTA)"
-            },
-            "⚠️ CORREÇÃO CRÍTICA DE RENDERIZAÇÃO": {
-                "problema_identificado": "Textos aparecendo fragmentados, sobrepostos ou incompletos nas imagens geradas",
-                "solucao_obrigatoria": "SEMPRE renderizar textos completos e legíveis, usar posições fixas matemáticas, nunca cortar palavras",
-                "posicoes_fixas_obrigatorias": "TÍTULO: top=60px, SUBTÍTULO: top=220px, CTA: top=420px - NUNCA varie essas posições",
-                "verificacao_final": "Antes de gerar, verificar se todos os textos estão completos, posicionados corretamente e sem sobreposição"
-            },
-            "⚠️ RENDERIZAÇÃO TEXTO LIMPO (CRÍTICO)": {
-                "problema_atual": "Textos aparecendo com caixas, blocos e fundos grandes que dominam a imagem",
-                "solucao_obrigatoria": "Texto LIMPO diretamente sobre a imagem - ZERO fundos, ZERO caixas, ZERO blocos coloridos",
-                "legibilidade_correta": "Use text-shadow forte e múltiplo para legibilidade: 2px 2px 8px rgba(0,0,0,0.8), 0px 0px 4px rgba(0,0,0,0.6)",
-                "verificacao_anti_caixa": "NUNCA renderizar qualquer elemento visual atrás do texto - apenas o texto com sombra forte"
-            }}
+                "posicionamento_absoluto_rigido": "❌ EVITAR: Posicionar cada elemento com 'top' e 'left' fixos. ✅ USAR: Um container com 'display: flex' para criar um layout fluido e alinhado.",
+                "falta_de_fundo": "❌ EVITAR: Texto direto sobre a imagem sem um fundo de container. ✅ USAR: Um container com 'background' (cor sólida com transparência ou gradiente) para garantir legibilidade.",
+                "sombras_pesadas": "❌ EVITAR: 'text-shadow' muito forte e escuro. ✅ USAR: Sombras sutis para texto e container ('box-shadow').",
+                "layout_desalinhado": "❌ EVITAR: Elementos desalinhados. ✅ USAR: 'align-items' no container flex para alinhar todos os textos (ex: 'flex-start' para alinhar à esquerda).",
+                "espacamento_inconsistente": "❌ EVITAR: Espaços aleatórios entre os textos. ✅ USAR: A propriedade 'gap' no container flex para um espaçamento consistente."
+            }
+        }
 
     def build_json_text_prompt(self, content: str = None) -> Dict:
 
         return f""""
-Você é um especialista em copywriting estratégico, criativo e persuasivo, com foco em posts de Feed para redes sociais (Instagram, Facebook, LinkedIn, etc.).
+Você é um Diretor de Arte e Copywriter especialista em criar designs de texto para posts de redes sociais que sejam visualmente deslumbrantes, profissionais e que vendem.
 
-Sua missão é gerar título, subtítulo e CTA para serem inseridos na imagem anexada. Leve em consideração o conteúdo do post, em {content}.
+Sua missão é gerar um JSON com título, subtítulo e CTA para serem sobrepostos em uma imagem, usando o conteúdo do post como inspiração: "{content}".
 
-O texto deve ser fluido, natural, relevante e alinhado às tendências atuais do nicho, utilizando o método AIDA e linguagem adaptada ao público.
+O design do texto deve ser elegante, moderno e, acima de tudo, legível.
 
-🎯 DIRETRIZES DE TOM PROFISSIONAL (OBRIGATÓRIO):
-1. Use linguagem PROFISSIONAL e EDUCATIVA, evite sensacionalismo
-2. EVITE palavras exageradas como "extrema", "revolucionário", "incrível"
-3. PREFIRA verbos de ação construtivos: "desenvolva", "aprenda", "construa", "domine"
-4. CTA deve ser DIRETO e PROFISSIONAL: "Saiba Mais", "Inicie Agora", "Descubra Como"
-5. EVITE all caps desnecessário - use apenas para destaque pontual
-6. Foque em BENEFÍCIOS TANGÍVEIS em vez de promessas vazias
-7. Tom deve ser CONFIÁVEL e EDUCATIVO, não agressivo ou salesy
-
-📝 EXEMPLOS DE LINGUAGEM PROFISSIONAL:
-❌ EVITE: "EXTREMA!", "REVOLUCIONÁRIO!", "TORNE-SE COBIÇADO!", "INCRÍVEL!"
-✅ USE: "Eficiente", "Avançado", "Inicie sua Jornada", "Saiba Mais", "Moderno"
-
-❌ EVITE: "Domine tudo em 1 dia!"
-✅ USE: "Desenvolva suas habilidades"
-
-❌ EVITE: "SEGREDO REVELADO!"  
-✅ USE: "Descubra as melhores práticas"
-
-O texto deve ser conciso e descritivo, adequado para acessibilidade e SEO.
-
-🚨 REGRAS CRÍTICAS DE LEGIBILIDADE (OBRIGATÓRIO):
-
-1. TODOS OS TEXTOS DEVEM SER 100% LEGÍVEIS E VISÍVEIS EM QUALQUER FUNDO DA IMAGEM
-2. Use fundos SUTIS E DISCRETOS com blur (background + backdrop_filter OBRIGATÓRIOS)
-3. NUNCA crie blocos grandes, sólidos ou que cubram grandes áreas da imagem
-4. Os fundos devem ser APENAS uma leve sombra transparente para legibilidade
-5. Use opacidade BAIXA: máximo 0.3 para fundos escuros, máximo 0.3 para fundos claros
-6. NUNCA posicione textos em áreas da imagem onde ficam invisíveis ou ilegíveis
-7. Padding mínimo para evitar criar blocos visíveis na imagem
-8. SEMPRE teste mentalmente se o texto será legível na posição escolhida
+🎯 DIRETRIZES DE DESIGN (OBRIGATÓRIO):
+1.  **Layout com Flexbox**: Organize o texto dentro de um container principal usando `display: flex` e `flex-direction: column`. Isso garante alinhamento e espaçamento perfeitos.
+2.  **Legibilidade é Rei**: O texto DEVE ser 100% legível. Use um fundo no container (`background`) — seja uma cor sólida com transparência (ex: `rgba(0,0,0,0.4)`) ou um gradiente sutil — para criar contraste com a imagem.
+3.  **Hierarquia Clara**: Diferencie título, subtítulo e CTA com tamanhos de fonte (`font-size`) e pesos (`font-weight`) distintos.
+4.  **Estilo Profissional**: Use fontes limpas e modernas (Inter, Roboto). Aplique efeitos sutis como `box-shadow` no container e `text-shadow` suave no texto.
 
 ⚙️ FORMATO DE SAÍDA (OBRIGATÓRIO):
-A resposta deve ser entregue estritamente em formato JSON, seguindo exatamente esta estrutura:
+A resposta deve ser estritamente em formato JSON, seguindo esta estrutura. Preencha os campos de texto e ajuste os estilos para combinar com a imagem e o conteúdo.
 
-{self.text_characteristics()}                  
+{self.text_characteristics()}
 
-IMPORTANTE: Analise cuidadosamente a imagem anexada e escolha posições onde os textos serão completamente legíveis. Priorize sempre a legibilidade sobre a estética - textos invisíveis ou ilegíveis tornam a imagem inútil. Todos os elementos de texto (título, subtítulo, CTA) DEVEM ter fundos com blur para garantir máxima legibilidade.
+IMPORTANTE: Analise a imagem e o conteúdo para escolher cores e estilos que criem um resultado harmonioso e profissional. O objetivo é um design que pareça ter sido feito por um humano especialista.
       """
 
     def build_content_prompt(self, post_data: Dict) -> str:
