@@ -175,7 +175,6 @@ class DailyContentService:
             logger.error(
                 f"Erro ao enviar e-mail de fallback para administradores: {str(e)}")
 
-    @sync_to_async
     def _send_fallback_email_sync(self, error_message: str):
         """Synchronous wrapper for sending fallback emails to admins."""
         import asyncio
@@ -186,7 +185,8 @@ class DailyContentService:
                 if loop.is_running():
                     # If loop is running, we need to handle this differently
                     # For now, just log the error without sending email
-                    logger.warning(f"Could not send admin email due to running event loop: {error_message[:100]}...")
+                    logger.warning(
+                        f"Could not send admin email due to running event loop: {error_message[:100]}...")
                     return
             except RuntimeError:
                 # No event loop, create one
@@ -194,7 +194,8 @@ class DailyContentService:
                 asyncio.set_event_loop(loop)
 
             # Run the async email sending
-            loop.run_until_complete(self.send_fallback_email_to_admins(error_message))
+            loop.run_until_complete(
+                self.send_fallback_email_to_admins(error_message))
         except Exception as e:
             logger.error(f"Failed to send admin email: {str(e)}")
 
