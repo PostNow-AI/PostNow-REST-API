@@ -175,6 +175,29 @@ class DailyContentService:
             logger.error(
                 f"Erro ao enviar e-mail de fallback para administradores: {str(e)}")
 
+    @sync_to_async
+    def _send_fallback_email_sync(self, error_message: str):
+        """Synchronous wrapper for sending fallback emails to admins."""
+        import asyncio
+        try:
+            # Create a new event loop if one doesn't exist
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If loop is running, we need to handle this differently
+                    # For now, just log the error without sending email
+                    logger.warning(f"Could not send admin email due to running event loop: {error_message[:100]}...")
+                    return
+            except RuntimeError:
+                # No event loop, create one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # Run the async email sending
+            loop.run_until_complete(self.send_fallback_email_to_admins(error_message))
+        except Exception as e:
+            logger.error(f"Failed to send admin email: {str(e)}")
+
     async def fetch_users_automatic_posts(self) -> List[Dict[str, Any]]:
         """Recupera todos os posts automáticos gerados para usuários."""
         return await sync_to_async(list)(
@@ -499,7 +522,7 @@ class DailyContentService:
                     "UPDATE auth_user SET daily_generation_error = %s, daily_generation_error_date = %s WHERE id = %s",
                     [error_message, timezone.now(), user.id]
                 )
-            self.send_fallback_email_to_admins(
+            self._send_fallback_email_sync(
                 f"Usuário {user.first_name} ({user.email}) falhou ao gerar conteúdo durante o envio de conteúdo diário. Motivo: {error_message}"
             )
             logger.info(
