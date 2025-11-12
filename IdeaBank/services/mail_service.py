@@ -3,7 +3,6 @@ import logging
 import os
 
 import requests
-from IdeaBank.utils.mail_templates.logo_base64 import logo
 from mailjet_rest import Client
 
 logger = logging.getLogger(__name__)
@@ -44,14 +43,6 @@ class MailService():
                 "Subject": subject,
                 "HTMLPart": html_content
             }
-
-            if attachments is not None:
-                attachments.append({
-                    'url': logo,
-                    'filename': 'postnow_logo.svg',
-                    'content_type': 'image/png',
-                    'content_id': 'postnow_logo'
-                })
 
             # Add attachments if provided
             if attachments:
