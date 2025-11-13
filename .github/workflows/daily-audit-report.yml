@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  mail-content:
+  report_logs:
     runs-on: ubuntu-latest
     environment: Production
     steps:

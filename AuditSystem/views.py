@@ -1,17 +1,26 @@
+import os
 from datetime import date, timedelta
 
-from django.conf import settings
 from django.db.models import Count, Q
+from django.views.decorators.csrf import csrf_exempt
 from IdeaBank.services.mail_service import MailService
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .models import AuditLog, DailyReport
 from .services import AuditService
 
 
+@csrf_exempt
 @api_view(['GET', 'POST'])
+@authentication_classes([])  # No authentication required
+@permission_classes([AllowAny])  # Allow anyone to access
 def generate_daily_audit_report(request):
     """
     Generate daily audit report and optionally send email to administrators.
@@ -20,28 +29,15 @@ def generate_daily_audit_report(request):
     - date (optional): Date for the report (YYYY-MM-DD format). Defaults to yesterday.
     - send_email (optional): Whether to send the report via email (default: false)
     - email_to (optional): Email address to send report to (overrides default admin emails)
+    - format (optional): Response format - 'json' or 'html' (default: json)
     """
-    # Check if this is a script call (bypass permission check for scripts)
-    is_script_call = getattr(request, '_script_call', False)
 
-    if not is_script_call:
-        # Apply permission checks for API calls
-        if not request.user.is_authenticated:
-            return Response(
-                {'error': 'Autenticação necessária'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-
-        if not request.user.is_staff:
-            return Response(
-                {'error': 'Privilégios de administrador necessários'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-    # Get parameters from either GET or POST data
     if request.method == 'GET':
         params = request.GET
     else:
         params = request.data
+
+    # Debug line
 
     # Determine the report date
     report_date_str = params.get('date')
@@ -74,6 +70,18 @@ def generate_daily_audit_report(request):
             _send_email_report(report, email_to)
             email_sent = True
 
+        # Check if HTML response is requested
+        format_param = params.get('format', 'json').lower()
+        if format_param == 'html':
+            # Return HTML report directly
+            html_content = _generate_html_report(report)
+            return Response(
+                html_content,
+                content_type='text/html; charset=utf-8',
+                status=status.HTTP_200_OK
+            )
+
+        # Default JSON response
         return Response({
             'success': True,
             'message': f'Relatório gerado com sucesso para {report_date}',
@@ -210,7 +218,7 @@ def _send_email_report(report, email_to=None):
     """Send the report via email using Mailjet"""
     if not email_to:
         # Default admin emails - you might want to configure this
-        email_to = getattr(settings, 'ADMIN_EMAILS', ['admin@postnow.com.br'])
+        email_to = os.getenv('ADMIN_EMAILS', 'admin@postnow.com.br').split(',')
 
     if isinstance(email_to, str):
         email_to = [email_to]
@@ -391,7 +399,7 @@ def _generate_html_report(report):
                                                 <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 500;">{count}</td>
                                             </tr>"""
 
-    html += """
+    html += f"""
                                         </table>
                                     </td>
                                 </tr>
