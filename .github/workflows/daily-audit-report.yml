@@ -1,4 +1,4 @@
-name: Daily Content Mailing
+name: Daily Audit Repost Mailing
 
 on:
   schedule:
