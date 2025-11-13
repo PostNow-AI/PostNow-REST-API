@@ -1,0 +1,25 @@
+name: Daily Content Mailing
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # Run once at 3:00 AM UTC (0am GMT-3)
+
+  workflow_dispatch:
+
+jobs:
+  mail-content:
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Debug Url
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/audit/generate-daily-report/"
+
+      - name: Call api for audit
+        run: |
+          echo "Auditing system functions"
+          curl -X GET \
+            "${{ secrets.VERCEL_API_URL}}/api/v1/audit/generate-daily-report/?send_email=true" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -w "HTTP Status: %{http_code}\n" \
+            -s

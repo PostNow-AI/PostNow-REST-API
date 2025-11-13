@@ -5,6 +5,7 @@ import random
 from typing import Any, Dict, List
 
 from asgiref.sync import sync_to_async
+from AuditSystem.services import AuditService
 from CreatorProfile.models import CreatorProfile
 from CreditSystem.services.credit_service import CreditService
 from django.contrib.auth import get_user_model
@@ -224,6 +225,18 @@ class DailyContentService:
                     'message': 'No eligible users found',
                 }
 
+            # Log daily content generation start
+            await sync_to_async(AuditService.log_system_operation)(
+                user=None,
+                action='daily_content_generation_started',
+                status='info',
+                resource_type='DailyContent',
+                details={
+                    'total_users': total_users,
+                    'max_concurrent_users': self.max_concurrent_users
+                }
+            )
+
             results = await self._process_users_concurrently(eligible_users)
 
             processed_count = sum(
@@ -245,6 +258,22 @@ class DailyContentService:
                 'duration_seconds': duration,
                 'details': results,
             }
+
+            # Log daily content generation completion
+            await sync_to_async(AuditService.log_system_operation)(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success' if failed_count == 0 else 'warning',
+                resource_type='DailyContent',
+                details={
+                    'total_users': total_users,
+                    'processed': processed_count,
+                    'failed': failed_count,
+                    'skipped': skipped_count,
+                    'success_rate': (processed_count / total_users * 100) if total_users > 0 else 0,
+                    'duration_seconds': duration
+                }
+            )
 
             return result
         except Exception as e:
@@ -330,6 +359,20 @@ class DailyContentService:
                 # Store error in user profile
                 await self._store_user_error(user, error_message)
 
+                # Log content generation failure for audit
+                await sync_to_async(AuditService.log_daily_content_generation)(
+                    user=user,
+                    action='daily_content_generation_failed',
+                    status='error',
+                    error_message=error_message,
+                    details={
+                        'generation_type': 'campaign',
+                        'post_objective': post_objective,
+                        'error_type': 'ai_service_failure',
+                        'user_id': user_id
+                    }
+                )
+
                 return {
                     'user_id': user_id,
                     'status': 'failed',
@@ -343,6 +386,19 @@ class DailyContentService:
             if user_data:
                 user, _ = user_data
                 await self._store_user_error(user, error_message)
+
+                # Log unexpected error for audit
+                await sync_to_async(AuditService.log_daily_content_generation)(
+                    user=user,
+                    action='daily_content_generation_failed',
+                    status='error',
+                    error_message=error_message,
+                    details={
+                        'generation_type': 'campaign',
+                        'error_type': 'unexpected_error',
+                        'user_id': user_id
+                    }
+                )
 
             return {
                 'user_id': user_id,
@@ -443,7 +499,25 @@ class DailyContentService:
 
                     return result
         except Exception as e:
-            return {'status': 'error', 'error': str(e)}
+            error_message = str(e)
+
+            # Log AI service failure for audit (includes Gemini 503 errors)
+            AuditService.log_daily_content_generation(
+                user=user,
+                action='daily_content_generation_failed',
+                status='error',
+                error_message=error_message,
+                details={
+                    'generation_type': post_type,
+                    'post_objective': post_objective,
+                    'ai_provider': 'google',
+                    'ai_model': 'gemini-2.5-flash',
+                    'error_type': 'ai_service_error',
+                    'is_503_error': '503' in error_message or 'sobrecarregado' in error_message.lower()
+                }
+            )
+
+            return {'status': 'error', 'error': error_message}
 
     async def process_users_batch_async(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
         """Process a specific batch of users for daily content generation."""
@@ -576,6 +650,18 @@ class DailyContentService:
             logger.info(
                 f"Starting retry process for {total_users} users with errors")
 
+            # Log retry process start
+            await sync_to_async(AuditService.log_system_operation)(
+                user=None,
+                action='daily_content_retry_started',
+                status='info',
+                resource_type='DailyContent',
+                details={
+                    'total_users': total_users,
+                    'retry_type': 'failed_users'
+                }
+            )
+
             results = await self._process_users_concurrently(failed_users)
 
             processed_count = sum(
@@ -600,6 +686,22 @@ class DailyContentService:
 
             logger.info(
                 f"Retry completed: {processed_count} successful, {failed_count} failed, {skipped_count} skipped")
+
+            # Log retry process completion
+            await sync_to_async(AuditService.log_system_operation)(
+                user=None,
+                action='daily_content_retry_completed',
+                status='success' if failed_count == 0 else 'warning',
+                resource_type='DailyContent',
+                details={
+                    'total_users': total_users,
+                    'processed': processed_count,
+                    'failed': failed_count,
+                    'skipped': skipped_count,
+                    'success_rate': (processed_count / total_users * 100) if total_users > 0 else 0
+                }
+            )
+
             return result
 
         except Exception as e:

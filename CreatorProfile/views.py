@@ -1,4 +1,5 @@
 
+from AuditSystem.services import AuditService
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -65,6 +66,20 @@ class Step1PersonalView(generics.RetrieveUpdateAPIView):
             request.user, serializer.validated_data
         )
 
+        # Log profile step 1 completion
+        AuditService.log_profile_operation(
+            user=request.user,
+            action='profile_updated',
+            status='success',
+            resource_type='CreatorProfile',
+            resource_id=updated_profile.id,
+            details={
+                'step': 1,
+                'step_completed': updated_profile.step_1_completed,
+                'current_step': updated_profile.current_step
+            }
+        )
+
         response_serializer = CreatorProfileSerializer(updated_profile)
         return Response({
             'message': 'Dados pessoais salvos com sucesso!',
@@ -99,6 +114,20 @@ class Step2BusinessView(generics.RetrieveUpdateAPIView):
         # Update the profile with step 2 data
         updated_profile = CreatorProfileService.update_profile_data(
             request.user, serializer.validated_data
+        )
+
+        # Log profile step 2 completion
+        AuditService.log_profile_operation(
+            user=request.user,
+            action='profile_updated',
+            status='success',
+            resource_type='CreatorProfile',
+            resource_id=updated_profile.id,
+            details={
+                'step': 2,
+                'step_completed': updated_profile.step_2_completed,
+                'current_step': updated_profile.current_step
+            }
         )
 
         response_serializer = CreatorProfileSerializer(updated_profile)
@@ -137,6 +166,25 @@ class Step3BrandingView(generics.RetrieveUpdateAPIView):
             request.user, serializer.validated_data
         )
 
+        # Log profile step 3 completion and onboarding status
+        action = 'profile_updated'
+        if updated_profile.onboarding_completed:
+            action = 'profile_created'  # First time completion
+
+        AuditService.log_profile_operation(
+            user=request.user,
+            action=action,
+            status='success',
+            resource_type='CreatorProfile',
+            resource_id=updated_profile.id,
+            details={
+                'step': 3,
+                'step_completed': updated_profile.step_3_completed,
+                'current_step': updated_profile.current_step,
+                'onboarding_completed': updated_profile.onboarding_completed
+            }
+        )
+
         response_serializer = CreatorProfileSerializer(updated_profile)
         return Response({
             'message': 'Dados de marca salvos com sucesso!' if not updated_profile.onboarding_completed else 'Onboarding completado com sucesso!',
@@ -165,6 +213,19 @@ class CreatorProfileView(generics.RetrieveUpdateAPIView):
         updated_profile = CreatorProfileService.update_profile_data(
             request.user, serializer.validated_data)
 
+        # Log profile update
+        AuditService.log_profile_operation(
+            user=request.user,
+            action='profile_updated',
+            status='success',
+            resource_type='CreatorProfile',
+            resource_id=updated_profile.id,
+            details={
+                'changes': list(serializer.validated_data.keys()),
+                'onboarding_completed': updated_profile.onboarding_completed
+            }
+        )
+
         response_serializer = CreatorProfileSerializer(updated_profile)
         return Response({
             'message': 'Perfil atualizado com sucesso!',
@@ -180,6 +241,15 @@ class ResetCreatorProfileStatusView(generics.GenericAPIView):
         try:
             success = CreatorProfileService.reset_profile(request.user)
             if success:
+                # Log profile reset
+                AuditService.log_profile_operation(
+                    user=request.user,
+                    action='profile_deleted',
+                    status='success',
+                    resource_type='CreatorProfile',
+                    details={'action': 'reset_profile'}
+                )
+
                 return Response({
                     'message': 'Perfil resetado com sucesso!',
                     'reset': True
@@ -205,6 +275,15 @@ class CompleteCreatorProfileStatusView(generics.GenericAPIView):
         try:
             success = CreatorProfileService.complete_profile(request.user)
             if success:
+                # Log profile completion
+                AuditService.log_profile_operation(
+                    user=request.user,
+                    action='profile_created',
+                    status='success',
+                    resource_type='CreatorProfile',
+                    details={'action': 'complete_onboarding'}
+                )
+
                 return Response({
                     'message': 'Perfil completado com sucesso!',
                     'completed': True
@@ -240,6 +319,19 @@ class UserBehaviorView(generics.RetrieveUpdateAPIView):
         serializer.is_valid(raise_exception=True)
 
         serializer.save()
+
+        # Log behavior update
+        AuditService.log_system_operation(
+            user=request.user,
+            action='system_operation',
+            status='success',
+            resource_type='UserBehavior',
+            resource_id=instance.id,
+            details={
+                'behavior_updated': True,
+                'changes': list(serializer.validated_data.keys())
+            }
+        )
 
         return Response({
             'message': 'Dados comportamentais atualizados!',

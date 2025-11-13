@@ -65,4 +65,7 @@ urlpatterns = [
 
     # Credit System endpoints
     path('api/v1/credits/', include('CreditSystem.urls')),
+
+    # Audit System endpoints
+    path('api/v1/audit/', include('AuditSystem.urls')),
 ]
