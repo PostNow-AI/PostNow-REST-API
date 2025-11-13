@@ -1,4 +1,4 @@
-name: Daily Audit Repost Mailing
+name: Daily Audit Report
 
 on:
   schedule:
