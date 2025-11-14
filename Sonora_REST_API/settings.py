@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'IdeaBank',
     'GlobalOptions',
     'CreditSystem',
+    'AuditSystem',
 ]
 
 SITE_ID = 3
@@ -98,6 +99,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'CreditSystem.middleware.CreditCheckMiddleware',
+    'AuditSystem.middleware.AuditMiddleware',
 ]
 
 ROOT_URLCONF = 'Sonora_REST_API.urls'

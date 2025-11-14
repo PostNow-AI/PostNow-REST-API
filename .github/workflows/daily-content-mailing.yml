@@ -3,6 +3,8 @@ name: Daily Content Mailing
 on:
   schedule:
     - cron: "0 9 * * *" # Run once at 9:00 AM UTC (6am GMT-3)
+    - cron: "0 12 * * *" # Run once at 9:00 AM UTC (6am GMT-3)
+
   workflow_dispatch:
 
 jobs:

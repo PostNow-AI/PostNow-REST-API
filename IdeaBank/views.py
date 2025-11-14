@@ -5,6 +5,7 @@ New Post-based views for IdeaBank app.
 import asyncio
 import logging
 
+from AuditSystem.services import AuditService
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -50,6 +51,15 @@ class PostListView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+        # Log post creation
+        AuditService.log_post_operation(
+            user=self.request.user,
+            action='post_created',
+            post_id=str(serializer.instance.id),
+            status='success',
+            details={'post_name': serializer.instance.name}
+        )
+
 
 class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update and delete posts."""
@@ -58,6 +68,49 @@ class PostDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Post.objects.filter(user=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+
+        old_name = instance.name
+        self.perform_update(serializer)
+
+        # Log post update
+        AuditService.log_post_operation(
+            user=request.user,
+            action='post_updated',
+            post_id=str(instance.id),
+            status='success',
+            details={
+                'old_name': old_name,
+                'new_name': instance.name,
+                'changes': list(serializer.validated_data.keys())
+            }
+        )
+
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        post_id = instance.id
+        post_name = instance.name
+
+        self.perform_destroy(instance)
+
+        # Log post deletion
+        AuditService.log_post_operation(
+            user=request.user,
+            action='post_deleted',
+            post_id=str(post_id),
+            status='success',
+            details={'post_name': post_name}
+        )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PostWithIdeasView(generics.RetrieveAPIView):
@@ -90,6 +143,45 @@ class PostIdeaDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return PostIdea.objects.filter(post__user=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+
+        self.perform_update(serializer)
+
+        # Log post idea update
+        AuditService.log_content_generation(
+            user=request.user,
+            action='content_updated',
+            status='success',
+            resource_id=instance.id,
+            details={'post_id': instance.post.id,
+                     'post_name': instance.post.name}
+        )
+
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        idea_id = instance.id
+        post_name = instance.post.name
+
+        self.perform_destroy(instance)
+
+        # Log post idea deletion
+        AuditService.log_content_generation(
+            user=request.user,
+            action='content_deleted',
+            status='success',
+            resource_id=idea_id,
+            details={'post_name': post_name}
+        )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # AI-powered post generation views
@@ -172,6 +264,19 @@ def generate_post_idea(request):
                     '`').strip('json')
                 post_idea.save()
 
+                # Log successful image generation
+                AuditService.log_image_generation(
+                    user=request.user,
+                    action='image_generated',
+                    status='success',
+                    resource_id=post_idea.id,
+                    details={
+                        'post_id': post.id,
+                        'post_name': post.name,
+                        'content_type': 'image',
+                        'ai_provider': 'dalle'
+                    }
+                )
             except Exception as image_error:
                 print(f"Warning: Failed to generate image: {image_error}")
                 # Continue without image - don't fail the entire request
@@ -180,6 +285,21 @@ def generate_post_idea(request):
         post_serializer = PostSerializer(post)
         idea_serializer = PostIdeaSerializer(post_idea)
 
+        # Log successful post and content generation
+        AuditService.log_content_generation(
+            user=request.user,
+            action='content_generated',
+            status='success',
+            resource_id=post_idea.id,
+            details={
+                'post_id': post.id,
+                'post_name': post.name,
+                'content_type': 'text',
+                'ai_provider': 'gemini',
+                'include_image': include_image
+            }
+        )
+
         return Response({
             'message': 'Post e ideia gerados com sucesso!',
             'post': post_serializer.data,
@@ -187,6 +307,18 @@ def generate_post_idea(request):
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
+        # Log failed content generation
+        AuditService.log_content_generation(
+            user=request.user,
+            action='content_generation_failed',
+            status='error',
+            error_message=str(e),
+            details={
+                'post_data': post_data,
+                'include_image': include_image
+            }
+        )
+
         return Response(
             {'error': f'Erro na geração do post: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -247,6 +379,21 @@ def generate_image_for_idea(request, idea_id):
         post_idea.image_url = image_url
         post_idea.save()
 
+        # Log successful image generation
+        AuditService.log_image_generation(
+            user=request.user,
+            action='image_generated',
+            status='success',
+            resource_id=post_idea.id,
+            details={
+                'post_id': post_idea.post.id,
+                'post_name': post_idea.post.name,
+                'content_type': 'image',
+                'ai_provider': 'dalle',
+                'custom_prompt': custom_prompt is not None
+            }
+        )
+
         return Response({
             'message': 'Imagem gerada com sucesso!',
             'image_url': image_url,
@@ -254,6 +401,18 @@ def generate_image_for_idea(request, idea_id):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        # Log failed image generation
+        AuditService.log_email_operation(
+            user=request.user,
+            action='image_generation_failed',
+            status='error',
+            error_message=str(e),
+            details={
+                'idea_id': idea_id,
+                'custom_prompt': custom_prompt is not None
+            }
+        )
+
         return Response(
             {'error': f'Erro na geração da imagem: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -315,12 +474,40 @@ def edit_post_idea(request, idea_id):
         post_idea.content = result['content']
         post_idea.save()
 
+        # Log successful content editing
+        AuditService.log_content_generation(
+            user=request.user,
+            action='content_updated',
+            status='success',
+            resource_id=post_idea.id,
+            details={
+                'post_id': post_idea.post.id,
+                'post_name': post_idea.post.name,
+                'ai_provider': ai_provider,
+                'ai_model': ai_model,
+                'user_prompt_provided': user_prompt is not None
+            }
+        )
+
         return Response({
             'message': 'Ideia editada com sucesso!',
             'idea': PostIdeaSerializer(post_idea).data
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        # Log failed content editing
+        AuditService.log_content_generation(
+            user=request.user,
+            action='content_generation_failed',
+            status='error',
+            error_message=str(e),
+            details={
+                'idea_id': idea_id,
+                'ai_provider': ai_provider,
+                'ai_model': ai_model
+            }
+        )
+
         return Response(
             {'error': f'Erro na edição da ideia: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -380,6 +567,22 @@ def regenerate_image_for_idea(request, idea_id):
         post_idea.image_url = image_url
         post_idea.save()
 
+        # Log successful image regeneration
+        AuditService.log_image_generation(
+            user=request.user,
+            action='image_updated',
+            status='success',
+            resource_id=post_idea.id,
+            details={
+                'post_id': post_idea.post.id,
+                'post_name': post_idea.post.name,
+                'content_type': 'image',
+                'ai_provider': 'dalle',
+                'regenerated': True,
+                'custom_prompt': custom_prompt is not None
+            }
+        )
+
         return Response({
             'message': 'Imagem regenerada com sucesso!',
             'image_url': image_url,
@@ -387,6 +590,19 @@ def regenerate_image_for_idea(request, idea_id):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        # Log failed image regeneration
+        AuditService.log_image_generation(
+            user=request.user,
+            action='image_generation_failed',
+            status='error',
+            error_message=str(e),
+            details={
+                'idea_id': idea_id,
+                'regenerated': True,
+                'custom_prompt': custom_prompt is not None
+            }
+        )
+
         return Response(
             {'error': f'Erro na regeneração da imagem: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -485,6 +701,19 @@ def vercel_cron_daily_content_generation(request):
         # Get batch number from query params (default to 1)
         batch_number = int(request.GET.get('batch', 1))
         batch_size = 5  # Process 5 users per batch, to avoid vercel timeouts
+
+        # Log cron job start
+        AuditService.log_daily_content_generation(
+            action='daily_content_cron_started',
+            status='info',
+            resource_type='CronJob',
+            details={
+                'batch_number': batch_number,
+                'batch_size': batch_size,
+                'cron_type': 'daily_content_generation'
+            }
+        )
+
         # Run async processing
         service = DailyContentService()
 
@@ -499,10 +728,34 @@ def vercel_cron_daily_content_generation(request):
         finally:
             loop.close()
 
+        # Log cron job completion
+        AuditService.log_daily_content_generation(
+            action='daily_content_cron_completed',
+            status='success',
+            resource_type='CronJob',
+            details={
+                'batch_number': batch_number,
+                'result': result
+            }
+        )
+
         return JsonResponse(result, status=200)
 
     except Exception as e:
         logger.error(f"Vercel cron job failed: {str(e)}")
+
+        # Log cron job failure
+        AuditService.log_daily_content_generation(
+            action='daily_content_cron_failed',
+            status='error',
+            error_message=str(e),
+            resource_type='CronJob',
+            details={
+                'batch_number': batch_number if 'batch_number' in locals() else None,
+                'cron_type': 'daily_content_generation'
+            }
+        )
+
         return JsonResponse({
             'error': 'Internal server error',
             'details': str(e)
@@ -565,5 +818,108 @@ def mail_all_generated_content(request):
     except Exception as e:
         return JsonResponse({
             'error': 'Failed to email generated content',
+            'details': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def vercel_cron_retry_failed_users(request):
+    """
+    Vercel Cron endpoint for retrying failed daily content generation
+    Called automatically by Vercel at 8:00 AM UTC
+    """
+    # Verify it's from Vercel (security check)
+    auth_header = request.headers.get('Authorization', '')
+    expected_auth = f"Bearer {settings.CRON_SECRET}"
+
+    if auth_header != expected_auth:
+        return JsonResponse({
+            'error': 'Unauthorized'
+        }, status=401)
+
+    try:
+        service = DailyContentService()
+
+        # Log retry cron job start
+        AuditService.log_daily_content_generation(
+            action='daily_content_retry_cron_started',
+            status='info',
+            resource_type='CronJob',
+            details={
+                'cron_type': 'retry_failed_users'
+            }
+        )
+
+        # Use asyncio to run the async function
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            result = loop.run_until_complete(
+                service.retry_failed_users_async()
+            )
+        finally:
+            loop.close()
+
+        # Log retry cron job completion
+        AuditService.log_daily_content_generation(
+            action='daily_content_retry_cron_completed',
+            status='success',
+            resource_type='CronJob',
+            details={
+                'result': result
+            }
+        )
+
+        return JsonResponse(result, status=200)
+
+    except Exception as e:
+        logger.error(f"Vercel retry cron job failed: {str(e)}")
+
+        # Log retry cron job failure
+        AuditService.log_daily_content_generation(
+            action='daily_content_retry_cron_failed',
+            status='error',
+            error_message=str(e),
+            resource_type='CronJob',
+            details={
+                'cron_type': 'retry_failed_users'
+            }
+        )
+
+        return JsonResponse({
+            'error': 'Internal server error',
+            'details': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def manual_trigger_retry_failed(request):
+    """
+    Manual trigger for retrying failed users (for testing)
+    """
+    try:
+        service = DailyContentService()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            result = loop.run_until_complete(
+                service.retry_failed_users_async()
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse({
+            'message': 'Retry failed users completed',
+            'result': result
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({
+            'error': 'Failed to retry failed users',
             'details': str(e)
         }, status=500)

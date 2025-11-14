@@ -136,6 +136,59 @@ def get_image_data(image_input: str) -> bytes:
         return b""
 
 
+def fetch_image_bytes(image_source: str) -> bytes:
+    """
+    Fetches image bytes from either an S3 URL or base64 data.
+    Returns image bytes suitable for Gemini.
+
+    Args:
+        image_source: Either an S3 URL or base64 data string
+
+    Returns:
+        bytes: Raw image bytes
+    """
+    # Check if it's an S3 URL
+    if image_source.startswith('https://') and 's3' in image_source:
+        try:
+            import boto3
+            from botocore.exceptions import ClientError, NoCredentialsError
+
+            # Parse S3 URL to extract bucket and key
+            # Format: https://bucket-name.s3.region.amazonaws.com/key
+            url_parts = image_source.replace('https://', '').split('/')
+            bucket_name = url_parts[0].split('.')[0]
+            key = '/'.join(url_parts[1:])
+
+            # Initialize S3 client
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
+            )
+
+            # Get object from S3
+            response = s3_client.get_object(Bucket=bucket_name, Key=key)
+            image_bytes = response['Body'].read()
+
+            print(f"🖼️ Successfully fetched image from S3: {image_source}")
+            return image_bytes
+
+        except NoCredentialsError:
+            print("❌ AWS credentials not found for image fetch")
+            raise ValueError("AWS credentials not configured for image fetch")
+        except ClientError as e:
+            print(f"❌ S3 error fetching image: {e}")
+            raise ValueError(f"Failed to fetch image from S3: {e}")
+        except Exception as e:
+            print(f"❌ Unexpected error fetching image from S3: {e}")
+            raise ValueError(f"Failed to fetch image from S3: {e}")
+
+    # If not an S3 URL, treat as base64
+    else:
+        return extract_base64_image(image_source)
+
+
 class GeminiService(BaseAIService):
     def _parse_retry_delay(self, error_str: str) -> float:
         """Parse retry delay from Gemini API error message."""
@@ -485,7 +538,19 @@ class GeminiService(BaseAIService):
                     contents = [
                         types.Content(
                             role="user",
-                            parts=image_parts,
+                            parts=[
+                                part for part in [
+                                    types.Part.from_bytes(
+                                        mime_type="image/jpeg",
+                                        data=fetch_image_bytes(logo),
+                                    ) if logo else None,
+                                    types.Part.from_bytes(
+                                        mime_type="image/jpeg",
+                                        data=fetch_image_bytes(current_image),
+                                    ) if current_image else None,
+                                    types.Part.from_text(text=prompt),
+                                ] if part is not None
+                            ],
                         ),
                     ]
 

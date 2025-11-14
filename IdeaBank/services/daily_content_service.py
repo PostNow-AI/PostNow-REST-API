@@ -5,6 +5,7 @@ import random
 from typing import Any, Dict, List
 
 from asgiref.sync import sync_to_async
+from AuditSystem.services import AuditService
 from CreatorProfile.models import CreatorProfile
 from CreditSystem.services.credit_service import CreditService
 from django.contrib.auth import get_user_model
@@ -175,6 +176,30 @@ class DailyContentService:
             logger.error(
                 f"Erro ao enviar e-mail de fallback para administradores: {str(e)}")
 
+    def _send_fallback_email_sync(self, error_message: str):
+        """Synchronous wrapper for sending fallback emails to admins."""
+        import asyncio
+        try:
+            # Create a new event loop if one doesn't exist
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If loop is running, we need to handle this differently
+                    # For now, just log the error without sending email
+                    logger.warning(
+                        f"Could not send admin email due to running event loop: {error_message[:100]}...")
+                    return
+            except RuntimeError:
+                # No event loop, create one
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            # Run the async email sending
+            loop.run_until_complete(
+                self.send_fallback_email_to_admins(error_message))
+        except Exception as e:
+            logger.error(f"Failed to send admin email: {str(e)}")
+
     async def fetch_users_automatic_posts(self) -> List[Dict[str, Any]]:
         """Recupera todos os posts automáticos gerados para usuários."""
         return await sync_to_async(list)(
@@ -200,6 +225,18 @@ class DailyContentService:
                     'message': 'No eligible users found',
                 }
 
+            # Log daily content generation start
+            await sync_to_async(AuditService.log_system_operation)(
+                user=None,
+                action='daily_content_generation_started',
+                status='info',
+                resource_type='DailyContent',
+                details={
+                    'total_users': total_users,
+                    'max_concurrent_users': self.max_concurrent_users
+                }
+            )
+
             results = await self._process_users_concurrently(eligible_users)
 
             processed_count = sum(
@@ -221,6 +258,22 @@ class DailyContentService:
                 'duration_seconds': duration,
                 'details': results,
             }
+
+            # Log daily content generation completion
+            await sync_to_async(AuditService.log_system_operation)(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success' if failed_count == 0 else 'warning',
+                resource_type='DailyContent',
+                details={
+                    'total_users': total_users,
+                    'processed': processed_count,
+                    'failed': failed_count,
+                    'skipped': skipped_count,
+                    'success_rate': (processed_count / total_users * 100) if total_users > 0 else 0,
+                    'duration_seconds': duration
+                }
+            )
 
             return result
         except Exception as e:
@@ -252,9 +305,11 @@ class DailyContentService:
             if isinstance(result, Exception):
                 processed_results.append({
                     'user_id': users[i]['id'],
+                    'user': users[i]['first_name'],
                     'status': 'failed',
                     'error': str(result)
                 })
+
             else:
                 processed_results.append(result)
 
@@ -280,6 +335,9 @@ class DailyContentService:
             result = await self._generate_content_for_user(user, creator_profile, 'campaign', post_objective)
 
             if result and result.get('status') != 'error':
+                # Success - clear any previous error
+                await self._clear_user_error(user)
+
                 # Handle campaign mode result
                 if result.get('campaign_mode', False):
                     return {
@@ -296,24 +354,65 @@ class DailyContentService:
                         'status': 'success',
                     }
             else:
+                error_message = result.get(
+                    'error', 'content_generation_failed') if result else 'no_content_generated'
+                # Store error in user profile
+                await self._store_user_error(user, error_message)
+
+                # Log content generation failure for audit
+                await sync_to_async(AuditService.log_daily_content_generation)(
+                    user=user,
+                    action='daily_content_generation_failed',
+                    status='error',
+                    error_message=error_message,
+                    details={
+                        'generation_type': 'campaign',
+                        'post_objective': post_objective,
+                        'error_type': 'ai_service_failure',
+                        'user_id': user_id
+                    }
+                )
+
                 return {
                     'user_id': user_id,
                     'status': 'failed',
-                    'reason': result.get('error', 'content_generation_failed') if result else 'no_content_generated'
+                    'reason': error_message
                 }
 
         except Exception as e:
+            error_message = str(e)
+            # Store error in user profile
+            user_data = await self._get_user_data(user_id)
+            if user_data:
+                user, _ = user_data
+                await self._store_user_error(user, error_message)
+
+                # Log unexpected error for audit
+                await sync_to_async(AuditService.log_daily_content_generation)(
+                    user=user,
+                    action='daily_content_generation_failed',
+                    status='error',
+                    error_message=error_message,
+                    details={
+                        'generation_type': 'campaign',
+                        'error_type': 'unexpected_error',
+                        'user_id': user_id
+                    }
+                )
+
             return {
                 'user_id': user_id,
                 'status': 'failed',
-                'error': str(e)
+                'error': error_message
             }
 
     @sync_to_async
     def _get_eligible_users(self):
-        """Get all users eligible for daily content generation"""
+        """Get all users eligible for daily content generation (excluding those with errors)"""
         return list(
-            User.objects.filter(
+            User.objects.extra(
+                where=["daily_generation_error IS NULL"]
+            ).filter(
                 usersubscription__status='active',
                 is_active=True
             ).distinct().values('id', 'email', 'username')
@@ -403,7 +502,25 @@ class DailyContentService:
 
                     return result
         except Exception as e:
-            return {'status': 'error', 'error': str(e)}
+            error_message = str(e)
+
+            # Log AI service failure for audit (includes Gemini 503 errors)
+            AuditService.log_daily_content_generation(
+                user=user,
+                action='daily_content_generation_failed',
+                status='error',
+                error_message=error_message,
+                details={
+                    'generation_type': post_type,
+                    'post_objective': post_objective,
+                    'ai_provider': 'google',
+                    'ai_model': 'gemini-2.5-flash',
+                    'error_type': 'ai_service_error',
+                    'is_503_error': '503' in error_message or 'sobrecarregado' in error_message.lower()
+                }
+            )
+
+            return {'status': 'error', 'error': error_message}
 
     async def process_users_batch_async(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
         """Process a specific batch of users for daily content generation."""
@@ -463,10 +580,142 @@ class DailyContentService:
 
     @sync_to_async
     def _get_eligible_users_batch(self, offset: int, limit: int):
-        """Get a batch of users eligible for daily content generation"""
+        """Get a batch of users eligible for daily content generation (excluding those with errors)"""
         return list(
-            User.objects.filter(
+            User.objects.extra(
+                where=["daily_generation_error IS NULL"]
+            ).filter(
                 usersubscription__status='active',
-                is_active=True,
+                is_active=True
             ).distinct().values('id', 'email', 'username')[offset:offset + limit]
         )
+
+    @sync_to_async
+    def _store_user_error(self, user, error_message: str):
+        """Store error message in user model for retry processing."""
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE auth_user SET daily_generation_error = %s, daily_generation_error_date = %s WHERE id = %s",
+                    [error_message, timezone.now(), user.id]
+                )
+            self._send_fallback_email_sync(
+                f"Usuário {user.first_name} ({user.email}) falhou ao gerar conteúdo durante o envio de conteúdo diário. Motivo: {error_message}"
+            )
+            logger.info(
+                f"Stored error for user {user.id}: {error_message[:100]}...")
+        except Exception as e:
+            logger.error(f"Failed to store error for user {user.id}: {str(e)}")
+
+    @sync_to_async
+    def _clear_user_error(self, user):
+        """Clear error message from user model after successful generation."""
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE auth_user SET daily_generation_error = NULL, daily_generation_error_date = NULL WHERE id = %s",
+                    [user.id]
+                )
+            logger.info(f"Cleared error for user {user.id}")
+        except Exception as e:
+            logger.error(f"Failed to clear error for user {user.id}: {str(e)}")
+
+    @sync_to_async
+    def _get_users_with_errors(self):
+        """Get all users who have daily generation errors."""
+        return list(
+            User.objects.extra(
+                where=["daily_generation_error IS NOT NULL"]
+            ).filter(
+                usersubscription__status='active',
+                is_active=True
+            ).distinct().values('id', 'email', 'username', 'first_name')
+        )
+
+    async def retry_failed_users_async(self) -> Dict[str, Any]:
+        """Retry daily content generation for users who had errors."""
+        start_time = timezone.now()
+
+        try:
+            failed_users = await self._get_users_with_errors()
+            total_users = len(failed_users)
+
+            if total_users == 0:
+                return {
+                    'status': 'completed',
+                    'total_users': 0,
+                    'processed': 0,
+                    'message': 'No users with errors found',
+                }
+
+            logger.info(
+                f"Starting retry process for {total_users} users with errors")
+
+            # Log retry process start
+            await sync_to_async(AuditService.log_system_operation)(
+                user=None,
+                action='daily_content_retry_started',
+                status='info',
+                resource_type='DailyContent',
+                details={
+                    'total_users': total_users,
+                    'retry_type': 'failed_users'
+                }
+            )
+
+            results = await self._process_users_concurrently(failed_users)
+
+            processed_count = sum(
+                1 for r in results if r.get('status') == 'success')
+            failed_count = sum(
+                1 for r in results if r.get('status') == 'failed')
+            skipped_count = sum(
+                1 for r in results if r.get('status') == 'skipped')
+
+            end_time = timezone.now()
+            duration = (end_time - start_time).total_seconds()
+
+            result = {
+                'status': 'completed',
+                'total_users': total_users,
+                'processed': processed_count,
+                'failed': failed_count,
+                'skipped': skipped_count,
+                'duration_seconds': duration,
+                'details': results,
+            }
+
+            logger.info(
+                f"Retry completed: {processed_count} successful, {failed_count} failed, {skipped_count} skipped")
+
+            # Log retry process completion
+            await sync_to_async(AuditService.log_system_operation)(
+                user=None,
+                action='daily_content_retry_completed',
+                status='success' if failed_count == 0 else 'warning',
+                resource_type='DailyContent',
+                details={
+                    'total_users': total_users,
+                    'processed': processed_count,
+                    'failed': failed_count,
+                    'skipped': skipped_count,
+                    'success_rate': (processed_count / total_users * 100) if total_users > 0 else 0
+                }
+            )
+
+            return result
+
+        except Exception as e:
+            end_time = timezone.now()
+            duration = (end_time - start_time).total_seconds()
+
+            logger.error(f"Error in retry process: {str(e)}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'processed': 0,
+                'message': 'Error processing retry users',
+                'duration_seconds': duration,
+            }

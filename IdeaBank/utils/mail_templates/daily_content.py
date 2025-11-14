@@ -17,7 +17,7 @@ def daily_content_template(user_name: str, feed_image: str, feed_text: str, reel
                     <!-- Header -->
                     <tr>
                         <td style="background-color: #0f172a; padding: 40px; text-align: center;">
-                            <img src="cid:postnow_logo" alt="PostNow Logo" style="width: 114px; height: 32px; margin-bottom: 20px;">
+                            <img src="https://postnow-image-bucket-prod.s3.sa-east-1.amazonaws.com/postnow_logo_white.png" alt="PostNow Logo" style="width: 114px; height: 32px; margin-bottom: 20px;">
                             <h1 style="margin: 0; color: #8b5cf6; font-size: 24px; font-weight: 600;">
                                 {user_name} <span style="color: #ffffff;">chegaram suas ideias para os posts de hoje! 🎉</span>
                             </h1>
