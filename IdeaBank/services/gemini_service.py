@@ -259,7 +259,7 @@ class GeminiService(BaseAIService):
         """Generate descriptive text for an image using Gemini's chat API."""
         compressed_data = ""
 
-        # Validate credits before generation
+        # Validate credits before generation (using 2.5-flash as base for validation)
         if user and user.is_authenticated:
             model_name = 'gemini-2.5-flash'
             if not self._validate_credits(user, model_name, 1):
@@ -277,69 +277,134 @@ class GeminiService(BaseAIService):
                 except ImportError:
                     print("⚠️ Could not deduct credits - AIModelService not available")
 
-        try:
-            # Validate existing_image before processing
-            if not existing_image:
-                raise ValueError("Imagem é obrigatória para geração de texto")
+        # Validate existing_image before processing
+        if not existing_image:
+            raise ValueError("Imagem é obrigatória para geração de texto")
 
-            # Get image data (handles both URLs and base64)
-            image_data = get_image_data(existing_image)
-            if not image_data:
-                raise ValueError(
-                    "Falha ao obter dados da imagem (URL ou base64)")
+        # Get image data (handles both URLs and base64)
+        image_data = get_image_data(existing_image)
+        if not image_data:
+            raise ValueError("Falha ao obter dados da imagem (URL ou base64)")
 
-            client = genai.Client(
-                api_key=os.environ.get("GEMINI_API_KEY"),
-            )
+        # Try models with fallback: 2.5-flash first, then 1.5-flash if 503 error
+        models_to_try = ['gemini-2.5-flash', 'gemini-1.5-flash']
 
-            contents = [
-                types.Content(
-                    role="user",
-                    parts=[
-                        types.Part.from_text(text=prompt),
-                        types.Part.from_bytes(
-                            mime_type="image/jpeg",
-                            data=image_data,
-                        )
-                    ],
-                ),
-            ]
+        for model_name in models_to_try:
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    client = genai.Client(
+                        api_key=os.environ.get("GEMINI_API_KEY"),
+                    )
 
-            generate_content_config = types.GenerateContentConfig(
-                response_modalities=[
-                    "TEXT",
-                ],
-            )
+                    # Add delay based on attempt number
+                    if attempt > 0:
+                        delay = 10 * (attempt + 1)  # 10s, 20s, 30s
+                        print(
+                            f"⏳ Attempt {attempt + 1}/{max_retries} with {model_name} after {delay}s delay...")
+                        time.sleep(delay)
+                    else:
+                        # Small initial delay to avoid rate limits
+                        time.sleep(5)
 
-            for chunk in client.models.generate_content_stream(
-                model='gemini-2.5-flash',
-                contents=contents,
-                config=generate_content_config,
-            ):
-                # Skip if chunk is not a response object with candidates
-                if not hasattr(chunk, 'candidates') or chunk.candidates is None:
-                    continue
-                if (
-                    len(chunk.candidates) == 0
-                    or chunk.candidates[0].content is None
-                    or chunk.candidates[0].content.parts is None
-                    or len(chunk.candidates[0].content.parts) == 0
-                ):
-                    continue
-                part = chunk.candidates[0].content.parts[0]
-                if hasattr(part, 'text') and part.text:
-                    compressed_data += part.text
+                    print(f'📝 Generating text for image with {model_name}')
 
-            if compressed_data:
-                # Deduct credits for successful text generation
-                deduct_credits_for_text(" (image description)")
+                    contents = [
+                        types.Content(
+                            role="user",
+                            parts=[
+                                types.Part.from_text(text=prompt),
+                                types.Part.from_bytes(
+                                    mime_type="image/jpeg",
+                                    data=image_data,
+                                )
+                            ],
+                        ),
+                    ]
 
-                return compressed_data
-            else:
-                print("❌ No text generated from Gemini")
-        except Exception as e:
-            error_str = str(e)
-            print(f"❌ Exception in text generation: {error_str}")
+                    generate_content_config = types.GenerateContentConfig(
+                        response_modalities=[
+                            "TEXT",
+                        ],
+                    )
+
+                    compressed_data = ""
+                    for chunk in client.models.generate_content_stream(
+                        model=model_name,
+                        contents=contents,
+                        config=generate_content_config,
+                    ):
+                        # Skip if chunk is not a response object with candidates
+                        if not hasattr(chunk, 'candidates') or chunk.candidates is None:
+                            continue
+                        if (
+                            len(chunk.candidates) == 0
+                            or chunk.candidates[0].content is None
+                            or chunk.candidates[0].content.parts is None
+                            or len(chunk.candidates[0].content.parts) == 0
+                        ):
+                            continue
+                        part = chunk.candidates[0].content.parts[0]
+                        if hasattr(part, 'text') and part.text:
+                            compressed_data += part.text
+
+                    if compressed_data:
+                        # Deduct credits for successful text generation
+                        deduct_credits_for_text(" (image description)")
+                        return compressed_data
+                    else:
+                        print("❌ No text generated from Gemini - retrying...")
+                        if attempt == max_retries - 1:  # Last attempt
+                            break  # Try next model
+                        continue  # Try again with same model
+
+                except Exception as e:
+                    error_str = str(e)
+                    print(
+                        f"❌ Exception with {model_name} (attempt {attempt + 1}/{max_retries}): {error_str}")
+
+                    # Check for server overload errors (503) - try fallback model
+                    if '503' in error_str or 'unavailable' in error_str.lower() or 'overloaded' in error_str.lower():
+                        if attempt < max_retries - 1:  # Not the last attempt with this model
+                            print("⚠️ Model overloaded, will retry in a moment...")
+                            continue
+                        else:
+                            print(
+                                f"⚠️ {model_name} overloaded after all retries, trying next model...")
+                            break  # Try next model
+
+                    # Check for quota/rate limit errors - these can be retried
+                    if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+                        if attempt < max_retries - 1:  # Not the last attempt
+                            print(
+                                "⚠️ Rate limit hit, will retry with longer delay...")
+                            continue
+                        else:
+                            print(
+                                f"⚠️ {model_name} rate limited after all retries, trying next model...")
+                            break  # Try next model
+
+                    # Check for block reason errors (safety filters) - these should not be retried
+                    if 'block_reason:' in error_str:
+                        user_friendly_message = self._get_block_reason_error_message(
+                            error_str)
+                        print(
+                            f"🛡️ Content blocked by Gemini safety filters: {user_friendly_message}")
+                        raise Exception(
+                            f"Conteúdo bloqueado pelos filtros de segurança: {user_friendly_message}")
+
+                    # For other errors, retry if not last attempt
+                    if attempt < max_retries - 1:
+                        print("⚠️ Unexpected error, will retry...")
+                        continue
+                    else:
+                        print(
+                            f"⚠️ {model_name} failed after all retries, trying next model...")
+                        break  # Try next model
+
+        # If we reach here, all models failed
+        print("❌ All models failed to generate text")
+        return ""
 
     def generate_image(self, prompt: str, current_image: str, user: User = None, post_data: dict = None, idea_content: str = None) -> str:
         """Generate an image using Gemini's chat API with conversation history support."""
@@ -367,16 +432,13 @@ class GeminiService(BaseAIService):
 
         try:
 
-            # Try different model names for image generation with fallbacks
+            # Try different model names for image generation with fallbacks (2.5 first, then 1.5)
             model_names = [
                 'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image-preview',
                 'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image-preview',
+                'gemini-1.5-flash-image',
                 'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image-preview',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image-preview',
+                'gemini-2.5-flash-image', 'gemini-2.5-flash-image', 'gemini-2.5-flash-image', 'gemini-2.5-flash-image', 'gemini-2.5-flash-image', 'gemini-2.5-flash-image',
             ]
 
             for model_name in model_names:
@@ -803,89 +865,115 @@ class GeminiService(BaseAIService):
         # Create client with API key
         client = genai.Client(api_key=api_key)
 
-        try:
-            # Fetch existing conversation history from S3 bucket
-            chat_history_data = []
-            if user:
-                chat_history_data = s3_chat_history.get_history(user)
+        # Try the requested model first, then fallback to alternative if 503 error
+        models_to_try = [model_name]
 
-            # Convert serializable history to Content objects for the new API
-            history_contents = []
-            if chat_history_data:
-                for content_dict in chat_history_data:
-                    parts = []
-                    for part_dict in content_dict.get('parts', []):
-                        if 'text' in part_dict:
-                            parts.append(types.Part.from_text(
-                                text=part_dict['text']))
-                        elif 'inline_data' in part_dict:
-                            # Handle inline data if needed
-                            pass
-                    if parts:
-                        history_contents.append(types.Content(
-                            role=content_dict.get('role', 'user'),
-                            parts=parts
-                        ))
+        # Add fallback model if we get 503 error
+        if model_name == 'gemini-2.5-flash':
+            models_to_try.append('gemini-1.5-flash')
+        elif model_name == 'gemini-1.5-flash':
+            models_to_try.append('gemini-2.5-flash')
 
-            # Create a chat session with the fetched history
-            chat = client.chats.create(
-                model=model_name,
-                history=history_contents if history_contents else None
-            )
+        for current_model in models_to_try:
+            try:
+                print(f"🤖 Trying {current_model} for text generation")
 
-            # Handle special conversation flows
-            is_campaign = post_data and post_data.get(
-                'type', '').lower() == 'campaign'
-            if is_campaign:
-                return self._handle_campaign_generation_flow(chat, user, post_data)
-            else:
-                # Default flow - send the prompt as the message
-                response = chat.send_message(prompt)
+                # Fetch existing conversation history from S3 bucket
+                chat_history_data = []
+                if user:
+                    chat_history_data = s3_chat_history.get_history(user)
 
-                if response.text:
-                    # Save the updated history back to S3 bucket
-                    if user:
-                        updated_history = chat.get_history()
-                        serializable_history = self._convert_history_to_serializable(
-                            updated_history)
-                        s3_chat_history.append_interaction(
-                            user, serializable_history)
+                # Convert serializable history to Content objects for the new API
+                history_contents = []
+                if chat_history_data:
+                    for content_dict in chat_history_data:
+                        parts = []
+                        for part_dict in content_dict.get('parts', []):
+                            if 'text' in part_dict:
+                                parts.append(types.Part.from_text(
+                                    text=part_dict['text']))
+                            elif 'inline_data' in part_dict:
+                                # Handle inline data if needed
+                                pass
+                        if parts:
+                            history_contents.append(types.Content(
+                                role=content_dict.get('role', 'user'),
+                                parts=parts
+                            ))
 
-                    return response.text
+                # Create a chat session with the fetched history
+                chat = client.chats.create(
+                    model=current_model,
+                    history=history_contents if history_contents else None
+                )
+
+                # Handle special conversation flows
+                is_campaign = post_data and post_data.get(
+                    'type', '').lower() == 'campaign'
+                if is_campaign:
+                    return self._handle_campaign_generation_flow(chat, user, post_data)
                 else:
-                    raise Exception("Empty response from Gemini API")
+                    # Default flow - send the prompt as the message
+                    response = chat.send_message(prompt)
 
-        except Exception as e:
-            error_str = str(e)
-            print(f"❌ Gemini API error: {error_str}")
+                    if response.text:
+                        # Save the updated history back to S3 bucket
+                        if user:
+                            updated_history = chat.get_history()
+                            serializable_history = self._convert_history_to_serializable(
+                                updated_history)
+                            s3_chat_history.append_interaction(
+                                user, serializable_history)
 
-            # Check for block reason errors (safety filters)
-            if 'block_reason:' in error_str:
-                user_friendly_message = self._get_block_reason_error_message(
-                    error_str)
-                print(
-                    f"🛡️ Content blocked by Gemini safety filters: {user_friendly_message}")
+                        return response.text
+                    else:
+                        raise Exception("Empty response from Gemini API")
+
+            except Exception as e:
+                error_str = str(e)
+                print(f"❌ Gemini API error with {current_model}: {error_str}")
+
+                # Check for server overload errors (503) - try fallback model
+                if '503' in error_str or 'unavailable' in error_str.lower() or 'overloaded' in error_str.lower():
+                    # Not the last model to try
+                    if current_model != models_to_try[-1]:
+                        print(
+                            f"⚠️ {current_model} overloaded, trying fallback model...")
+                        continue  # Try next model
+                    else:
+                        user_friendly_message = self._get_overload_error_message(
+                            error_str)
+                        print(
+                            f"⚠️ All models overloaded: {user_friendly_message}")
+                        raise Exception(
+                            f"Serviço temporariamente sobrecarregado: {user_friendly_message}")
+
+                # For non-503 errors, handle them immediately
+                # Check for block reason errors (safety filters)
+                if 'block_reason:' in error_str:
+                    user_friendly_message = self._get_block_reason_error_message(
+                        error_str)
+                    print(
+                        f"🛡️ Content blocked by Gemini safety filters: {user_friendly_message}")
+                    raise Exception(
+                        f"Conteúdo bloqueado pelos filtros de segurança: {user_friendly_message}")
+
+                # Check for quota/rate limit errors
+                if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
+                    user_friendly_message = self._get_quota_error_message(
+                        error_str)
+                    print(
+                        f"⚠️ Quota/rate limit error: {user_friendly_message}")
+                    raise Exception(
+                        f"Erro de quota da API: {user_friendly_message}")
+
+                # For other errors, provide generic message
                 raise Exception(
-                    f"Conteúdo bloqueado pelos filtros de segurança: {user_friendly_message}")
+                    f"Falha na comunicação com Gemini: {error_str}")
 
-            # Check for quota/rate limit errors
-            if '429' in error_str or 'quota' in error_str.lower() or 'exhausted' in error_str.lower():
-                user_friendly_message = self._get_quota_error_message(
-                    error_str)
-                print(f"⚠️ Quota/rate limit error: {user_friendly_message}")
-                raise Exception(
-                    f"Erro de quota da API: {user_friendly_message}")
-
-            # Check for server overload errors (503)
-            if '503' in error_str or 'unavailable' in error_str.lower() or 'overloaded' in error_str.lower():
-                user_friendly_message = self._get_overload_error_message(
-                    error_str)
-                print(f"⚠️ Server overload error: {user_friendly_message}")
-                raise Exception(
-                    f"Serviço temporariamente sobrecarregado: {user_friendly_message}")
-
-            # For other errors, provide generic message
-            raise Exception(f"Falha na comunicação com Gemini: {error_str}")
+        # If we reach here, all models failed
+        raise Exception(
+            "Falha na comunicação com Gemini: todos os modelos falharam")
 
     def _handle_campaign_generation_flow(self, chat, user: User, post_data: dict = None) -> str:
         """Handle campaign generation flow with historical analysis."""

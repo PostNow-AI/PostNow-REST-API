@@ -19,16 +19,16 @@ class PromptService:
                 "whitespace_breathing": "ESPAÇO EM BRANCO GENEROSO: Use padding no container principal (ex: '40px') e 'gap' (ex: '16px') entre os elementos de texto para criar um design limpo e arejado.",
                 "professional_effects": "EFEITOS SUTIS E MODERNOS: Use 'box-shadow' suave para o container ou 'text-shadow' delicado para o texto. Gradientes sutis no fundo do container são bem-vindos.",
             },
-            "🚨 INSTRUÇÃO_CRÍTICA_LEGIBILIDADE": "GARANTA 100% DE LEGIBILIDADE. O texto DEVE ser fácil de ler. Use um fundo de container (cor sólida com transparência ou gradiente sutil) para separar o texto da imagem de fundo e garantir o contraste.",
-            "🚨 INSTRUÇÃO_CRÍTICA_LAYOUT": "NÃO SOBREPONHA TEXTOS. Use um único container com layout flexbox ('display: flex', 'flex-direction: column') para empilhar os elementos de texto verticalmente com espaçamento adequado ('gap').",
+            "🚨 INSTRUÇÃO_CRÍTICA_LEGIBILIDADE": "GARANTA 100% DE LEGIBILIDADE - OBRIGATÓRIO. O texto DEVE ser fácil de ler. O fundo do container é OPCIONAL, mas se a legibilidade não estiver garantida sem ele, então use um fundo (cor sólida com transparência ou gradiente sutil) para separar o texto da imagem de fundo e garantir o contraste perfeito.",
+            "🚨 INSTRUÇÃO_CRÍTICA_LAYOUT": "NÃO SOBREPONHA TEXTOS. FLEXIBILIDADE DE CONTAINERS: Você pode usar UM container único com layout flexbox ('display: flex', 'flex-direction: column') OU SEPARAR os elementos em containers individuais se isso criar um design mais harmonioso e dinâmico. Analise a imagem e escolha a melhor abordagem.",
             "feed_image_text": {
                 "main_container": {
-                    "comment": "Este é o container principal que envolve todos os elementos de texto. Use-o para posicionar o bloco de texto na imagem e aplicar um fundo para legibilidade.",
+                    "comment": "ANALISE A IMAGEM e escolha a abordagem ideal: UM container único (quando os elementos ficam melhor agrupados) OU containers SEPARADOS (quando isso cria design mais dinâmico). Posicione estrategicamente baseado na composição da imagem.",
                     "position": {
-                        "top": "40px",
-                        "left": "40px",
-                        "right": "40px",
-                        "bottom": "auto"
+                        "top": "[ANALISE A IMAGEM - escolha: '20px' para topo, '40%' para centro, 'auto' para baixo, etc.]",
+                        "left": "[ANALISE A IMAGEM - escolha: '20px' para esquerda, '40%' para centro, 'auto' para direita, etc.]", 
+                        "right": "[ANALISE A IMAGEM - escolha: '20px' para direita, 'auto' se usar left, etc.]",
+                        "bottom": "[ANALISE A IMAGEM - escolha: '20px' para baixo, 'auto' para outras posições, etc.]"
                     },
                     "style": {
                         "display": "flex",
@@ -36,7 +36,7 @@ class PromptService:
                         "align-items": "flex-start",
                         "gap": "12px",
                         "padding": "24px",
-                        "background": "rgba(0, 0, 0, 0.45)",
+                        "background": "[OPCIONAL - use apenas se necessário para legibilidade: 'rgba(0, 0, 0, 0.45)' ou 'transparent' se não precisar]",
                         "border-radius": "12px",
                         "box-shadow": "0 6px 24px rgba(0, 0, 0, 0.25)",
                         "backdrop-filter": "blur(10px)"
@@ -90,9 +90,19 @@ class PromptService:
                     ]
                 }
             },
-            "🚫 ERROS DE DESIGN A EVITAR": {
+            "� GUIA DE POSICIONAMENTO INTELIGENTE": {
+                "analise_composicao": "OBRIGATÓRIO: Identifique onde estão os elementos principais da imagem (pessoas, objetos, texto existente) e posicione o texto em áreas complementares.",
+                "areas_ideais": "PROCURE por: Espaços com cor uniforme, áreas sem muito detalhe, fundos desfocados, céu, paredes lisas, ou cantos com menos informação visual.",
+                "coordenadas_flexiveis": "USE coordenadas variadas: top: '20px'/'50%'/'auto', left: '20px'/'40%'/'auto', right: '20px'/'auto', bottom: '20px'/'auto' baseado na análise da imagem.",
+                "composicao_harmoniosa": "CRIE equilíbrio: Se a imagem tem elementos do lado esquerdo, posicione o texto à direita. Se há movimento no centro, use as laterais ou cantos.",
+                "teste_legibilidade": "GARANTA que o texto não compete visualmente com elementos importantes da imagem e mantém alta legibilidade em qualquer posição escolhida."
+            },
+            "�🚫 ERROS DE DESIGN A EVITAR": {
+                "posicionamento_generico": "❌ EVITAR: Usar sempre as mesmas coordenadas (ex: top: 40px, left: 40px). ✅ USAR: Coordenadas baseadas na análise específica de cada imagem.",
+                "sobreposicao_elementos": "❌ EVITAR: Posicionar texto sobre rostos, logotipos ou elementos importantes. ✅ USAR: Áreas vazias ou com menos informação visual.",
+                "container_unico_forcado": "❌ EVITAR: Forçar todos os elementos em um único container gigante quando isso não funciona bem na composição. ✅ USAR: Flexibilidade - UM container quando apropriado, ou elementos SEPARADOS em containers individuais para design mais dinâmico.",
                 "posicionamento_absoluto_rigido": "❌ EVITAR: Posicionar cada elemento com 'top' e 'left' fixos. ✅ USAR: Um container com 'display: flex' para criar um layout fluido e alinhado.",
-                "falta_de_fundo": "❌ EVITAR: Texto direto sobre a imagem sem um fundo de container. ✅ USAR: Um container com 'background' (cor sólida com transparência ou gradiente) para garantir legibilidade.",
+                "legibilidade_comprometida": "❌ EVITAR: Texto que não pode ser lido claramente sobre a imagem. ✅ USAR: Posicionamento inteligente e/ou fundo do container (quando necessário) para garantir 100% de legibilidade.",
                 "sombras_pesadas": "❌ EVITAR: 'text-shadow' muito forte e escuro. ✅ USAR: Sombras sutis para texto e container ('box-shadow').",
                 "layout_desalinhado": "❌ EVITAR: Elementos desalinhados. ✅ USAR: 'align-items' no container flex para alinhar todos os textos (ex: 'flex-start' para alinhar à esquerda).",
                 "espacamento_inconsistente": "❌ EVITAR: Espaços aleatórios entre os textos. ✅ USAR: A propriedade 'gap' no container flex para um espaçamento consistente."
@@ -108,18 +118,58 @@ Sua missão é gerar um JSON com título, subtítulo e CTA para serem sobreposto
 
 O design do texto deve ser elegante, moderno e, acima de tudo, legível.
 
+🔍 ANÁLISE OBRIGATÓRIA DA IMAGEM (PRIMEIRA ETAPA):
+ANTES de criar o design, você DEVE analisar a imagem fornecida e identificar:
+
+1. **Composição e Elementos Visuais**:
+   - Onde estão os elementos principais da imagem (pessoas, objetos, logotipos)?
+   - Quais áreas têm mais movimento visual vs. áreas mais "vazias"?
+   - Há texto ou elementos gráficos já presentes?
+
+2. **Análise de Cores Dominantes**:
+   - Quais são as 3 cores principais da imagem?
+   - Há áreas mais claras ou escuras que facilitariam a leitura?
+   - Que cores de texto criariam melhor contraste?
+
+3. **Identificação de Espaços Ideais**:
+   - Qual área da imagem tem menos "ruído visual" para colocar o texto?
+   - Onde o texto NÃO competiria com elementos importantes da imagem?
+   - Que posicionamento (superior esquerdo, inferior direito, centro, etc.) seria mais harmonioso?
+
+4. **Decisão de Layout Estratégico**:
+   Decida se usar UM container único agrupando todos os elementos OU containers SEPARADOS para cada elemento (título, subtítulo, CTA). Esta decisão deve ser baseada na composição da imagem.
+
+5. **Posicionamento Inteligente**:
+   Com base na análise acima, escolha ESTRATEGICAMENTE onde posicionar o(s) container(s) usando coordenadas específicas (top, left, right, bottom) que complementem a composição da imagem.
+
 🎯 DIRETRIZES DE DESIGN (OBRIGATÓRIO):
-1.  **Layout com Flexbox**: Organize o texto dentro de um container principal usando `display: flex` e `flex-direction: column`. Isso garante alinhamento e espaçamento perfeitos.
-2.  **Legibilidade é Rei**: O texto DEVE ser 100% legível. Use um fundo no container (`background`) — seja uma cor sólida com transparência (ex: `rgba(0,0,0,0.4)`) ou um gradiente sutil — para criar contraste com a imagem.
+1.  **Flexibilidade de Layout**: Você pode usar UM container único com `display: flex` e `flex-direction: column` OU SEPARAR os elementos (título, subtítulo, CTA) em containers individuais posicionados estrategicamente na imagem. Escolha baseado na análise da composição da imagem.
+2.  **Legibilidade é OBRIGATÓRIA**: O texto DEVE ser 100% legível - esta é a regra mais importante. O fundo do container (`background`) é OPCIONAL, mas se necessário para garantir legibilidade, use uma cor sólida com transparência (ex: `rgba(0,0,0,0.4)`) ou um gradiente sutil.
 3.  **Hierarquia Clara**: Diferencie título, subtítulo e CTA com tamanhos de fonte (`font-size`) e pesos (`font-weight`) distintos.
 4.  **Estilo Profissional**: Use fontes limpas e modernas (Inter, Roboto). Aplique efeitos sutis como `box-shadow` no container e `text-shadow` suave no texto.
+5.  **Posicionamento Inteligente**: Use as coordenadas (top, left, right, bottom) baseadas na sua análise da imagem para criar uma composição harmoniosa e dinâmica.
 
 ⚙️ FORMATO DE SAÍDA (OBRIGATÓRIO):
-A resposta deve ser estritamente em formato JSON, seguindo esta estrutura. Preencha os campos de texto e ajuste os estilos para combinar com a imagem e o conteúdo.
+A resposta deve ser estritamente em formato JSON, seguindo esta estrutura. Preencha os campos de texto, ajuste os estilos E MODIFIQUE AS COORDENADAS DO CONTAINER baseado na sua análise da imagem.
 
 {self.text_characteristics()}
 
-IMPORTANTE: Analise a imagem e o conteúdo para escolher cores e estilos que criem um resultado harmonioso e profissional. O objetivo é um design que pareça ter sido feito por um humano especialista.
+🚨 INSTRUÇÃO CRÍTICA DE POSICIONAMENTO:
+NÃO use sempre as mesmas coordenadas (top: 40px, left: 40px, etc.). ANALISE a imagem e escolha coordenadas específicas que:
+- Evitem sobrepor elementos importantes da imagem
+- Aproveitem espaços "vazios" ou com menos informação visual  
+- Criem equilíbrio visual com a composição existente
+- Garantam máxima legibilidade sem competir com a imagem
+
+🎯 EXIGÊNCIA DE QUALIDADE PROFISSIONAL:
+Sua análise deve gerar um JSON que se transforme em um texto de QUALIDADE PROFISSIONAL - OBRIGATÓRIO. O resultado final deve parecer ter sido criado por um designer especialista que:
+- Analisou meticulosamente a composição da imagem
+- Escolheu posicionamento estratégico baseado em princípios de design
+- Priorizou legibilidade acima de tudo
+- Criou uma hierarquia visual clara e harmoniosa
+- Aplicou conhecimentos de design gráfico profissional
+
+IMPORTANTE: Sua análise da imagem deve resultar em um posicionamento único e estratégico do texto. O objetivo é um design que pareça ter sido feito por um humano especialista que realmente analisou a imagem antes de posicionar o texto.
       """
 
     def build_content_prompt(self, post_data: Dict) -> str:
