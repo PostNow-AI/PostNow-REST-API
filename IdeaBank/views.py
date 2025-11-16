@@ -675,18 +675,6 @@ def vercel_cron_daily_content_generation(request):
         batch_number = int(request.GET.get('batch', 1))
         batch_size = 5  # Process 5 users per batch, to avoid vercel timeouts
 
-        # Log cron job start
-        AuditService.log_daily_content_generation(
-            action='daily_content_cron_started',
-            status='info',
-            resource_type='CronJob',
-            details={
-                'batch_number': batch_number,
-                'batch_size': batch_size,
-                'cron_type': 'daily_content_generation'
-            }
-        )
-
         # Run async processing
         service = DailyContentService()
 
@@ -701,33 +689,10 @@ def vercel_cron_daily_content_generation(request):
         finally:
             loop.close()
 
-        # Log cron job completion
-        AuditService.log_daily_content_generation(
-            action='daily_content_cron_completed',
-            status='success',
-            resource_type='CronJob',
-            details={
-                'batch_number': batch_number,
-                'result': result
-            }
-        )
-
         return JsonResponse(result, status=200)
 
     except Exception as e:
         logger.error(f"Vercel cron job failed: {str(e)}")
-
-        # Log cron job failure
-        AuditService.log_daily_content_generation(
-            action='daily_content_cron_failed',
-            status='error',
-            error_message=str(e),
-            resource_type='CronJob',
-            details={
-                'batch_number': batch_number if 'batch_number' in locals() else None,
-                'cron_type': 'daily_content_generation'
-            }
-        )
 
         return JsonResponse({
             'error': 'Internal server error',
@@ -814,16 +779,6 @@ def vercel_cron_retry_failed_users(request):
     try:
         service = DailyContentService()
 
-        # Log retry cron job start
-        AuditService.log_daily_content_generation(
-            action='daily_content_retry_cron_started',
-            status='info',
-            resource_type='CronJob',
-            details={
-                'cron_type': 'retry_failed_users'
-            }
-        )
-
         # Use asyncio to run the async function
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -835,31 +790,10 @@ def vercel_cron_retry_failed_users(request):
         finally:
             loop.close()
 
-        # Log retry cron job completion
-        AuditService.log_daily_content_generation(
-            action='daily_content_retry_cron_completed',
-            status='success',
-            resource_type='CronJob',
-            details={
-                'result': result
-            }
-        )
-
         return JsonResponse(result, status=200)
 
     except Exception as e:
         logger.error(f"Vercel retry cron job failed: {str(e)}")
-
-        # Log retry cron job failure
-        AuditService.log_daily_content_generation(
-            action='daily_content_retry_cron_failed',
-            status='error',
-            error_message=str(e),
-            resource_type='CronJob',
-            details={
-                'cron_type': 'retry_failed_users'
-            }
-        )
 
         return JsonResponse({
             'error': 'Internal server error',
