@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'GlobalOptions',
     'CreditSystem',
     'AuditSystem',
+    'ClientContext',
 ]
 
 SITE_ID = 3

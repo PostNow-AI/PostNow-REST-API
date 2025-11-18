@@ -68,4 +68,7 @@ urlpatterns = [
 
     # Audit System endpoints
     path('api/v1/audit/', include('AuditSystem.urls')),
+
+    # Client Context endpoints
+    path('api/v1/client-context/', include('ClientContext.urls')),
 ]
