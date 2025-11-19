@@ -26,7 +26,9 @@ class AiService:
             ],
         )
         self.generate_image_config = types.GenerateContentConfig(
-            image_size=types.ImageSize.IMAGE_SIZE_1024,
+            image_config=types.ImageConfig(
+                image_size="1K",
+            ),
             response_modalities=[
                 "IMAGE",
             ],
@@ -46,7 +48,7 @@ class AiService:
             try:
                 result = self._try_model_with_retries(
                     model=self.main_model,
-                    generate_func=lambda: self._try_generate_text(
+                    generate_function=lambda: self._try_generate_text(
                         self.main_model, self.contents, self.generate_text_config),
                     max_retries=3
                 )

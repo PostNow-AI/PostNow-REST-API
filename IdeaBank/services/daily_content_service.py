@@ -6,14 +6,14 @@ from typing import Any, Dict, List
 
 from asgiref.sync import sync_to_async
 from AuditSystem.services import AuditService
-from CreatorProfile.models import CreatorProfile
-from CreditSystem.services.credit_service import CreditService
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 from IdeaBank.models import Post, PostIdea, PostObjective
 from IdeaBank.services.mail_service import MailService
 from IdeaBank.utils.mail_templates.daily_content import daily_content_template
+from services.mailjet_service import MailjetService
+from services.user_validation_service import UserValidationService
 
 from .post_ai_service import PostAIService
 
@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 class DailyContentService:
     def __init__(self):
         self.ai_service = PostAIService()
-        self.credit_service = CreditService()
         self.max_concurrent_users = os.getenv('MAX_CONCURRENT_USERS', 50)
+        self.user_validation_service = UserValidationService()
 
     async def mail_all_generated_content(self) -> Dict[str, Any]:
         """Send one email per user with all their generated posts, then activate posts."""
@@ -156,50 +156,6 @@ class DailyContentService:
             logger.error(
                 f"Erro ao enviar e-mail para o usuário {user.id}: {str(e)}")
 
-    async def send_fallback_email_to_admins(self, error_message: str):
-        """Send fallback email to admins in case of critical failure."""
-        try:
-            mailjet = MailService()
-            subject = "Falha na Geração de Conteúdo Diário"
-            admin_emails = os.getenv(
-                'ADMIN_EMAILS', '').split(',')
-            html_content = f"""
-            <h1>Falha na Geração de Conteúdo Diário</h1>
-            <p>Ocorreu um erro durante o processo de geração de conteúdo diário:</p>
-            <pre>{error_message or 'Erro interno de servidor'}</pre>
-            """
-            for admin_email in admin_emails:
-                mailjet.send_email(
-                    admin_email.strip(), subject, html_content)
-
-        except Exception as e:
-            logger.error(
-                f"Erro ao enviar e-mail de fallback para administradores: {str(e)}")
-
-    def _send_fallback_email_sync(self, error_message: str):
-        """Synchronous wrapper for sending fallback emails to admins."""
-        import asyncio
-        try:
-            # Create a new event loop if one doesn't exist
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # If loop is running, we need to handle this differently
-                    # For now, just log the error without sending email
-                    logger.warning(
-                        f"Could not send admin email due to running event loop: {error_message[:100]}...")
-                    return
-            except RuntimeError:
-                # No event loop, create one
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            # Run the async email sending
-            loop.run_until_complete(
-                self.send_fallback_email_to_admins(error_message))
-        except Exception as e:
-            logger.error(f"Failed to send admin email: {str(e)}")
-
     async def fetch_users_automatic_posts(self) -> List[Dict[str, Any]]:
         """Recupera todos os posts automáticos gerados para usuários."""
         return await sync_to_async(list)(
@@ -288,15 +244,15 @@ class DailyContentService:
                 'duration_seconds': duration,
             }
 
+    async def process_with_semaphore(self, user_data: Dict):
+        semaphore = asyncio.Semaphore(int(self.max_concurrent_users))
+        async with semaphore:
+            return await self._process_single_user_async(user_data['id'])
+
     async def _process_users_concurrently(self, users: List[Dict]) -> List[Dict[str, Any]]:
         """Processa usuários com limite de concorrência."""
-        semaphore = asyncio.Semaphore(int(self.max_concurrent_users))
 
-        async def process_with_semaphore(user_data: Dict):
-            async with semaphore:
-                return await self._process_single_user_async(user_data['id'])
-
-        tasks = [process_with_semaphore(user) for user in users]
+        tasks = [self.process_with_semaphore(user) for user in users]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -305,7 +261,7 @@ class DailyContentService:
             if isinstance(result, Exception):
                 processed_results.append({
                     'user_id': users[i]['id'],
-                    'user': users[i]['first_name'],
+                    'user': users[i]['email'],
                     'status': 'failed',
                     'error': str(result)
                 })
@@ -318,13 +274,13 @@ class DailyContentService:
     async def _process_single_user_async(self, user_id: int) -> Dict[str, Any]:
         """Processa geração de conteúdo para um único usuário."""
         try:
-            user_data = await self._get_user_data(user_id)
+            user_data = await self.user_validation_service.get_user_data(user_id)
             if not user_data:
                 return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
 
             user, creator_profile = user_data
 
-            validation_result = await self._validate_user_eligibility(user, user_data)
+            validation_result = await self.user_validation_service.validate_user_eligibility(user)
             if validation_result['status'] != 'eligible':
                 return {'user_id': user_id,
                         'status': 'skipped',
@@ -382,7 +338,7 @@ class DailyContentService:
         except Exception as e:
             error_message = str(e)
             # Store error in user profile
-            user_data = await self._get_user_data(user_id)
+            user_data = await self.user_validation_service.get_user_data(user_id)
             if user_data:
                 user, _ = user_data
                 await self._store_user_error(user, error_message)
@@ -417,30 +373,6 @@ class DailyContentService:
                 is_active=True
             ).distinct().values('id', 'email', 'username')
         )
-
-    @sync_to_async
-    def _get_user_data(self, user_id: int):
-        """Fetch user data needed for content generation."""
-        try:
-            user = User.objects.select_related(
-                'creator_profile').get(id=user_id)
-            return user, user.creator_profile
-        except (User.DoesNotExist, CreatorProfile.DoesNotExist):
-            return None
-
-    @sync_to_async
-    def _validate_user_eligibility(self, user, user_data) -> Dict[str, str]:
-        """Check if user is eligible for content generation."""
-        if not self.credit_service.validate_user_subscription(user):
-            return {'status': 'ineligible', 'reason': 'no_active_subscription'}
-
-        if not self.credit_service.has_sufficient_credits(user, required_amount=0.02):
-            return {'status': 'ineligible', 'reason': 'insufficient_credits'}
-
-        if not user_data[1].onboarding_completed:
-            return {'status': 'ineligible', 'reason': 'incomplete_onboarding'}
-
-        return {'status': 'eligible'}
 
     @sync_to_async
     def _generate_content_for_user(self, user, creator_profile, post_type, post_objective) -> Dict[str, Any]:
@@ -592,14 +524,20 @@ class DailyContentService:
         """Store error message in user model for retry processing."""
         try:
             from django.db import connection
+            mailjet = MailjetService()
+
             with connection.cursor() as cursor:
                 cursor.execute(
                     "UPDATE auth_user SET daily_generation_error = %s, daily_generation_error_date = %s WHERE id = %s",
                     [error_message, timezone.now(), user.id]
                 )
-            self._send_fallback_email_sync(
-                f"Usuário {user.first_name} ({user.email}) falhou ao gerar conteúdo durante o envio de conteúdo diário. Motivo: {error_message}"
-            )
+            subject = "Falha na Geração de Conteúdo Diário"
+            html_content = f"""
+            <h1>Falha na Geração de Conteúdo Diário</h1>
+            <p>Ocorreu um erro durante o processo de geração de conteúdo diário:</p>
+            <pre>{error_message or 'Erro interno de servidor'}</pre>
+            """
+            mailjet.send_fallback_email_sync(subject, html_content)
             logger.info(
                 f"Stored error for user {user.id}: {error_message[:100]}...")
         except Exception as e:

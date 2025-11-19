@@ -13,7 +13,10 @@ class ClientContext(models.Model):
         verbose_name_plural = 'Client Contexts'
 
     user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name='user_context')
+        User, on_delete=models.CASCADE, related_name='client_context')
+
+    weekly_context_error = models.TextField(default="", blank=True, null=True)
+    weekly_context_error_date = models.DateTimeField(blank=True, null=True)
 
     market_panorama = models.TextField(default="", blank=True, null=True)
     market_tendencies = models.JSONField(default=list, blank=True, null=True)
