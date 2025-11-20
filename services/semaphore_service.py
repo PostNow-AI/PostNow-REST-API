@@ -1,10 +1,12 @@
 import asyncio
+import os
 from typing import Any, Dict, List
 
 
 class SemaphoreService:
-    def __init__(self, max_concurrent: int):
-        self.semaphore = asyncio.Semaphore(max_concurrent)
+    def __init__(self):
+        self.max_concurrent_users = os.getenv('MAX_CONCURRENT_USERS', 50)
+        self.semaphore = asyncio.Semaphore(int(self.max_concurrent_users))
 
     async def process_with_semaphore(self, function: callable, user_data: Dict):
         async with self.semaphore:

@@ -5,7 +5,7 @@ from CreatorProfile.models import CreatorProfile
 logger = logging.getLogger(__name__)
 
 
-class PromptService:
+class AIPromptService:
     def __init__(self):
         self.user = None
 
@@ -37,6 +37,10 @@ class PromptService:
                               profile.color_3, profile.color_4, profile.color_5],
             'competition': ['Nenhum'],
             'references': ['Nenhum'],
+            'purpose': 'Nenhum' if not profile.business_description else profile.business_description,
+            'values_personality': 'Nenhum' if not profile.voice_tone else profile.voice_tone,
+            'main_goal': 'Nenhum' if not profile.business_description else profile.business_description,
+            'desired_post_types': ['Nenhum'],
         }
         return profile_data
 
@@ -108,3 +112,75 @@ class PromptService:
               }}
             }}
             """]
+
+    def build_content_prompts(self, context: dict, posts_quantity: str) -> dict:
+        """Build content generation prompts based on the user's creator profile."""
+        profile_data = self._get_creator_profile_data()
+
+        return [
+            """
+            Você é um estrategista de conteúdo e redator de marketing digital especializado em redes sociais. Sua função é criar posts para o Instagram totalmente personalizados, usando dados reais e verificados sobre a empresa, seu público e o mercado. Se alguma informação estiver ausente ou marcada como 'sem dados disponíveis', você deve ignorar essa parte sem criar suposições. Não invente dados, tendências, números ou nomes de concorrentes. Baseie todas as decisões de conteúdo nas informações recebidas do onboarding e no contexto pesquisado, sempre respeitando o tom e propósito da marca.
+            """,
+            f'''
+            Abaixo estão as informações disponíveis:
+            ---### 📊 CONTEXTO PESQUISADO (dados externos e verificados)
+            {context}
+            
+            ---### 🏢 INFORMAÇÕES DA EMPRESA (dados internos do onboarding)
+            - Nome da empresa: {profile_data['business_name']}
+            - Descrição: {profile_data['business_description']}
+            - Setor / nicho: {profile_data['specialization']}
+            - Propósito: {profile_data['purpose']}
+            - Valores e personalidade: {profile_data['values_personality']}
+            - Tom de voz: {profile_data['voice_tone']}
+            - Público-alvo:  {profile_data['target_gender']}, {profile_data['target_age_range']}, interesses em {profile_data['target_interests']}
+            - Interesses do Público: {profile_data['target_interests']}
+            - Tipos de post desejados: {profile_data['desired_post_types']}
+            - Objetivo principal: {profile_data['main_goal']}
+            - Produtos ou serviços prioritários: {profile_data['specialization'], profile_data['business_description']}
+            
+            ---### 📌 TAREFA
+            Crie {posts_quantity} posts para o Instagram, combinando as informações da empresa com o contexto pesquisado.
+            Cada post deve conter:
+            1. **Título curto e atrativo** (até 6 palavras, coerente com o tom da marca)
+            2. **Legenda completa**, adaptada ao público e ao objetivo principal.
+              - Baseie-se apenas em informações confirmadas (do onboarding e do contexto pesquisado).   
+              - Se alguma tendência, público ou concorrente não tiver dados disponíveis, ignore esse aspecto.
+              - Você pode citar fontes ou dados do contexto apenas se forem relevantes e confiáveis.
+            3. **Sugestão visual** (descrição de imagem, layout e estilo visual, coerente com a identidade da marca)
+            4. **Hashtags recomendadas**, combinando:   
+              - As de {context['tendencies_hashtags']}
+              - As tendências verificadas em {context['tendencies_popular_themes']} 
+              - Evite criar hashtags inexistentes.
+            5. **CTA (chamada para ação)**, relevante e consistente com o objetivo {profile_data['main_goal']}.
+            
+            ---### 🧭 DIRETRIZES DE QUALIDADE E CONFIABILIDADE
+            - Não invente estatísticas, datas ou referências.
+            - Prefira uma linguagem natural, persuasiva e compatível com {profile_data['voice_tone']}.
+            - Se não houver dados de mercado ou público suficientes, foque na proposta de valor da empresa.
+            - Inclua storytelling apenas se houver base no propósito, produto ou cliente real.
+            - Caso detecte 'sem dados disponíveis' no contexto, não mencione isso explicitamente; apenas omita o conteúdo correspondente.
+            - O conteúdo deve soar autêntico, relevante e profissional.
+            
+            ---### 💬 FORMATO DE SAÍDA (JSON)
+            [
+              {{
+                "titulo": "Título do post",
+                "tipo_post": "feed/reel/story",
+                "legenda": "Texto completo da legenda",    
+                "sugestao_visual": "Descrição da imagem ou layout",    
+                "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],    
+                "cta": "Chamada para ação"  
+              }}
+            ]
+                
+            ---### ⚙️ CONFIGURAÇÕES RECOMENDADAS
+            - **temperature:** 0.7 (para criatividade equilibrada)
+            - **top_p:** 0.9
+            - **max_tokens:** 2000
+            - **presence_penalty:** 0.2
+            - **frequency_penalty:** 0.1
+            
+            Essas configurações permitem gerar conteúdo criativo, porém sempre dentro dos limites de dados reais e verificados.
+            '''
+        ]

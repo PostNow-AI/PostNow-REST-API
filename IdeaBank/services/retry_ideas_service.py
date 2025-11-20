@@ -6,32 +6,33 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from services.semaphore_service import SemaphoreService
 
-from .weekly_context_service import WeeklyContextService
+from .daily_ideas_service import DailyIdeasService
 
 logger = logging.getLogger(__name__)
 
 
-class RetryClientContext:
+class RetryIdeasService:
     def __init__(self):
         self.semaphore_service = SemaphoreService()
-        self.weekly_context_service = WeeklyContextService()
+        self.daily_ideas_service = DailyIdeasService()
 
     @sync_to_async
-    def _get_eligible_users(self) -> list[User]:
-        """Get a batch of users with weekly context errors"""
+    def _get_users_with_errors(self):
+        """Get all users who have daily generation errors."""
         return list(
-            User.objects.filter(
+            User.objects.extra(
+                where=["daily_generation_error IS NOT NULL"]
+            ).filter(
                 usersubscription__status='active',
-                is_active=True,
-                client_context__weekly_context_error__isnull=False
-            ).distinct().values('id', 'email', 'username')
+                is_active=True
+            ).distinct().values('id', 'email', 'username', 'first_name')
         )
 
-    async def process_all_users_context(self) -> Dict[str, Any]:
-        """Process weekly context gen for all eligible users."""
+    async def process_daily_ideas_for_failed_users(self) -> Dict[str, Any]:
+        """Process daily ideas generation for a batch of users"""
         start_time = timezone.now()
 
-        eligible_users = await self._get_eligible_users()
+        eligible_users = await self._get_users_with_errors()
         total = len(eligible_users)
 
         if total == 0:
@@ -39,13 +40,13 @@ class RetryClientContext:
                 'status': 'completed',
                 'processed': 0,
                 'total_users': 0,
-                'message': 'No users with error found',
+                'message': 'No eligible users found',
             }
 
         try:
             results = await self.semaphore_service.process_concurrently(
                 users=eligible_users,
-                function=self.weekly_context_service._process_single_user
+                function=self.daily_ideas_service._process_single_user
             )
 
             processed_count = sum(
@@ -54,6 +55,9 @@ class RetryClientContext:
                 1 for r in results if r.get('status') == 'failed')
             skipped_count = sum(
                 1 for r in results if r.get('status') == 'skipped')
+            created_posts_count = sum(
+                len(r.get('created_posts', [])) for r in results if r.get('status') == 'success'
+            )
 
             end_time = timezone.now()
             duration = (end_time - start_time).total_seconds()
@@ -61,6 +65,7 @@ class RetryClientContext:
             result = {
                 'status': 'completed',
                 'processed': processed_count,
+                'created_posts': created_posts_count,
                 'failed': failed_count,
                 'skipped': skipped_count,
                 'total_users': total,
@@ -69,7 +74,6 @@ class RetryClientContext:
             }
 
             return result
-
         except Exception as e:
             return {
                 'status': 'error',

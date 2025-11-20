@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
@@ -8,9 +7,9 @@ from AuditSystem.services import AuditService
 from ClientContext.models import ClientContext
 from django.contrib.auth.models import User
 from django.utils import timezone
+from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.mailjet_service import MailjetService
-from services.prompt_service import PromptService
 from services.semaphore_service import SemaphoreService
 from services.user_validation_service import UserValidationService
 
@@ -20,17 +19,23 @@ logger = logging.getLogger(__name__)
 class WeeklyContextService:
     def __init__(self):
         self.user_validation_service = UserValidationService()
-        self.max_concurrent_users = os.getenv('MAX_CONCURRENT_USERS', 50)
-        self.semaphore_service = SemaphoreService(
-            int(self.max_concurrent_users))
+        self.semaphore_service = SemaphoreService()
         self.ai_service = AiService()
-        self.prompt_service = PromptService()
+        self.prompt_service = AIPromptService()
         self.audit_service = AuditService()
         self.mailjet_service = MailjetService()
 
     @sync_to_async
-    def _get_eligible_users(self, offset: int, limit: int):
+    def _get_eligible_users(self, offset: int, limit: int) -> list[User]:
         """Get a batch of users eligible for weekly context generation"""
+        if limit is None:
+            return list(
+                User.objects.filter(
+                    usersubscription__status='active',
+                    is_active=True
+                ).distinct().values('id', 'email', 'username')[offset:]
+            )
+
         return list(
             User.objects.filter(
                 usersubscription__status='active',
@@ -38,7 +43,7 @@ class WeeklyContextService:
             ).distinct().values('id', 'email', 'username')[offset:offset + limit]
         )
 
-    async def _process_single_user(self, user_data) -> Dict[str, Any]:
+    async def _process_single_user(self, user_data: dict) -> Dict[str, Any]:
         """Wrapper method to process a single user from the user data."""
         user_id = user_data.get('id') or user_data.get('user_id')
         if not user_data:
@@ -206,7 +211,7 @@ class WeeklyContextService:
             }
 
         except Exception as e:
-            # await self._store_user_error(user, str(e))
+            await self._store_user_error(user, str(e))
             await sync_to_async(self.audit_service.log_context_generation)(
                 user=user,
                 action='weekly_context_generation_failed',
@@ -221,8 +226,7 @@ class WeeklyContextService:
             }
 
     def _generate_context_for_user(self, user: User) -> None:
-        """Placeholder for the actual context generation logic for a user."""
-        # Implement the actual context generation logic here
+        """AI service call to generate weekly context for a user."""
         try:
             self.prompt_service.set_user(user)
             prompt = self.prompt_service.build_context_prompts()

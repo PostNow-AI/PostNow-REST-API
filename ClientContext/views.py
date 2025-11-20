@@ -90,7 +90,8 @@ def manual_generate_client_context(request):
         try:
             context_service = WeeklyContextService()
             result = loop.run_until_complete(
-                context_service.process_all_users_context()
+                context_service.process_all_users_context(
+                    batch_number=1, batch_size=0)
             )
             AuditService.log_system_operation(
                 user=None,
