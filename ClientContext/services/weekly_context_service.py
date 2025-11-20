@@ -30,11 +30,9 @@ class WeeklyContextService:
 
     @sync_to_async
     def _get_eligible_users(self, offset: int, limit: int):
-        """Get a batch of users eligible for daily content generation (excluding those with errors)"""
+        """Get a batch of users eligible for weekly context generation"""
         return list(
-            User.objects.extra(
-                where=["daily_generation_error IS NULL"]
-            ).filter(
+            User.objects.filter(
                 usersubscription__status='active',
                 is_active=True
             ).distinct().values('id', 'email', 'username')[offset:offset + limit]

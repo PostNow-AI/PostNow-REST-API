@@ -9,6 +9,7 @@ from rest_framework.decorators import (
 )
 from rest_framework.response import Response
 
+from ClientContext.services.retry_client_context import RetryClientContext
 from ClientContext.services.weekly_context_service import WeeklyContextService
 
 
@@ -90,6 +91,58 @@ def manual_generate_client_context(request):
             context_service = WeeklyContextService()
             result = loop.run_until_complete(
                 context_service.process_all_users_context()
+            )
+            AuditService.log_system_operation(
+                user=None,
+                action='weekly_context_generation_completed',
+                status='success',
+                resource_type='WeeklyContextGeneration',
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        finally:
+            loop.close()
+
+    except Exception as e:
+        AuditService.log_system_operation(
+            user=None,
+            action='weekly_context_generation_failed',
+            status='error',
+            resource_type='WeeklyContextGeneration',
+            details=str(e)
+        )
+        return Response(
+            {'error': f'Failed to generate weekly context: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@csrf_exempt
+@api_view(['GET'])
+def retry_generate_client_context(request):
+    """Retry generate client context view."""
+    # Verify it's from Cronjob (security check)
+    auth_header = request.headers.get('Authorization', '')
+    expected_auth = f"Bearer {settings.CRON_SECRET}"
+
+    if auth_header != expected_auth:
+        return Response({
+            'error': 'Unauthorized'
+        }, status=status.HTTP_401_UNAUTHORIZED)
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        AuditService.log_system_operation(
+            user=None,
+            action='weekly_context_generation_started',
+            status='info',
+            resource_type='WeeklyContextGeneration',
+        )
+
+        try:
+            retry_context_service = RetryClientContext()
+            result = loop.run_until_complete(
+                retry_context_service.process_all_users_context()
             )
             AuditService.log_system_operation(
                 user=None,
