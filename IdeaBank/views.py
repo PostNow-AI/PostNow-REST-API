@@ -25,8 +25,8 @@ from .serializers import (
     PostSerializer,
     PostWithIdeasSerializer,
 )
-from .services.daily_content_service import DailyContentService
 from .services.daily_ideas_service import DailyIdeasService
+from .services.mail_daily_ideas_service import MailDailyIdeasService
 from .services.post_ai_service import PostAIService
 from .services.retry_ideas_service import RetryIdeasService
 
@@ -780,14 +780,14 @@ def manual_trigger_daily_generation(request):
 def mail_all_generated_content(request):
     """Fetch all user automatically generated content and email it to them."""
     try:
-        service = DailyContentService()
+        service = MailDailyIdeasService()
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
             result = loop.run_until_complete(
-                service.mail_all_generated_content()
+                service.mail_daily_ideas()
             )
         finally:
             loop.close()
@@ -821,7 +821,6 @@ def vercel_cron_retry_failed_users(request):
         }, status=401)
 
     try:
-        # Run async processing
         service = RetryIdeasService()
 
         loop = asyncio.new_event_loop()

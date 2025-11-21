@@ -145,32 +145,34 @@ class DailyIdeasService:
                     'user_id': user_id
                 }
 
-            content_result = await sync_to_async(self._generate_content_for_user)(user)
-            content_json = content_result.replace(
-                'json', '', 1).strip('`').strip()
+            for post_type in ["feed", "reels", "story"]:
+                content_result = await sync_to_async(self._generate_content_for_user)(user, post_type=post_type)
+                content_json = content_result.replace(
+                    'json', '', 1).strip('`').strip()
+                content_loaded = json.loads(content_json)
 
-            content_data = json.loads(content_json)
+                content_data = content_loaded[0] if isinstance(
+                    content_loaded, list) and len(content_loaded) > 0 else {}
 
-            for content in content_data:
                 post = await sync_to_async(Post.objects.create)(
                     user=user,
-                    name=content.get('titulo', 'Conteúdo Diário'),
-                    type=content.get('tipo_post', 'feed'),
+                    name=content_data.get('titulo', 'Conteúdo Diário'),
+                    type=post_type,
                     further_details='',
-                    include_image=True if content.get('tipo_post') in [
+                    include_image=True if post_type in [
                         'feed'] else False,
                     is_automatically_generated=True,
                     is_active=False
                 )
 
-                post_content = f"""{content.get('legenda', '').strip()}\n\n\n{' '.join(content.get('hashtags', []))}\n\n\n{content.get('cta', '').strip()}
+                post_content = f"""{content_data.get('legenda', '').strip()}\n\n\n{' '.join(content_data.get('hashtags', []))}\n\n\n{content_data.get('cta', '').strip()}
                 """
 
                 post_idea = await sync_to_async(PostIdea.objects.create)(
                     post=post,
                     content=post_content,
                     image_url='',
-                    image_description=content.get('sugestao_visual', '')
+                    image_description=content_data.get('sugestao_visual', '')
                 )
                 user_posts.append({
                     'post_id': post.id,
@@ -195,7 +197,7 @@ class DailyIdeasService:
                 'user_id': user_id
             }
 
-    def _generate_content_for_user(self, user: User) -> None:
+    def _generate_content_for_user(self, user: User, post_type: str) -> None:
         """AI service call to generate daily ideas for a user."""
         try:
             self.prompt_service.set_user(user)
@@ -205,7 +207,7 @@ class DailyIdeasService:
             context_data = serializer.data if serializer else {}
 
             prompt = self.prompt_service.build_content_prompts(
-                context_data, "3 (1 feed, 1 reel, 1 story)")
+                context_data, f"1 ({post_type})")
 
             context_result = self.ai_service.generate_text(prompt, user)
 
