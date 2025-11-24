@@ -218,7 +218,6 @@ class DailyIdeasService:
                 ],
                 image_config=types.ImageConfig(
                     aspect_ratio="4:5",
-                    image_size="1K",
                 ),
             ))
 

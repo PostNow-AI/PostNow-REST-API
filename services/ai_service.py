@@ -11,7 +11,6 @@ from google.genai import types
 class AiService:
     def __init__(self):
         self.models = [
-            'gemini-3-pro-preview',
             'gemini-2.5-flash',
             'gemini-2.5-flash-lite'
         ]
@@ -21,8 +20,7 @@ class AiService:
             'gemini-2.5-flash-image',
             'gemini-2.5-flash-image',
             'gemini-2.5-flash-image-preview',
-            'gemini-2.5-flash-image-preview',
-        ]
+            'gemini-2.5-flash-image-preview',]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
         self.client = genai.Client(api_key=self.api_key)
         self.contents = types.Content(
@@ -35,9 +33,6 @@ class AiService:
             ],
         )
         self.generate_image_config = types.GenerateContentConfig(
-            image_config=types.ImageConfig(
-                image_size="1K",
-            ),
             response_modalities=[
                 "IMAGE",
             ],
@@ -213,7 +208,6 @@ class AiService:
 
             part = chunk.candidates[0].content.parts[0]
             if hasattr(part, 'inline_data') and part.inline_data and hasattr(part.inline_data, 'data') and part.inline_data.data:
-                print(part.inline_data)
                 inline_data = part.inline_data
                 image_bytes = inline_data.data
                 break
