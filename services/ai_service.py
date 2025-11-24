@@ -1,5 +1,5 @@
 import os
-from time import time
+from time import sleep
 
 from AuditSystem.services import AuditService
 from CreditSystem.services.credit_service import CreditService
@@ -10,10 +10,19 @@ from google.genai import types
 
 class AiService:
     def __init__(self):
-        self.main_model = 'gemini-2.5-flash'
-        self.main_image_model = 'gemini-2.5-flash-image'
-        self.secondary_model = 'gemini-2.5-flash-lite'
-        self.secondary_image_model = 'gemini-2.5-flash-image-lite'
+        self.models = [
+            'gemini-3-pro-preview',
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite'
+        ]
+        self.image_models = [
+            'gemini-3-pro-image-preview',
+            'gemini-3-pro-image-preview',
+            'gemini-2.5-flash-image',
+            'gemini-2.5-flash-image',
+            'gemini-2.5-flash-image-preview',
+            'gemini-2.5-flash-image-preview',
+        ]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
         self.client = genai.Client(api_key=self.api_key)
         self.contents = types.Content(
@@ -34,8 +43,13 @@ class AiService:
             ],
         )
 
-    def generate_text(self, prompt_list: list[str], user: User) -> str:
+    def generate_text(self, prompt_list: list[str], user: User, config: types.GenerateContentConfig = None) -> str:
         try:
+            effective_config = self.generate_text_config
+
+            if config is not None:
+                effective_config = config
+
             user_has_credits = self._validate_credits(
                 user=user, operation='text_generation')
             if not user_has_credits:
@@ -45,56 +59,25 @@ class AiService:
             for prompt in prompt_list:
                 self.contents.parts.append(types.Part.from_text(text=prompt))
 
-            try:
-                result = self._try_model_with_retries(
-                    model=self.main_model,
-                    generate_function=lambda: self._try_generate_text(
-                        self.main_model, self.contents, self.generate_text_config),
-                    max_retries=3
-                )
-                self._deduct_credits(
-                    user=user, model=self.main_model, operation='text_generation',
-                    description='Geração de texto via Gemini'
-                )
+            model, result = self._try_model_with_retries(
+                models=self.models,
+                generate_function=lambda model: self._try_generate_text(
+                    model, self.contents, effective_config),
+                max_retries=3
+            )
+            self._deduct_credits(
+                user=user, model=model, operation='text_generation',
+                description='Geração de texto via Gemini'
+            )
 
-                AuditService.log_content_generation(
-                    user=user,
-                    action='content_generated',
-                    status='success',
-                    details={'model': self.main_model}
-                )
+            AuditService.log_content_generation(
+                user=user,
+                action='content_generated',
+                status='success',
+                details={'model': model}
+            )
 
-                return result
-            except Exception as main_error:
-                if self._is_retryable_error(str(main_error)):
-                    print(
-                        f"Main image model failed: {main_error}. Trying secondary model...")
-                    try:
-                        result = self._try_model_with_retries(
-                            model=self.secondary_model,
-                            generate_function=lambda: self._try_generate_image(
-                                self.secondary_model, self.contents, self.generate_image_config),
-                            max_retries=3,
-                            is_main_model=False
-                        )
-                        self._deduct_credits(
-                            user=user, model=self.secondary_model, operation='text_generation',
-                            description='Geração de texto via Gemini (fallback model)'
-                        )
-
-                        AuditService.log_content_generation(
-                            user=user,
-                            action='content_generated',
-                            status='success',
-                            details={'model': self.secondary_model}
-                        )
-
-                        return result
-                    except Exception as secondary_error:
-                        raise Exception(
-                            f"Both image models failed after retries. Main: {main_error}, Secondary: {secondary_error}")
-                else:
-                    raise main_error
+            return result
 
         except Exception as e:
             AuditService.log_content_generation(
@@ -105,8 +88,22 @@ class AiService:
             )
             raise Exception(f"Error generating text: {str(e)}")
 
-    def generate_image(self, prompt_list: list[str], user: User) -> str:
+        except Exception as e:
+            AuditService.log_content_generation(
+                user=user,
+                action='content_generation_failed',
+                status='failure',
+                details={'error': str(e)}
+            )
+            raise Exception(f"Error generating text: {str(e)}")
+
+    def generate_image(self, prompt_list: list[str], user: User, config: types.GenerateContentConfig = None) -> str:
         try:
+            effective_config = self.generate_image_config
+
+            if config is not None:
+                effective_config = config
+
             user_has_credits = self._validate_credits(
                 user=user, operation='image_generation')
             if not user_has_credits:
@@ -116,54 +113,23 @@ class AiService:
             for prompt in prompt_list:
                 self.contents.parts.append(types.Part.from_text(text=prompt))
 
-            try:
-                result = self._try_model_with_retries(
-                    model=self.main_image_model,
-                    generate_function=lambda: self._try_generate_image(
-                        self.main_image_model, self.contents, self.generate_image_config),
-                    max_retries=3,
-                    is_main_model=True
-                )
-                self._deduct_credits(
-                    user=user, model=self.main_image_model, operation='image_generation',
-                    description='Geração de imagem via Gemini'
-                )
-                AuditService.log_image_generation(
-                    user=user,
-                    action='image_generated',
-                    status='success',
-                    details={'model': self.main_image_model}
-                )
-                return result
-            except Exception as main_error:
-                if self._is_retryable_error(str(main_error)):
-                    print(
-                        f"Main image model failed: {main_error}. Trying secondary model...")
-                    try:
-                        result = self._try_model_with_retries(
-                            model=self.secondary_image_model,
-                            generate_function=lambda: self._try_generate_image(
-                                self.secondary_image_model, self.contents, self.generate_image_config),
-                            max_retries=3,
-                            is_main_model=False
-                        )
-                        self._deduct_credits(
-                            user=user, model=self.secondary_image_model, operation='image_generation',
-                            description='Geração de imagem via Gemini (fallback model)'
-                        )
-                        AuditService.log_image_generation(
-                            user=user,
-                            action='image_generated',
-                            status='success',
-                            details={'model': self.secondary_image_model}
-                        )
-                        return result
-                    except Exception as secondary_error:
-                        raise Exception(
-                            f"Both image models failed after retries. Main: {main_error}, Secondary: {secondary_error}")
-                else:
-                    # Non-retryable error, don't try secondary
-                    raise main_error
+            model, result = self._try_model_with_retries(
+                models=self.image_models,
+                generate_function=lambda model: self._try_generate_image(
+                    model, self.contents, effective_config),
+                max_retries=3
+            )
+            self._deduct_credits(
+                user=user, model=model, operation='image_generation',
+                description='Geração de imagem via Gemini'
+            )
+            AuditService.log_image_generation(
+                user=user,
+                action='image_generated',
+                status='success',
+                details={'model': model}
+            )
+            return result
 
         except Exception as e:
             AuditService.log_image_generation(
@@ -174,32 +140,42 @@ class AiService:
             )
             raise Exception(f"Error generating image: {str(e)}")
 
-    def _try_model_with_retries(self, model: str, generate_function: callable, max_retries: int = 3) -> str:
+    def _try_model_with_retries(self, models: list[str], generate_function: callable, max_retries: int = 3) -> tuple[str, str]:
         """Try making a request to the AI model with retries for retryable errors."""
         last_error = None
-        for attempt in range(max_retries):
-            try:
-                return generate_function()
-            except Exception as e:
-                error_str = str(e)
-                last_error = e
-                if not self._is_retryable_error(error_str):
-                    # Non-retryable error, don't retry
-                    raise e
-                if attempt < max_retries - 1:
-                    # Wait a bit before retrying (exponential backoff could be added here)
-                    # Exponential backoff delay between retries
-                    time.sleep(10 * (2 ** attempt))
+        for model in models:
+            for attempt in range(max_retries):
+                try:
+                    # Pass the current model to the function
+                    result = generate_function(model)
+                    print(f"Model {model} succeeded on attempt {attempt + 1}")
+                    return model, result
+                except Exception as e:
                     print(
-                        f"Attempt {attempt + 1} failed for {model}, retrying...")
-                else:
-                    print(f"All {max_retries} attempts failed for {model}")
+                        f"Error with model {model} on attempt {attempt + 1}: {str(e)}")
+                    error_str = str(e)
+                    last_error = e
+                    if not self._is_retryable_error(error_str):
+                        # Non-retryable error, don't retry
+                        print(
+                            f"Non-retryable error for {model}, trying next model...")
+                        break  # Break inner loop to try next model
+                    if attempt < max_retries - 1:
+                        # Exponential backoff delay between retries
+                        sleep(5 * (2 ** attempt))
+                        print(
+                            f"Attempt {attempt + 1} failed for {model}, retrying...")
+                    else:
+                        print(
+                            f"All {max_retries} attempts for {model} failed")
         raise last_error
 
     def _is_retryable_error(self, error_str: str) -> bool:
         """Determine if an error is retryable based on its content."""
         retryable_indicators = [
             '503',
+            '500',
+            'internal',
             'unavailable',
             'overloaded',
             'timeout',
@@ -224,7 +200,7 @@ class AiService:
                 response_text += part.text
         return response_text
 
-    def _try_generate_image(self, model: str, contents: types.Content, config: types.GenerateContentConfig) -> str:
+    def _try_generate_image(self, model: str, contents: types.Content, config: types.GenerateContentConfig) -> bytes:
         """Try generating an image using the specified model."""
         image_bytes = None
         for chunk in self.client.models.generate_content_stream(
@@ -237,9 +213,15 @@ class AiService:
 
             part = chunk.candidates[0].content.parts[0]
             if hasattr(part, 'inline_data') and part.inline_data and hasattr(part.inline_data, 'data') and part.inline_data.data:
-                image_bytes = part.inline_data
-                # Use the image bytes directly
-        return image_bytes
+                print(part.inline_data)
+                inline_data = part.inline_data
+                image_bytes = inline_data.data
+                break
+
+        if image_bytes:
+            return image_bytes
+        else:
+            raise Exception("No image data received from the model")
 
     def _check_for_content_parts(self, chunk: types.Content) -> bool:
         if not hasattr(chunk, 'candidates') or chunk.candidates is None:

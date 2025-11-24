@@ -9,10 +9,12 @@ from ClientContext.serializers import ClientContextSerializer
 from django.contrib.auth.models import User
 from django.db import connection
 from django.utils import timezone
+from google.genai import types
 from IdeaBank.models import Post, PostIdea
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.mailjet_service import MailjetService
+from services.s3_sevice import S3Service
 from services.semaphore_service import SemaphoreService
 from services.user_validation_service import UserValidationService
 
@@ -27,6 +29,7 @@ class DailyIdeasService:
         self.prompt_service = AIPromptService()
         self.audit_service = AuditService()
         self.mailjet_service = MailjetService()
+        self.s3_service = S3Service()
 
     @sync_to_async
     def _get_eligible_users(self, offset: int, limit: int) -> list[User]:
@@ -154,6 +157,12 @@ class DailyIdeasService:
                 content_data = content_loaded[0] if isinstance(
                     content_loaded, list) and len(content_loaded) > 0 else {}
 
+                if post_type == 'feed':
+                    image_prompt = content_data.get(
+                        'sugestao_visual', '')
+                    image_url = await sync_to_async(self._generate_image_for_feed_post)(
+                        user, image_prompt)
+
                 post = await sync_to_async(Post.objects.create)(
                     user=user,
                     name=content_data.get('titulo', 'Conteúdo Diário'),
@@ -171,7 +180,7 @@ class DailyIdeasService:
                 post_idea = await sync_to_async(PostIdea.objects.create)(
                     post=post,
                     content=post_content,
-                    image_url='',
+                    image_url=image_url if post_type == 'feed' else '',
                     image_description=content_data.get('sugestao_visual', '')
                 )
                 user_posts.append({
@@ -197,6 +206,32 @@ class DailyIdeasService:
                 'user_id': user_id
             }
 
+    def _generate_image_for_feed_post(self, user: User, prompt: str) -> str:
+        """AI service call to generate image for feed post."""
+        # TODO: Fix image gen config to better one
+        try:
+            print("Generating image with prompt:", prompt)
+            self.prompt_service.set_user(user)
+            image_result = self.ai_service.generate_image(prompt, user, types.GenerateContentConfig(
+                response_modalities=[
+                    "IMAGE",
+                ],
+                image_config=types.ImageConfig(
+                    aspect_ratio="4:5",
+                    image_size="1K",
+                ),
+            ))
+
+            print(f"Image result: {image_result}")
+
+            image_url = self.s3_service.upload_image(
+                user, image_result.data, image_result.mime_type)
+
+            return image_url
+        except Exception as e:
+            raise Exception(
+                f"Failed to generate image for user {user.id}: {str(e)}")
+
     def _generate_content_for_user(self, user: User, post_type: str) -> None:
         """AI service call to generate daily ideas for a user."""
         try:
@@ -209,9 +244,12 @@ class DailyIdeasService:
             prompt = self.prompt_service.build_content_prompts(
                 context_data, f"1 ({post_type})")
 
-            context_result = self.ai_service.generate_text(prompt, user)
+            content_result = self.ai_service.generate_text(prompt, user, types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
+            ))
 
-            return context_result
+            return content_result
         except Exception as e:
             raise Exception(
                 f"Failed to generate context for user {user.id}: {str(e)}")
