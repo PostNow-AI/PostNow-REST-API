@@ -221,10 +221,11 @@ class DailyIdeasService:
                 ),
             ))
 
-            print(f"Image result: {image_result}")
-
-            image_url = self.s3_service.upload_image(
-                user, image_result.data, image_result.mime_type)
+            if not image_result or not image_result.data:
+                image_url = ''
+            else:
+                image_url = self.s3_service.upload_image(
+                    user, image_result.data, image_result.mime_type)
 
             return image_url
         except Exception as e:

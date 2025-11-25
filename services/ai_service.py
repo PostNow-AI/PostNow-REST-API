@@ -11,7 +11,11 @@ from google.genai import types
 class AiService:
     def __init__(self):
         self.models = [
+            'gemini-3-pro-preview',
+            'gemini-3-pro-preview',
             'gemini-2.5-flash',
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
             'gemini-2.5-flash-lite'
         ]
         self.image_models = [
@@ -36,6 +40,10 @@ class AiService:
             response_modalities=[
                 "IMAGE",
             ],
+            image_config=types.ImageConfig(
+                aspect_ratio="4:5",  # Add this
+                image_size="1K",     # Add this
+            ),
         )
 
     def generate_text(self, prompt_list: list[str], user: User, config: types.GenerateContentConfig = None) -> str:
@@ -175,7 +183,8 @@ class AiService:
             'overloaded',
             'timeout',
             'temporarily',
-            '429'
+            '429',
+            'No image data received from the model'
         ]
         return any(indicator in error_str.lower() for indicator in retryable_indicators)
 
@@ -207,15 +216,15 @@ class AiService:
                 continue
 
             part = chunk.candidates[0].content.parts[0]
+
             if hasattr(part, 'inline_data') and part.inline_data and hasattr(part.inline_data, 'data') and part.inline_data.data:
                 inline_data = part.inline_data
                 image_bytes = inline_data.data
                 break
+            elif hasattr(part, 'text') and part.text:
+                continue
 
-        if image_bytes:
-            return image_bytes
-        else:
-            raise Exception("No image data received from the model")
+        return image_bytes
 
     def _check_for_content_parts(self, chunk: types.Content) -> bool:
         if not hasattr(chunk, 'candidates') or chunk.candidates is None:
