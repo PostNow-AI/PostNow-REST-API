@@ -41,6 +41,7 @@ class AIPromptService:
             'values_personality': 'Nenhum' if not profile.voice_tone else profile.voice_tone,
             'main_goal': 'Nenhum' if not profile.business_description else profile.business_description,
             'desired_post_types': ['Nenhum'],
+            'visual_style': 'Minimalista',
         }
         return profile_data
 
@@ -184,3 +185,61 @@ class AIPromptService:
             Essas configurações permitem gerar conteúdo criativo, porém sempre dentro dos limites de dados reais e verificados.
             '''
         ]
+
+    def semantic_analysis_prompt(self, post_text: str) -> str:
+        """Prompt for semantic analysis of user input."""
+        return [
+            """
+              Você é um analista de semântica e especialista em direção de arte para redes sociais. Sua função é interpretar textos publicitários e identificar seus elementos conceituais e visuais principais, transformando a mensagem escrita em diretrizes visuais e emocionais claras. Baseie suas respostas apenas no texto fornecido, sem adicionar interpretações não fundamentadas.
+            """,
+            f"""
+              Analise o texto a seguir e extraia:
+              
+              1. Tema principal
+              2. Conceitos visuais que o representam
+              3. Emoções ou sensações associadas
+              4. Elementos visuais sugeridos (objetos, cenários, cores)
+              
+              Texto: {post_text}
+              
+              A SAÍDA DEVE SER NO FORMATO:
+              {{
+                "analise_semantica":{{
+                  "tema_principal": "",
+                  "subtemas": [],
+                  "conceitos_visuais": [],
+                  "objetos_relevantes": [],
+                  "contexto_visual_sugerido": "",
+                  "emoções_associadas": [],
+                  "tons_de_cor_sugeridos": [],
+                  "ação_sugerida": "",
+                  "sensação_geral": "",
+                  "palavras_chave": []
+                }}
+              }}
+            """
+        ]
+
+    def image_generation_prompt(self, semantic_analysis: dict) -> str:
+        """Prompt for AI image generation based on semantic analysis."""
+        profile_data = self._get_creator_profile_data()
+
+        return f"""
+          Crie uma imagem em estilo {profile_data['visual_style']}.
+          
+          {semantic_analysis['contexto_visual_sugerido']}.
+          
+          Inclua elementos como {semantic_analysis['objetos_relevantes']}.
+          
+          Transmita as emoções de {semantic_analysis['emoções_associadas']} e a sensação geral de {semantic_analysis['sensação_geral']}.
+          
+          Use tons de {semantic_analysis['tons_de_cor_sugeridos']}.
+          
+          O post fala sobre: {semantic_analysis['tema_principal']}.
+          
+          A marca é {profile_data['business_name']}, cujo estilo é {profile_data['visual_style']} e paleta é {profile_data['color_palette']}.
+          
+          REGRAS/RESTRIÇÕES:
+          A IMAGEM GERADA NÃO DEVE CONTER TEXTO ALGUM
+          NÃO GERE OU ADICIONE LOGOMARCAS OU MARCAS D'ÁGUA
+        """

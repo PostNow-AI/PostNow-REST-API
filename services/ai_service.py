@@ -27,10 +27,6 @@ class AiService:
             'gemini-2.5-flash-image-preview',]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
         self.client = genai.Client(api_key=self.api_key)
-        self.contents = types.Content(
-            role='user',
-            parts=[]
-        )
         self.generate_text_config = types.GenerateContentConfig(
             response_modalities=[
                 "TEXT",
@@ -59,13 +55,10 @@ class AiService:
                 raise Exception(
                     "Créditos insuficientes para gerar texto. Por favor, adquira mais créditos.")
 
-            for prompt in prompt_list:
-                self.contents.parts.append(types.Part.from_text(text=prompt))
-
             model, result = self._try_model_with_retries(
                 models=self.models,
                 generate_function=lambda model: self._try_generate_text(
-                    model, self.contents, effective_config),
+                    model, prompt_list, effective_config),
                 max_retries=3
             )
             self._deduct_credits(
@@ -113,13 +106,10 @@ class AiService:
                 raise Exception(
                     "Créditos insuficientes para gerar texto. Por favor, adquira mais créditos.")
 
-            for prompt in prompt_list:
-                self.contents.parts.append(types.Part.from_text(text=prompt))
-
             model, result = self._try_model_with_retries(
                 models=self.image_models,
                 generate_function=lambda model: self._try_generate_image(
-                    model, self.contents, effective_config),
+                    model, prompt_list, effective_config),
                 max_retries=3
             )
             self._deduct_credits(
@@ -188,9 +178,16 @@ class AiService:
         ]
         return any(indicator in error_str.lower() for indicator in retryable_indicators)
 
-    def _try_generate_text(self, model: str, contents: types.Content, config: types.GenerateContentConfig) -> str:
+    def _try_generate_text(self, model: str, prompt_list: list[str], config: types.GenerateContentConfig) -> str:
         """Try generating text using the specified model."""
         response_text = ''
+        contents = types.Content(
+            role='user',
+            parts=[]
+        )
+        for prompt in prompt_list:
+            contents.parts.append(types.Part.from_text(text=prompt))
+
         for chunk in self.client.models.generate_content_stream(
             model=model,
             contents=contents,
@@ -204,9 +201,17 @@ class AiService:
                 response_text += part.text
         return response_text
 
-    def _try_generate_image(self, model: str, contents: types.Content, config: types.GenerateContentConfig) -> bytes:
+    def _try_generate_image(self, model: str, prompt_list: list[str], config: types.GenerateContentConfig) -> bytes:
         """Try generating an image using the specified model."""
         image_bytes = None
+        contents = types.Content(
+            role='user',
+            parts=[]
+        )
+
+        for prompt in prompt_list:
+            contents.parts.append(types.Part.from_text(text=prompt))
+
         for chunk in self.client.models.generate_content_stream(
             model=model,
             contents=contents,

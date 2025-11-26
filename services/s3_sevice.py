@@ -19,17 +19,17 @@ class S3Service:
         )
         self.image_bucket = os.getenv('AWS_S3_IMAGE_BUCKET')
 
-    def upload_image(self, user: User, image_bytes: bytes, image_mime_type: str) -> str:
+    def upload_image(self, user: User, image_bytes: bytes) -> str:
         """Upload a file to an S3 bucket"""
         try:
             unique_id = str(uuid.uuid4())
             user_prefix = f"user_{user.id}_" if user else ""
-            filename = f"{user_prefix}generated_image_{unique_id}.{image_mime_type.split('/')[-1]}"
+            filename = f"{user_prefix}generated_image_{unique_id}.png"
             self.client.put_object(
                 Bucket=self.image_bucket,
                 Key=filename,
                 Body=image_bytes,
-                ContentType=image_mime_type,
+                ContentType='image/png',
             )
 
             image_url = f"https://{self.image_bucket}.s3.{self.region}.amazonaws.com/{filename}"

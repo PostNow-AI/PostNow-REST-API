@@ -157,11 +157,12 @@ class DailyIdeasService:
                 content_data = content_loaded[0] if isinstance(
                     content_loaded, list) and len(content_loaded) > 0 else {}
 
+                post_content = f"""{content_data.get('legenda', '').strip()}\n\n\n{' '.join(content_data.get('hashtags', []))}\n\n\n{content_data.get('cta', '').strip()}
+                """
+
                 if post_type == 'feed':
-                    image_prompt = content_data.get(
-                        'sugestao_visual', '')
                     image_url = await sync_to_async(self._generate_image_for_feed_post)(
-                        user, image_prompt)
+                        user, post_content)
 
                 post = await sync_to_async(Post.objects.create)(
                     user=user,
@@ -173,9 +174,6 @@ class DailyIdeasService:
                     is_automatically_generated=True,
                     is_active=False
                 )
-
-                post_content = f"""{content_data.get('legenda', '').strip()}\n\n\n{' '.join(content_data.get('hashtags', []))}\n\n\n{content_data.get('cta', '').strip()}
-                """
 
                 post_idea = await sync_to_async(PostIdea.objects.create)(
                     post=post,
@@ -206,13 +204,26 @@ class DailyIdeasService:
                 'user_id': user_id
             }
 
-    def _generate_image_for_feed_post(self, user: User, prompt: str) -> str:
+    def _generate_image_for_feed_post(self, user: User, post_content: str) -> str:
         """AI service call to generate image for feed post."""
         # TODO: Fix image gen config to better one
         try:
-            print("Generating image with prompt:", prompt)
+            image_url = ''
             self.prompt_service.set_user(user)
-            image_result = self.ai_service.generate_image(prompt, user, types.GenerateContentConfig(
+
+            semantic_prompt = self.prompt_service.semantic_analysis_prompt(
+                post_content)
+            semantic_result = self.ai_service.generate_text(
+                semantic_prompt, user)
+            semantic_json = semantic_result.replace(
+                'json', '', 1).strip('`').strip()
+            semantic_loaded = json.loads(semantic_json)
+            semantic_analysis = semantic_loaded.get('analise_semantica', {})
+
+            image_prompt = self.prompt_service.image_generation_prompt(
+                semantic_analysis)
+
+            image_result = self.ai_service.generate_image([image_prompt], user, types.GenerateContentConfig(
                 response_modalities=[
                     "IMAGE",
                 ],
@@ -221,11 +232,11 @@ class DailyIdeasService:
                 ),
             ))
 
-            if not image_result or not image_result.data:
+            if not image_result:
                 image_url = ''
             else:
                 image_url = self.s3_service.upload_image(
-                    user, image_result.data, image_result.mime_type)
+                    user, image_result)
 
             return image_url
         except Exception as e:
