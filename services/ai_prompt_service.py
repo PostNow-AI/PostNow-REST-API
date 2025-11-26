@@ -26,15 +26,20 @@ class AIPromptService:
             "profession": profile.profession,
             "whatsapp_number": profile.whatsapp_number,
             "business_name": profile.business_name,
-            'specialization': profile.specialization,
+            'specialization': 'Nenhuma' if not profile.specialization else profile.specialization,
             'business_description': 'Nenhum' if not profile.business_description else profile.business_description,
-            'target_gender': 'Todos' if profile.target_gender == 'all' else profile.target_gender(),
+            'target_gender': 'Todos' if profile.target_gender == 'all' else profile.target_gender,
             'target_age_range': 'Todos' if profile.target_age_range == 'all' else profile.target_age_range,
             'target_interests': 'Nenhum' if not profile.target_interests else profile.target_interests,
             'target_location': 'Nenhum' if not profile.target_location else profile.target_location,
             'voice_tone': profile.voice_tone,
-            'color_palette': [profile.color_1, profile.color_2,
-                              profile.color_3, profile.color_4, profile.color_5],
+            'color_palette': [] if not any([
+                profile.color_1, profile.color_2,
+                profile.color_3, profile.color_4, profile.color_5
+            ]) else [
+                profile.color_1, profile.color_2,
+                profile.color_3, profile.color_4, profile.color_5
+            ],
             'competition': ['Nenhum'],
             'references': ['Nenhum'],
             'purpose': 'Nenhum' if not profile.business_description else profile.business_description,
@@ -48,6 +53,8 @@ class AIPromptService:
     def build_context_prompts(self) -> dict:
         """Build context prompts based on the user's creator profile."""
         profile_data = self._get_creator_profile_data()
+
+        print(profile_data)
 
         return [
             """
