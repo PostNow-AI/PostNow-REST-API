@@ -28,7 +28,7 @@ def generate_client_context(request):
     try:
         # Get batch number from query params (default to 1)
         batch_number = int(request.GET.get('batch', 1))
-        batch_size = 5  # Process 5 users per batch, to avoid vercel timeouts
+        batch_size = 3  # Process 3 users per batch, to avoid vercel timeouts
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
