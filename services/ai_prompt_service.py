@@ -54,8 +54,6 @@ class AIPromptService:
         """Build context prompts based on the user's creator profile."""
         profile_data = self._get_creator_profile_data()
 
-        print(profile_data)
-
         return [
             """
                 Você é um analista de mercado especializado em marketing digital e pesquisa competitiva. Sua função é coletar informações atualizadas e factuais sobre empresas, setores e públicos, para gerar um contexto confiável usado na criação de conteúdo personalizado. Sempre que possível, baseie suas respostas em fontes verificáveis encontradas na internet. Se uma informação não estiver disponível, diga explicitamente 'não encontrado' ou 'sem dados disponíveis' — nunca invente ou suponha dados.
