@@ -5,14 +5,14 @@ New Post-based views for IdeaBank app.
 import asyncio
 import logging
 
-from AuditSystem.services import AuditService
-from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+
+from AuditSystem.services import AuditService
 
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
@@ -663,14 +663,6 @@ def vercel_cron_daily_content_generation(request):
     Vercel Cron endpoint for daily content generation
     Called automatically by Vercel at scheduled time
     """
-    # Verify it's from Vercel (security check)
-    auth_header = request.headers.get('Authorization', '')
-    expected_auth = f"Bearer {settings.CRON_SECRET}"
-
-    if auth_header != expected_auth:
-        return JsonResponse({
-            'error': 'Unauthorized'
-        }, status=401)
 
     try:
         # Get batch number from query params (default to 1)
@@ -811,14 +803,6 @@ def vercel_cron_retry_failed_users(request):
     Vercel Cron endpoint for retrying failed daily content generation
     Called automatically by Vercel at 8:00 AM UTC
     """
-    # Verify it's from Vercel (security check)
-    auth_header = request.headers.get('Authorization', '')
-    expected_auth = f"Bearer {settings.CRON_SECRET}"
-
-    if auth_header != expected_auth:
-        return JsonResponse({
-            'error': 'Unauthorized'
-        }, status=401)
 
     try:
         service = RetryIdeasService()

@@ -1,7 +1,5 @@
 import asyncio
 
-from AuditSystem.services import AuditService
-from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import (
@@ -9,6 +7,7 @@ from rest_framework.decorators import (
 )
 from rest_framework.response import Response
 
+from AuditSystem.services import AuditService
 from ClientContext.services.retry_client_context import RetryClientContext
 from ClientContext.services.weekly_context_email_service import (
     WeeklyContextEmailService,
@@ -21,14 +20,6 @@ from ClientContext.services.weekly_context_service import WeeklyContextService
 def generate_client_context(request):
     """Generate client context view."""
 
-    # Verify it's from Cronjob (security check)
-    auth_header = request.headers.get('Authorization', '')
-    expected_auth = f"Bearer {settings.CRON_SECRET}"
-
-    if auth_header != expected_auth:
-        return Response({
-            'error': 'Unauthorized'
-        }, status=status.HTTP_401_UNAUTHORIZED)
     try:
         # Get batch number from query params (default to 1)
         batch_number = int(request.GET.get('batch', 1))
@@ -124,14 +115,7 @@ def manual_generate_client_context(request):
 @api_view(['GET'])
 def retry_generate_client_context(request):
     """Retry generate client context view."""
-    # Verify it's from Cronjob (security check)
-    auth_header = request.headers.get('Authorization', '')
-    expected_auth = f"Bearer {settings.CRON_SECRET}"
 
-    if auth_header != expected_auth:
-        return Response({
-            'error': 'Unauthorized'
-        }, status=status.HTTP_401_UNAUTHORIZED)
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -177,13 +161,6 @@ def retry_generate_client_context(request):
 def send_weekly_context_test_email(request):
     """Send a test weekly context email to the authenticated user."""
 
-    auth_header = request.headers.get('Authorization', '')
-    expected_auth = f"Bearer {settings.CRON_SECRET}"
-
-    if auth_header != expected_auth:
-        return Response({
-            'error': 'Unauthorized'
-        }, status=status.HTTP_401_UNAUTHORIZED)
     try:
         # Get optional test data from request
         test_context_data = request.data.get('context_data', None)
