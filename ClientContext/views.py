@@ -4,7 +4,9 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import (
     api_view,
+    permission_classes,
 )
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from AuditSystem.services import AuditService
@@ -17,6 +19,7 @@ from ClientContext.services.weekly_context_service import WeeklyContextService
 
 @csrf_exempt
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def generate_client_context(request):
     """Generate client context view."""
 
@@ -67,6 +70,7 @@ def generate_client_context(request):
 
 @csrf_exempt
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def manual_generate_client_context(request):
     """Generate client context view."""
 
@@ -113,6 +117,7 @@ def manual_generate_client_context(request):
 
 @csrf_exempt
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def retry_generate_client_context(request):
     """Retry generate client context view."""
 
@@ -158,6 +163,7 @@ def retry_generate_client_context(request):
 
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def send_weekly_context_test_email(request):
     """Send a test weekly context email to the authenticated user."""
 

@@ -10,6 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from AuditSystem.services import AuditService
@@ -658,6 +659,7 @@ def get_post_stats(request):
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@permission_classes([AllowAny])
 def vercel_cron_daily_content_generation(request):
     """
     Vercel Cron endpoint for daily content generation
@@ -717,6 +719,7 @@ def vercel_cron_daily_content_generation(request):
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@permission_classes([AllowAny])
 def manual_trigger_daily_generation(request):
     """
     Manual trigger for daily content generation (for testing)
@@ -769,6 +772,7 @@ def manual_trigger_daily_generation(request):
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@permission_classes([AllowAny])
 def mail_all_generated_content(request):
     """Fetch all user automatically generated content and email it to them."""
     try:
@@ -798,6 +802,7 @@ def mail_all_generated_content(request):
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@permission_classes([AllowAny])
 def vercel_cron_retry_failed_users(request):
     """
     Vercel Cron endpoint for retrying failed daily content generation
@@ -851,6 +856,7 @@ def vercel_cron_retry_failed_users(request):
 
 @csrf_exempt
 @require_http_methods(["GET"])
+@permission_classes([AllowAny])
 def manual_trigger_retry_failed(request):
     """
     Manual trigger for retrying failed users (for testing)
