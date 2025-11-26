@@ -190,6 +190,27 @@ class AuditService:
         )
 
     @staticmethod
+    def log_context_generation(
+        user: User,
+        action: str,
+        status: str = 'success',
+        request: Optional[HttpRequest] = None,
+        error_message: str = '',
+        **kwargs
+    ) -> AuditLog:
+        """Log content generation operations"""
+        return AuditService.log_operation(
+            user=user,
+            operation_category='context',
+            action=action,
+            status=status,
+            resource_type='WeeklyContext',
+            request=request,
+            error_message=error_message,
+            **kwargs
+        )
+
+    @staticmethod
     def log_content_generation(
         user: User,
         action: str,

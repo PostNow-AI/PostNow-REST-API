@@ -1,4 +1,4 @@
-name: Retry Daily Content Generation - Failed Users
+name: Retry Weekly Context Generation - Failed Users
 
 on:
   schedule:
@@ -29,19 +29,29 @@ on:
   workflow_dispatch:
 
 jobs:
-  retry-failed-users:
+  generate-context:
     runs-on: ubuntu-latest
-    environment: Production
+    environment: Production # <-- Add this line
+    strategy:
+      matrix:
+        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      max-parallel: 3 # Limit concurrent batches to avoid overwhelming your API
 
     steps:
       - name: Debug URL
-        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/retry-failed-users/"
-
-      - name: Call Vercel API to retry failed users
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/retry-generate-weekly-context/"
+      - name: Wait for staggered execution
         run: |
-          echo "Retrying failed users from yesterday's generation"
+          # Stagger the batches by 5 minutes each
+          DELAY=$(( (${{ matrix.batch }} - 1) * 300 ))
+          echo "Waiting $DELAY seconds before executing batch ${{ matrix.batch }}"
+          sleep $DELAY
+
+      - name: Call Vercel API for batch ${{ matrix.batch }}
+        run: |
+          echo "Processing batch ${{ matrix.batch }}"
           curl -X GET \
-            "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/retry-failed-users/" \
+            "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/retry-generate-weekly-context/" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             -w "HTTP Status: %{http_code}\n" \

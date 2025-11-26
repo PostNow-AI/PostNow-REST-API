@@ -25,8 +25,10 @@ from .serializers import (
     PostSerializer,
     PostWithIdeasSerializer,
 )
-from .services.daily_content_service import DailyContentService
+from .services.daily_ideas_service import DailyIdeasService
+from .services.mail_daily_ideas_service import MailDailyIdeasService
 from .services.post_ai_service import PostAIService
+from .services.retry_ideas_service import RetryIdeasService
 
 logger = logging.getLogger(__name__)
 
@@ -676,26 +678,47 @@ def vercel_cron_daily_content_generation(request):
         batch_size = 5  # Process 5 users per batch, to avoid vercel timeouts
 
         # Run async processing
-        service = DailyContentService()
+        service = DailyIdeasService()
 
-        # Use asyncio to run the async function
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_started',
+            status='info',
+            resource_type='DailyContentGeneration',
+        )
+
         try:
             result = loop.run_until_complete(
-                service.process_users_batch_async(batch_number, batch_size)
+                service.process_daily_ideas_for_users(
+                    batch_number=batch_number, batch_size=batch_size)
+            )
+            AuditService.log_system_operation(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success',
+                resource_type='DailyContentGeneration',
             )
         finally:
             loop.close()
 
-        return JsonResponse(result, status=200)
+        return JsonResponse({
+            'message': 'Daily content generation completed',
+            'result': result
+        }, status=200)
 
     except Exception as e:
-        logger.error(f"Vercel cron job failed: {str(e)}")
-
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_failed',
+            status='error',
+            resource_type='DailyContentGeneration',
+            details=str(e)
+        )
         return JsonResponse({
-            'error': 'Internal server error',
+            'error': 'Failed to generate daily content',
             'details': str(e)
         }, status=500)
 
@@ -707,14 +730,28 @@ def manual_trigger_daily_generation(request):
     Manual trigger for daily content generation (for testing)
     """
     try:
-        service = DailyContentService()
+        service = DailyIdeasService()
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_started',
+            status='info',
+            resource_type='DailyContentGeneration',
+        )
+
         try:
             result = loop.run_until_complete(
-                service.process_all_users_async()
+                service.process_daily_ideas_for_users(
+                    batch_number=1, batch_size=0)
+            )
+            AuditService.log_system_operation(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success',
+                resource_type='DailyContentGeneration',
             )
         finally:
             loop.close()
@@ -725,6 +762,13 @@ def manual_trigger_daily_generation(request):
         }, status=200)
 
     except Exception as e:
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_failed',
+            status='error',
+            resource_type='DailyContentGeneration',
+            details=str(e)
+        )
         return JsonResponse({
             'error': 'Failed to generate daily content',
             'details': str(e)
@@ -736,14 +780,14 @@ def manual_trigger_daily_generation(request):
 def mail_all_generated_content(request):
     """Fetch all user automatically generated content and email it to them."""
     try:
-        service = DailyContentService()
+        service = MailDailyIdeasService()
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
             result = loop.run_until_complete(
-                service.mail_all_generated_content()
+                service.mail_daily_ideas()
             )
         finally:
             loop.close()
@@ -777,26 +821,46 @@ def vercel_cron_retry_failed_users(request):
         }, status=401)
 
     try:
-        service = DailyContentService()
+        service = RetryIdeasService()
 
-        # Use asyncio to run the async function
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_started',
+            status='info',
+            resource_type='DailyContentGeneration',
+        )
+
         try:
             result = loop.run_until_complete(
-                service.retry_failed_users_async()
+                service.process_daily_ideas_for_failed_users()
+            )
+            AuditService.log_system_operation(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success',
+                resource_type='DailyContentGeneration',
             )
         finally:
             loop.close()
 
-        return JsonResponse(result, status=200)
+        return JsonResponse({
+            'message': 'Daily content generation completed',
+            'result': result
+        }, status=200)
 
     except Exception as e:
-        logger.error(f"Vercel retry cron job failed: {str(e)}")
-
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_failed',
+            status='error',
+            resource_type='DailyContentGeneration',
+            details=str(e)
+        )
         return JsonResponse({
-            'error': 'Internal server error',
+            'error': 'Failed to generate daily content',
             'details': str(e)
         }, status=500)
 
@@ -808,25 +872,46 @@ def manual_trigger_retry_failed(request):
     Manual trigger for retrying failed users (for testing)
     """
     try:
-        service = DailyContentService()
+        # Run async processing
+        service = RetryIdeasService()
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_started',
+            status='info',
+            resource_type='DailyContentGeneration',
+        )
+
         try:
             result = loop.run_until_complete(
-                service.retry_failed_users_async()
+                service.process_daily_ideas_for_failed_users()
+            )
+            AuditService.log_system_operation(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success',
+                resource_type='DailyContentGeneration',
             )
         finally:
             loop.close()
 
         return JsonResponse({
-            'message': 'Retry failed users completed',
+            'message': 'Daily content generation completed',
             'result': result
         }, status=200)
 
     except Exception as e:
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_failed',
+            status='error',
+            resource_type='DailyContentGeneration',
+            details=str(e)
+        )
         return JsonResponse({
-            'error': 'Failed to retry failed users',
+            'error': 'Failed to generate daily content',
             'details': str(e)
         }, status=500)

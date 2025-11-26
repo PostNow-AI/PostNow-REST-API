@@ -12,6 +12,7 @@ class AuditLog(models.Model):
         ('account', 'Gerenciamento de Conta'),
         ('profile', 'Perfil do Criador'),
         ('post', 'Operações de Post'),
+        ('context', 'Geração de Contexto'),
         ('content', 'Geração de Conteúdo'),
         ('image', 'Geração de Imagem'),
         ('credit', 'Sistema de Créditos'),
@@ -51,6 +52,12 @@ class AuditLog(models.Model):
 
         ('daily_generation_started', 'Geração Diária Iniciada'),
         ('daily_generation_completed', 'Geração Diária Concluída'),
+
+        # Weekly Context Generation
+        ('weekly_generation_started', 'Geração Semanal Iniciada'),
+        ('weekly_generation_completed', 'Geração Semanal Concluída'),
+        ('context_generated', 'Contexto Gerado'),
+        ('context_generation_failed', 'Geração de Contexto Falhou'),
 
         # Credit System
         ('credit_purchased', 'Crédito Comprado'),
