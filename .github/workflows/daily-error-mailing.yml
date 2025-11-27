@@ -1,9 +1,8 @@
-name: Daily Content Mailing
+name: Daily Error Mailing
 
 on:
   schedule:
-    - cron: "0 9 * * 6" # Run once at 9:00 AM UTC (6am GMT-3)
-
+    - cron: "0 3 * * *" # Run at 3:00 AM UTC
   workflow_dispatch:
 
 jobs:
@@ -12,13 +11,13 @@ jobs:
     environment: Production
     steps:
       - name: Debug Url
-        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/send-weekly-context-email/"
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/mail-daily-errors/"
 
       - name: Call api for mailing
         run: |
-          echo "Mailing automatically generated context"
+          echo "Mailing daily content error"
           curl -X GET \
-            "${{ secrets.VERCEL_API_URL}}/api/v1/client-context/send-weekly-context-email/" \
+            "${{ secrets.VERCEL_API_URL}}/api/v1/ideabank/cron/mail-daily-errors/" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             -w "HTTP Status: %{http_code}\n" \

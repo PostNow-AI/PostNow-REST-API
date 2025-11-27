@@ -58,6 +58,8 @@ class AuditLog(models.Model):
         ('weekly_generation_completed', 'Geração Semanal Concluída'),
         ('context_generated', 'Contexto Gerado'),
         ('context_generation_failed', 'Geração de Contexto Falhou'),
+        ('weekly_context_email_sent', 'Email de Contexto Semanal Enviado'),
+        ('weekly_context_email_failed', 'Falha no Email de Contexto Semanal'),
 
         # Credit System
         ('credit_purchased', 'Crédito Comprado'),

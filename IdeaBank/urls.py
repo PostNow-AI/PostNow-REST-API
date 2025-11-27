@@ -48,4 +48,6 @@ urlpatterns = [
          name='manual_retry_failed'),
     path('cron/mail-automatic-posts/',
          views.mail_all_generated_content, name='mail_automatic_posts'),
+    path('cron/mail-daily-errors/',
+         views.mail_all_user_errors, name='mail_daily_errors'),
 ]

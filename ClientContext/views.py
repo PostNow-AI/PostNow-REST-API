@@ -1,5 +1,6 @@
 import asyncio
 
+from AuditSystem.services import AuditService
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import (
@@ -10,7 +11,6 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from AuditSystem.services import AuditService
 from ClientContext.services.retry_client_context import RetryClientContext
 from ClientContext.services.weekly_context_email_service import (
     WeeklyContextEmailService,
@@ -166,31 +166,24 @@ def retry_generate_client_context(request):
 
 
 @csrf_exempt
-@api_view(['POST'])
+@api_view(['GET'])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def send_weekly_context_test_email(request):
-    """Send a test weekly context email to the authenticated user."""
-
+def send_weekly_context_email(request):
+    """Send weekly context email view."""
     try:
-        # Get optional test data from request
-        test_context_data = request.data.get('context_data', None)
-
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
             email_service = WeeklyContextEmailService()
             result = loop.run_until_complete(
-                email_service.send_weekly_context_test_email(
-                    user=request.user,
-                    test_context_data=test_context_data
-                )
+                email_service.mail_weekly_context()
             )
 
             AuditService.log_system_operation(
-                user=request.user,
-                action='weekly_context_test_email_sent',
+                user=None,
+                action='weekly_context_email_sent',
                 status='success' if result['status'] == 'success' else 'failure',
                 resource_type='WeeklyContextEmail',
                 details=result
@@ -200,8 +193,8 @@ def send_weekly_context_test_email(request):
 
         except Exception as e:
             AuditService.log_system_operation(
-                user=request.user,
-                action='weekly_context_test_email_failed',
+                user=None,
+                action='weekly_context_email_failed',
                 status='error',
                 resource_type='WeeklyContextEmail',
                 details={'error': str(e)}

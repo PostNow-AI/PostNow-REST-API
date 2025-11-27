@@ -3,11 +3,10 @@ import logging
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
-from django.contrib.auth.models import User
-from django.utils import timezone
-
 from AuditSystem.services import AuditService
 from ClientContext.models import ClientContext
+from django.contrib.auth.models import User
+from django.utils import timezone
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.mailjet_service import MailjetService
@@ -258,4 +257,4 @@ class WeeklyContextService:
         <pre>{error_message or 'Erro interno de servidor'}</pre>
         """
         await self.mailjet_service.send_fallback_email_to_admins(
-            user, subject, html_content)
+            subject, html_content)

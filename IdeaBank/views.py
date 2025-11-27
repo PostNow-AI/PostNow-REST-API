@@ -5,6 +5,7 @@ New Post-based views for IdeaBank app.
 import asyncio
 import logging
 
+from AuditSystem.services import AuditService
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -16,8 +17,6 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-
-from AuditSystem.services import AuditService
 
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
@@ -31,6 +30,7 @@ from .serializers import (
     PostWithIdeasSerializer,
 )
 from .services.daily_ideas_service import DailyIdeasService
+from .services.mail_daily_error import MailDailyErrorService
 from .services.mail_daily_ideas_service import MailDailyIdeasService
 from .services.post_ai_service import PostAIService
 from .services.retry_ideas_service import RetryIdeasService
@@ -803,6 +803,37 @@ def mail_all_generated_content(request):
     except Exception as e:
         return JsonResponse({
             'error': 'Failed to email generated content',
+            'details': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def mail_all_user_errors(request):
+    """Fetch all user automatically generated content and email it to them."""
+    try:
+        service = MailDailyErrorService()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            result = loop.run_until_complete(
+                service.send_error_report()
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse({
+            'message': 'Emailing of generated content completed',
+            'result': result
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({
+            'error': 'Failed to email errors',
             'details': str(e)
         }, status=500)
 

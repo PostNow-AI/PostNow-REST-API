@@ -11,6 +11,6 @@ urlpatterns = [
          name='manual_generate_weekly_context'),
     path('retry-generate-weekly-context/', views.retry_generate_client_context,
          name='retry_generate_weekly_context'),
-    path('send-weekly-context-test-email/', views.send_weekly_context_test_email,
-         name='send_weekly_context_test_email'),
+    path('send-weekly-context-email/', views.send_weekly_context_email,
+         name='send_weekly_context_email'),
 ]

@@ -1,15 +1,56 @@
+import os
+
+
 def generate_weekly_context_email_template(context_data, user_data):
     """Generate HTML email template for weekly context report"""
 
     # Extract relevant data
     business_name = user_data.get('business_name', 'Sua Empresa')
-    user_name = user_data.get('user_name', 'Usuário')
+    user_name = user_data.get(
+        'user_name', user_data.get('user__first_name', 'Usuário'))
 
-    # Context sections
-    market_data = context_data.get('mercado', {})
-    competition_data = context_data.get('concorrencia', {})
-    audience_data = context_data.get('publico', {})
-    trends_data = context_data.get('tendencias', {})
+    # Map flat context_data structure to nested structure for compatibility
+    market_data = {
+        'panorama': context_data.get('market_panorama', ''),
+        'tendencias': context_data.get('market_tendencies', []),
+        'desafios': context_data.get('market_challenges', []),
+        'fontes': context_data.get('market_sources', [])
+    }
+
+    competition_data = {
+        'principais': context_data.get('competition_main', []),
+        'estrategias': context_data.get('competition_strategies', ''),
+        'oportunidades': context_data.get('competition_opportunities', ''),
+        'fontes': context_data.get('competition_sources', [])
+    }
+
+    audience_data = {
+        'perfil': context_data.get('target_audience_profile', ''),
+        'comportamento_online': context_data.get('target_audience_behaviors', ''),
+        'interesses': context_data.get('target_audience_interests', []),
+        'fontes': context_data.get('target_audience_sources', [])
+    }
+
+    trends_data = {
+        'temas_populares': context_data.get('tendencies_popular_themes', []),
+        'hashtags': context_data.get('tendencies_hashtags', []),
+        'palavras_chave': context_data.get('tendencies_keywords', []),
+        'fontes': context_data.get('tendencies_sources', [])
+    }
+
+    # Brand and seasonal data
+    brand_data = {
+        'presenca_online': context_data.get('brand_online_presence', ''),
+        'reputacao': context_data.get('brand_reputation', ''),
+        'estilo_comunicacao': context_data.get('brand_communication_style', ''),
+        'fontes': context_data.get('brand_sources', [])
+    }
+
+    seasonal_data = {
+        'datas_relevantes': context_data.get('seasonal_relevant_dates', []),
+        'eventos_locais': context_data.get('seasonal_local_events', []),
+        'fontes': context_data.get('seasonal_sources', [])
+    }
 
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -220,6 +261,81 @@ def generate_weekly_context_email_template(context_data, user_data):
                                 </tr>
                             </table>
 
+                            <!-- Brand Analysis Section -->
+                            <table role="presentation" style="width: 100%; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                                <tr>
+                                    <td style="background-color: #1e40af; padding: 20px; color: white;">
+                                        <h2 style="margin: 0; font-size: 20px; font-weight: 600;">🏢 Análise da Marca</h2>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 24px;">
+                                        <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
+                                            <strong>Presença Online:</strong><br>
+                                            {brand_data.get('presenca_online', 'Análise de presença online não disponível.')}
+                                        </p>
+                                        
+                                        <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
+                                            <strong>Reputação:</strong><br>
+                                            {brand_data.get('reputacao', 'Análise de reputação não disponível.')}
+                                        </p>
+                                        
+                                        {'''
+                                        <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
+                                            <strong>Estilo de Comunicação:</strong><br>
+                                            {brand_data.get('estilo_comunicacao', 'Análise de comunicação não disponível.')}
+                                        </p>
+                                        ''' if brand_data.get('estilo_comunicacao') else ''}
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Seasonal Calendar Section -->
+                            <table role="presentation" style="width: 100%; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                                <tr>
+                                    <td style="background-color: #be185d; padding: 20px; color: white;">
+                                        <h2 style="margin: 0; font-size: 20px; font-weight: 600;">📅 Calendário Estratégico</h2>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 24px;">
+                                        {'''
+                                        <div style="margin-bottom: 20px;">
+                                            <h4 style="margin: 0 0 12px 0; color: #be185d; font-size: 16px; font-weight: 600;">📆 Datas Relevantes:</h4>
+                                            <ul style="margin: 0; padding-left: 20px; color: #4b5563; font-size: 14px; line-height: 1.5;">
+                                        ''' if seasonal_data.get('datas_relevantes') else ''}
+                                        
+                                        {(''.join([f'<li style="margin-bottom: 8px;">{date}</li>' for date in seasonal_data.get('datas_relevantes', [])])) if seasonal_data.get('datas_relevantes') else ''}
+                                        
+                                        {'''
+                                            </ul>
+                                        </div>
+                                        ''' if seasonal_data.get('datas_relevantes') else ''}
+                                        
+                                        {'''
+                                        <div>
+                                            <h4 style="margin: 0 0 12px 0; color: #7c2d12; font-size: 16px; font-weight: 600;">🎪 Eventos Locais:</h4>
+                                            <ul style="margin: 0; padding-left: 20px; color: #4b5563; font-size: 14px; line-height: 1.5;">
+                                        ''' if seasonal_data.get('eventos_locais') else ''}
+                                        
+                                        {(''.join([f'<li style="margin-bottom: 8px;">{event}</li>' for event in seasonal_data.get('eventos_locais', [])])) if seasonal_data.get('eventos_locais') else ''}
+                                        
+                                        {'''
+                                            </ul>
+                                        </div>
+                                        ''' if seasonal_data.get('eventos_locais') else ''}
+                                        
+                                        {'''
+                                        <div style="background-color: #fef7ff; border-left: 4px solid #be185d; padding: 16px; border-radius: 4px; margin-top: 16px;">
+                                            <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.5;">
+                                                💡 <strong>Dica:</strong> Use essas datas para planejar campanhas especiais e criar conteúdo relevante para seu público.
+                                            </p>
+                                        </div>
+                                        ''' if seasonal_data.get('datas_relevantes') or seasonal_data.get('eventos_locais') else ''}
+                                    </td>
+                                </tr>
+                            </table>
+
                             <!-- Sources Section -->
                             <table role="presentation" style="width: 100%; margin-bottom: 40px; background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
                                 <tr>
@@ -254,6 +370,45 @@ def generate_weekly_context_email_template(context_data, user_data):
                                             </ul>
                                         </div>
                                         ''' if competition_data.get('fontes') else ''}
+                                        
+                                        {'''
+                                        <div style="margin-top: 16px;">
+                                            <h4 style="margin: 0 0 8px 0; color: #ea580c; font-size: 14px; font-weight: 600;">Público-Alvo:</h4>
+                                            <ul style="margin: 0 0 16px 0; padding-left: 20px; color: #6b7280; font-size: 12px;">
+                                        ''' if audience_data.get('fontes') else ''}
+                                        
+                                        {(''.join([f'<li style="margin-bottom: 4px;"><a href="{source}" style="color: #3b82f6; text-decoration: none;">{source}</a></li>' for source in audience_data.get('fontes', [])])) if audience_data.get('fontes') else ''}
+                                        
+                                        {'''
+                                            </ul>
+                                        </div>
+                                        ''' if audience_data.get('fontes') else ''}
+                                        
+                                        {'''
+                                        <div style="margin-top: 16px;">
+                                            <h4 style="margin: 0 0 8px 0; color: #7c3aed; font-size: 14px; font-weight: 600;">Tendências:</h4>
+                                            <ul style="margin: 0 0 16px 0; padding-left: 20px; color: #6b7280; font-size: 12px;">
+                                        ''' if trends_data.get('fontes') else ''}
+                                        
+                                        {(''.join([f'<li style="margin-bottom: 4px;"><a href="{source}" style="color: #3b82f6; text-decoration: none;">{source}</a></li>' for source in trends_data.get('fontes', [])])) if trends_data.get('fontes') else ''}
+                                        
+                                        {'''
+                                            </ul>
+                                        </div>
+                                        ''' if trends_data.get('fontes') else ''}
+                                        
+                                        {'''
+                                        <div style="margin-top: 16px;">
+                                            <h4 style="margin: 0 0 8px 0; color: #1e40af; font-size: 14px; font-weight: 600;">Marca:</h4>
+                                            <ul style="margin: 0 0 16px 0; padding-left: 20px; color: #6b7280; font-size: 12px;">
+                                        ''' if brand_data.get('fontes') else ''}
+                                        
+                                        {(''.join([f'<li style="margin-bottom: 4px;"><a href="{source}" style="color: #3b82f6; text-decoration: none;">{source}</a></li>' for source in brand_data.get('fontes', [])])) if brand_data.get('fontes') else ''}
+                                        
+                                        {'''
+                                            </ul>
+                                        </div>
+                                        ''' if brand_data.get('fontes') else ''}
                                     </td>
                                 </tr>
                             </table>
@@ -266,7 +421,7 @@ def generate_weekly_context_email_template(context_data, user_data):
                                         <p style="margin: 0 0 20px 0; color: #e2e8f0; font-size: 16px; line-height: 1.5;">
                                             Use estes insights para criar posts que realmente conectam com seu público
                                         </p>
-                                        <a href="https://postnow.ai/dashboard" style="display: inline-block; background-color: #ffffff; color: #667eea; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                                        <a href="{os.getenv('FRONTEND_URL')}" style="display: inline-block; background-color: #ffffff; color: #667eea; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
                                             Acessar Dashboard
                                         </a>
                                     </td>
@@ -307,12 +462,45 @@ def generate_weekly_context_plain_text(context_data, user_data):
     """Generate plain text version for email clients that don't support HTML"""
 
     business_name = user_data.get('business_name', 'Sua Empresa')
-    user_name = user_data.get('user_name', 'Usuário')
+    user_name = user_data.get(
+        'user_name', user_data.get('user__first_name', 'Usuário'))
 
-    market_data = context_data.get('mercado', {})
-    competition_data = context_data.get('concorrencia', {})
-    audience_data = context_data.get('publico', {})
-    trends_data = context_data.get('tendencias', {})
+    # Map flat context_data structure to nested structure for compatibility
+    market_data = {
+        'panorama': context_data.get('market_panorama', ''),
+        'tendencias': context_data.get('market_tendencies', []),
+        'desafios': context_data.get('market_challenges', [])
+    }
+
+    competition_data = {
+        'principais': context_data.get('competition_main', []),
+        'estrategias': context_data.get('competition_strategies', ''),
+        'oportunidades': context_data.get('competition_opportunities', '')
+    }
+
+    audience_data = {
+        'perfil': context_data.get('target_audience_profile', ''),
+        'comportamento_online': context_data.get('target_audience_behaviors', ''),
+        'interesses': context_data.get('target_audience_interests', [])
+    }
+
+    trends_data = {
+        'temas_populares': context_data.get('tendencies_popular_themes', []),
+        'hashtags': context_data.get('tendencies_hashtags', []),
+        'palavras_chave': context_data.get('tendencies_keywords', [])
+    }
+
+    # Brand and seasonal data
+    brand_data = {
+        'presenca_online': context_data.get('brand_online_presence', ''),
+        'reputacao': context_data.get('brand_reputation', ''),
+        'estilo_comunicacao': context_data.get('brand_communication_style', '')
+    }
+
+    seasonal_data = {
+        'datas_relevantes': context_data.get('seasonal_relevant_dates', []),
+        'eventos_locais': context_data.get('seasonal_local_events', [])
+    }
 
     text = f"""
 POSTNOW - CONTEXTO SEMANAL DE MERCADO
@@ -361,6 +549,26 @@ Comportamento Online:
 # Hashtags em Alta: {', '.join(trends_data.get('hashtags', [])) if trends_data.get('hashtags') else 'Não disponível'}
 
 🔍 Palavras-chave Estratégicas: {', '.join(trends_data.get('palavras_chave', [])) if trends_data.get('palavras_chave') else 'Não disponível'}
+
+🏢 ANÁLISE DA MARCA
+-------------------
+Presença Online:
+{brand_data.get('presenca_online', 'Análise de presença online não disponível.')}
+
+Reputação:
+{brand_data.get('reputacao', 'Análise de reputação não disponível.')}
+
+{f"""
+Estilo de Comunicação:
+{brand_data.get('estilo_comunicacao', 'Análise de comunicação não disponível.')}""" if brand_data.get('estilo_comunicacao') else ''}
+
+📅 CALENDÁRIO ESTRATÉGICO
+-------------------------
+📆 Datas Relevantes:
+{chr(10).join([f"• {date}" for date in seasonal_data.get('datas_relevantes', [])]) if seasonal_data.get('datas_relevantes') else "• Não disponível"}
+
+🎪 Eventos Locais:
+{chr(10).join([f"• {event}" for event in seasonal_data.get('eventos_locais', [])]) if seasonal_data.get('eventos_locais') else "• Não disponível"}
 
 📚 FONTES CONSULTADAS
 --------------------

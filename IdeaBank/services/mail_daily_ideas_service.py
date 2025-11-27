@@ -3,7 +3,6 @@ from collections import defaultdict
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth import get_user_model
-
 from IdeaBank.models import Post
 from IdeaBank.utils.mail_templates.daily_content import daily_content_template
 from services.mailjet_service import MailjetService
@@ -97,7 +96,7 @@ class MailDailyIdeasService:
             )
 
             await self.mailjet_service.send_email(
-                user, user.email, subject, html_content, [])
+                user.email, subject, html_content, [])
 
             logger.info(
                 f"E-mail enviado com sucesso para o usuário {user.id} - {user.username}")

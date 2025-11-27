@@ -3,18 +3,16 @@ import logging
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
+from AuditSystem.services import AuditService
+from ClientContext.models import ClientContext
+from ClientContext.serializers import ClientContextSerializer
 from django.contrib.auth.models import User
 from django.db import connection
 from django.utils import timezone
 from google.genai import types
-
-from AuditSystem.services import AuditService
-from ClientContext.models import ClientContext
-from ClientContext.serializers import ClientContextSerializer
 from IdeaBank.models import Post, PostIdea
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
-from services.mailjet_service import MailjetService
 from services.s3_sevice import S3Service
 from services.semaphore_service import SemaphoreService
 from services.user_validation_service import UserValidationService
@@ -29,7 +27,6 @@ class DailyIdeasService:
         self.ai_service = AiService()
         self.prompt_service = AIPromptService()
         self.audit_service = AuditService()
-        self.mailjet_service = MailjetService()
         self.s3_service = S3Service()
 
     @sync_to_async
@@ -282,13 +279,6 @@ class DailyIdeasService:
             "UPDATE auth_user SET daily_generation_error = %s, daily_generation_error_date = %s WHERE id = %s",
             [error_message, timezone.now(), user.id]
         ))()
-        subject = "Falha na Geração de Conteúdo Diário"
-        html_content = f"""
-        <h1>Falha na Geração de Conteúdo Diário</h1>
-        <p>Ocorreu um erro durante o processo de geração de conteúdo diário:</p>
-        <pre>{error_message or 'Erro interno de servidor'}</pre>
-        """
-        await self.mailjet_service.send_fallback_email_to_admins(user, subject, html_content)
 
     async def _clear_user_error(self, user):
         """Clear error message from user model after successful generation."""

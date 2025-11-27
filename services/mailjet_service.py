@@ -1,11 +1,9 @@
-import asyncio
 import base64
 import logging
 import os
 
 from asgiref.sync import sync_to_async
 from AuditSystem.services import AuditService
-from django.contrib.auth.models import User
 from mailjet_rest import Client
 
 from .s3_sevice import S3Service
@@ -29,7 +27,7 @@ class MailjetService:
             }
         }
 
-    async def send_email(self, user: User, to_email: str, subject: str, body: str, attachments: list[str] = None) -> tuple:
+    async def send_email(self, to_email: str, subject: str, body: str, attachments: list[str] = None) -> tuple:
         """ Send an email using Mailjet with optional attachments """
         audit_service = AuditService()
         try:
@@ -52,7 +50,7 @@ class MailjetService:
             result = self.mailjet_client.send.create(data=data)
 
             await sync_to_async(audit_service.log_system_operation)(
-                user=user,
+                user=None,
                 action='email_sent',
                 status='success',
                 details={'to_email': to_email, 'subject': subject}
@@ -62,7 +60,7 @@ class MailjetService:
         except Exception as e:
             logger.error(f"Falhou o envio de email: {e}")
             audit_service.log_system_operation(
-                user=user,
+                user=None,
                 action='email_failed',
                 status='failure',
                 details={'to_email': to_email, 'subject': subject}
@@ -107,14 +105,10 @@ class MailjetService:
             logger.error(f"Error processing attachment {index+1}: {e}")
             raise Exception(f"Error processing attachment {index+1}: {e}")
 
-    async def send_fallback_email_to_admins(self, user: User, subject: str, html_content: str):
+    async def send_fallback_email_to_admins(self, subject: str, html_content: str):
         """Send fallback email to admins in case of critical failure."""
         admin_emails = os.getenv(
             'ADMIN_EMAILS', '').split(',')
         for admin_email in admin_emails:
             await self.send_email(
-                user, admin_email.strip(), subject, html_content, None)
-
-    def send_fallback_email_sync(self, user: User, subject: str, html: str):
-        """Synchronous wrapper for sending fallback emails to admins."""
-        asyncio.run(self.send_fallback_email_to_admins(user, subject, html))
+                admin_email.strip(), subject, html_content, None)
