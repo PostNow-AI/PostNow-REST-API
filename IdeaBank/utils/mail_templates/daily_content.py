@@ -35,7 +35,7 @@ def daily_content_template(user_name: str, feed_image: str, feed_text: str, reel
                                         <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">
                                             Copie a legenda e baixe a imagem para colocar no Instagram.
                                         </p>
-                                        {'<img src="cid:feed_image" alt="Imagem do Post" style="width: 100%; max-width: 520px; height: auto; border-radius: 8px; margin: 20px 0; display: block;">' if feed_image else '<div style="background-color: #f0f0f0; padding: 40px; text-align: center; border-radius: 8px; margin: 20px 0; color: #888;">Nenhuma imagem disponível</div>'}
+                                        {f'<img src="{feed_image}" alt="Imagem do Post" style="width: 100%; max-width: 520px; height: auto; border-radius: 8px; margin: 20px 0; display: block;">' if feed_image else '<div style="background-color: #f0f0f0; padding: 40px; text-align: center; border-radius: 8px; margin: 20px 0; color: #888;">Nenhuma imagem disponível</div>'}
                                         <div style="color: #64748b; font-size: 16px; line-height: 1.6;">
                                             {feed_text or 'Nenhum conteúdo de feed foi gerado.'}
                                         </div>

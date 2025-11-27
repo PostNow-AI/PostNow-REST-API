@@ -3,10 +3,11 @@ import logging
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
-from AuditSystem.services import AuditService
-from ClientContext.models import ClientContext
 from django.contrib.auth.models import User
 from django.utils import timezone
+
+from AuditSystem.services import AuditService
+from ClientContext.models import ClientContext
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.mailjet_service import MailjetService
@@ -250,7 +251,7 @@ class WeeklyContextService:
         logger.error(
             f"Updated existing ClientContext for user {user.id} with error: {error_message}")
 
-        subject = "Falha na Geração de Conteúdo Diário"
+        subject = "Falha na Geração de Contexto Semanal"
         html_content = f"""
         <h1>Falha na Geração de Contexto Semanal</h1>
         <p>Ocorreu um erro durante o processo de geração de contexto semanal para o usuário {user.email}.</p>

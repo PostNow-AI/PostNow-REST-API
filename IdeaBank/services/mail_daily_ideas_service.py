@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth import get_user_model
+
 from IdeaBank.models import Post
 from IdeaBank.utils.mail_templates.daily_content import daily_content_template
 from services.mailjet_service import MailjetService
@@ -50,20 +51,10 @@ class MailDailyIdeasService:
                 await self.send_email_to_user(user, posts_list)
                 processed += 1
                 post_ids = [p['id'] for p in posts_list]
-                await sync_to_async(Post.objects.filter(id__in=post_ids).update)(is_active=True)
+                await sync_to_async(lambda: Post.objects.filter(id__in=post_ids).update(is_active=True))()
             except Exception as e:
                 logger.error(f"Failed to process user {user_id}: {str(e)}")
                 failed += 1
-
-        if failed > 0:
-            logger.warning(
-                f"Failed to process {failed} users out of {len(user_posts)}")
-            failed_users = await sync_to_async(list)(
-                User.objects.filter(id__in=user_posts.keys()).values('email'))
-            await self.send_fallback_email_to_admins(
-                f"{failed} processos, de um total de {len(user_posts)} usuários, obtiveram falha ao enviar emails durante o envio de conteúdo diário. Emails de usuários: " +
-                ", ".join(str(user['email']) for user in failed_users)
-            )
 
         return {
             'status': 'completed',
@@ -97,16 +88,6 @@ class MailDailyIdeasService:
                 elif post_type == 'story':
                     story_text = post_content
 
-            attachments = []
-
-            if feed_image:
-                attachments.append({
-                    'url': feed_image,
-                    'filename': 'feed_image.jpg',
-                    'content_type': 'image/jpeg',
-                    'content_id': 'feed_image'
-                })
-
             html_content = daily_content_template(
                 user_name=user_name,
                 feed_image=feed_image,
@@ -116,10 +97,10 @@ class MailDailyIdeasService:
             )
 
             await self.mailjet_service.send_email(
-                user, user.email, subject, html_content, attachments)
+                user, user.email, subject, html_content, [])
 
             logger.info(
-                f"E-mail enviado com sucesso para o usuário {user.id} - {user.username} com {len(attachments)} imagens anexadas")
+                f"E-mail enviado com sucesso para o usuário {user.id} - {user.username}")
 
         except Exception as e:
             logger.error(
