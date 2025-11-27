@@ -225,6 +225,50 @@ class AIPromptService:
             """
         ]
 
+    def adapted_semantic_analysis_prompt(self, semantic_analysis: dict) -> str:
+        """Prompt for semantic analysis adapted to creator profile."""
+        profile_data = self._get_creator_profile_data()
+
+        return [
+            """
+              Você é um Diretor de Arte Sênior de Inteligência Artificial. Sua tarefa é fundir uma análise semântica de conteúdo com um perfil de marca específico, garantindo que o resultado seja uma diretriz visual coesa, priorizando **integralmente** o estilo e a paleta de cores da marca, mesmo que os temas originais sejam de naturezas diferentes (ex: Café com estilo Futurista).
+            """,
+            f"""
+              ### DADOS DE ENTRADA  ####
+              1. ANÁLISE SEMÂNTICA (Conteúdo e Mensagem)
+              {semantic_analysis}
+              
+              #### 2. PERFIL DA MARCA (Estilo e Identidade)
+              // Cole o conteúdo do seu JSON "brand_profile" aqui.
+              // Esta seção define COMO DEVE SER MOSTRADO (Estilo prioritário).
+
+              {profile_data}
+              
+              ### INSTRUÇÕES PARA ADAPTAÇÃO
+              1.  **Prioridade Absoluta:** O resultado final deve priorizar o **"Estilo Visual"** e as **"Cores da Marca"** definidos no `brand_profile`.
+              2.  **Mapeamento Visual:** Adapte os `objetos_relevantes` e o `contexto_visual_sugerido` da análise semântica para o `Estilo Visual` da marca. Por exemplo, se o tema é 'natureza' e o estilo é '3D Futurista', a natureza deve ser renderizada em 3D, com brilhos e linhas geométricas.
+              3.  **Mapeamento de Emoções:** Use a `Personalidade da Marca` para refinar a `ação_sugerida` e as `emoções_associadas`. (Ex: Uma marca 'educadora' deve ter personagens em postura de clareza e acolhimento).
+              4.  **Paleta de Cores:** Substitua os `tons_de_cor_sugeridos` originais pelas **Cores da Marca** fornecidas. Use as cores da marca para destaques, iluminação e elementos de fundo, mantendo a consistência.
+              5.  **Geração:** Gere o novo JSON final com a estrutura `analise_semantica` abaixo, refletindo as alterações e a priorização do `brand_profile`.              
+              
+              ### SAÍDA REQUERIDA (NOVO JSON ADAPTADO)
+              {{
+                "analise_semantica": {{
+                    "tema_principal": "[Tema principal adaptado ao contexto da marca]",
+                    "subtemas": [],
+                    "conceitos_visuais": ["[Conceitos reinterpretados no estilo da marca]"],
+                    "objetos_relevantes": ["[Objetos descritos no estilo visual prioritário]"],
+                    "contexto_visual_sugerido": "[Cenário com a estética e paleta da marca]",
+                    "emoções_associadas": ["[Emoções alinhadas à personalidade da marca]"],
+                    "tons_de_cor_sugeridos": ["[As Cores da Marca e seus usos]"],
+                    "ação_sugerida": "[Ação que reflete a personalidade e estilo da marca]",
+                    "sensação_geral": "[Sensação geral de acordo com a estética da marca]",
+                    "palavras_chave": ["[Keywords que fundem tema e estilo (ex: Café 3D, Editorial Roxo)]"] 
+                }} 
+              }}
+            """
+        ]
+
     def image_generation_prompt(self, semantic_analysis: dict) -> str:
         """Prompt for AI image generation based on semantic analysis."""
         profile_data = self._get_creator_profile_data()
@@ -245,6 +289,5 @@ class AIPromptService:
           A marca é {profile_data['business_name']}, cujo estilo é {profile_data['visual_style']} e paleta é {profile_data['color_palette']}.
           
           REGRAS/RESTRIÇÕES:
-          A IMAGEM GERADA NÃO DEVE CONTER TEXTO ALGUM
           NÃO GERE OU ADICIONE LOGOMARCAS OU MARCAS D'ÁGUA
         """

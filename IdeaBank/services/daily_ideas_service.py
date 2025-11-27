@@ -3,13 +3,14 @@ import logging
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
-from AuditSystem.services import AuditService
-from ClientContext.models import ClientContext
-from ClientContext.serializers import ClientContextSerializer
 from django.contrib.auth.models import User
 from django.db import connection
 from django.utils import timezone
 from google.genai import types
+
+from AuditSystem.services import AuditService
+from ClientContext.models import ClientContext
+from ClientContext.serializers import ClientContextSerializer
 from IdeaBank.models import Post, PostIdea
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
@@ -218,7 +219,17 @@ class DailyIdeasService:
             semantic_json = semantic_result.replace(
                 'json', '', 1).strip('`').strip()
             semantic_loaded = json.loads(semantic_json)
-            semantic_analysis = semantic_loaded.get('analise_semantica', {})
+
+            adapted_semantic_analysis_prompt = self.prompt_service.adapted_semantic_analysis_prompt(
+                semantic_loaded)
+            adapted_semantic_json = self.ai_service.generate_text(
+                adapted_semantic_analysis_prompt, user)
+            adapted_semantic_str = adapted_semantic_json.replace(
+                'json', '', 1).strip('`').strip()
+            adapted_semantic_loaded = json.loads(adapted_semantic_str)
+
+            semantic_analysis = adapted_semantic_loaded.get(
+                'analise_semantica', {})
 
             image_prompt = self.prompt_service.image_generation_prompt(
                 semantic_analysis)
