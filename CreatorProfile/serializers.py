@@ -176,7 +176,8 @@ class Step1BusinessSerializer(serializers.ModelSerializer):
 class Step2BrandingSerializer(serializers.ModelSerializer):
     """Step 3: Branding information - logo, voice_tone, colors (optional, default to random)"""
 
-    visual_style_id = serializers.IntegerField(
+    visual_style_ids = serializers.ListField(
+        child=serializers.IntegerField(),
         required=False,
         allow_null=True
     )
@@ -191,7 +192,7 @@ class Step2BrandingSerializer(serializers.ModelSerializer):
             'color_3',
             'color_4',
             'color_5',
-            'visual_style_id'
+            'visual_style_ids'
         ]
 
     def validate_voice_tone(self, value):
@@ -237,17 +238,6 @@ class Step2BrandingSerializer(serializers.ModelSerializer):
         """Validate color 5 format if provided."""
         return self._validate_hex_color(value, "Cor 5")
 
-    def validate_visual_style_id(self, value):
-        """Validate visual style id exists if provided."""
-        if value:
-            try:
-                VisualStylePreference.objects.get(id=value)
-            except VisualStylePreference.DoesNotExist:
-                raise serializers.ValidationError(
-                    "Estilo visual selecionado não existe."
-                )
-        return value
-
 
 # === MAIN CREATOR PROFILE SERIALIZER ===
 
@@ -255,10 +245,11 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
     """Complete Creator Profile serializer with all fields and step status."""
 
     user = UserBasicSerializer(read_only=True)
-    visual_style_id = serializers.SerializerMethodField()
-
-    def get_visual_style_id(self, obj):
-        return obj.visual_style_id.id if obj.visual_style_id else None
+    visual_style_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_null=True
+    )
 
     class Meta:
         model = CreatorProfile
@@ -290,7 +281,7 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
             'color_3',
             'color_4',
             'color_5',
-            'visual_style_id',
+            'visual_style_ids',
 
             # Status fields
             'step_1_completed',

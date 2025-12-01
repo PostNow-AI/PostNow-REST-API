@@ -24,19 +24,10 @@ class CreatorProfileService:
             # Update only the fields that were provided
             for key, value in data.items():
                 if hasattr(profile, key):
-                    # Special handling for ForeignKey fields
-                    if key == 'visual_style_id':
-                        if value:
-                            try:
-                                from .models import VisualStylePreference
-                                instance = VisualStylePreference.objects.get(
-                                    id=value)
-                                setattr(profile, key, instance)
-                            except VisualStylePreference.DoesNotExist:
-                                # This shouldn't happen since serializer validates it
-                                setattr(profile, key, None)
-                        else:
-                            setattr(profile, key, None)
+                    # Special handling for JSONField arrays
+                    if key == 'visual_style_ids':
+                        # For JSONField, we can directly set the list of IDs
+                        setattr(profile, key, value if value else [])
                     else:
                         # Clean the value before setting
                         if isinstance(value, str):

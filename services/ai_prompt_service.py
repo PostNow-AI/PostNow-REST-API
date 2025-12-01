@@ -1,6 +1,7 @@
 import logging
+import random
 
-from CreatorProfile.models import CreatorProfile
+from CreatorProfile.models import CreatorProfile, VisualStylePreference
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class AIPromptService:
             "main_competitors": profile.main_competitors,
             "reference_profiles": profile.reference_profiles,
             "voice_tone": profile.voice_tone,
-            "visual_style": {"name": profile.visual_style_id.name, "description": profile.visual_style_id.description} if profile.visual_style_id else None,
+            "visual_style": self._get_random_visual_style(profile),
             'color_palette': [] if not any([
                 profile.color_1, profile.color_2,
                 profile.color_3, profile.color_4, profile.color_5
@@ -49,6 +50,25 @@ class AIPromptService:
 
         }
         return profile_data
+
+    def _get_random_visual_style(self, profile) -> dict:
+        """Randomly select and fetch one visual style from the user's visual_style_ids list."""
+        if not profile.visual_style_ids or len(profile.visual_style_ids) == 0:
+            return {"name": None, "description": None}
+
+        random_style_id = random.choice(profile.visual_style_ids)
+
+        try:
+            visual_style = VisualStylePreference.objects.get(
+                id=random_style_id)
+            return {
+                "name": visual_style.name,
+                "description": visual_style.description
+            }
+        except VisualStylePreference.DoesNotExist:
+            logger.warning(
+                f"VisualStylePreference with id {random_style_id} not found for user {self.user.id if self.user else 'unknown'}")
+            return {"name": None, "description": None}
 
     def build_context_prompts(self) -> dict:
         """Build context prompts based on the user's creator profile."""

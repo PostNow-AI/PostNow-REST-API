@@ -179,12 +179,11 @@ class CreatorProfile(models.Model):
         help_text="Quinta cor da paleta"
     )
 
-    visual_style_id = models.ForeignKey(
-        'VisualStylePreference',
-        on_delete=models.SET_NULL,
-        null=True,
-        verbose_name="Estilo Visual Preferido",
-        help_text="Preferência de estilo visual selecionada"
+    visual_style_ids = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Estilos Visuais Preferidos",
+        help_text="Lista de IDs das preferências de estilos visuais selecionadas"
     )
 
     # === ONBOARDING STATUS ===

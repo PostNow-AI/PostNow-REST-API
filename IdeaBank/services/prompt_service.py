@@ -57,7 +57,7 @@ class PromptService:
             "main_competitors": profile.main_competitors,
             "reference_profiles": profile.reference_profiles,
             "voice_tone": profile.voice_tone,
-            "visual_style": {"name": profile.visual_style_id.name, "description": profile.visual_style_id.description} if profile.visual_style_id else None,
+            "visual_style": None,
             'color_palette': [color for color in [
                 profile.color_1, profile.color_2,
                 profile.color_3, profile.color_4, profile.color_5
