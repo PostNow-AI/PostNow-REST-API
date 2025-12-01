@@ -49,6 +49,7 @@ class AIPromptService:
             'desired_post_types': ['Nenhum'],
 
         }
+
         return profile_data
 
     def _get_random_visual_style(self, profile) -> dict:
@@ -61,10 +62,7 @@ class AIPromptService:
         try:
             visual_style = VisualStylePreference.objects.get(
                 id=random_style_id)
-            return {
-                "name": visual_style.name,
-                "description": visual_style.description
-            }
+            return f'{visual_style.name} - {visual_style.description}'
         except VisualStylePreference.DoesNotExist:
             logger.warning(
                 f"VisualStylePreference with id {random_style_id} not found for user {self.user.id if self.user else 'unknown'}")

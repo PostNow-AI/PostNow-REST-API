@@ -146,7 +146,7 @@ class DailyIdeasService:
                     'user_id': user_id
                 }
 
-            for post_type in ["feed"]:
+            for post_type in ["feed", 'reels', 'story']:
                 content_result = await sync_to_async(self._generate_content_for_user)(user, post_type=post_type)
                 content_json = content_result.replace(
                     'json', '', 1).strip('`').strip()
