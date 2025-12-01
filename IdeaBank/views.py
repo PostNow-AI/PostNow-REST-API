@@ -163,7 +163,6 @@ class PostIdeaDetailView(generics.RetrieveUpdateDestroyAPIView):
             user=request.user,
             action='content_updated',
             status='success',
-            resource_id=instance.id,
             details={'post_id': instance.post.id,
                      'post_name': instance.post.name}
         )
@@ -182,7 +181,6 @@ class PostIdeaDetailView(generics.RetrieveUpdateDestroyAPIView):
             user=request.user,
             action='content_deleted',
             status='success',
-            resource_id=idea_id,
             details={'post_name': post_name}
         )
 
@@ -249,7 +247,6 @@ def generate_post_idea(request):
                     user=request.user,
                     action='image_generated',
                     status='success',
-                    resource_id=post_idea.id,
                     details={
                         'post_id': post.id,
                         'post_name': post.name,
@@ -270,7 +267,6 @@ def generate_post_idea(request):
             user=request.user,
             action='content_generated',
             status='success',
-            resource_id=post_idea.id,
             details={
                 'post_id': post.id,
                 'post_name': post.name,
@@ -364,7 +360,6 @@ def generate_image_for_idea(request, idea_id):
             user=request.user,
             action='image_generated',
             status='success',
-            resource_id=post_idea.id,
             details={
                 'post_id': post_idea.post.id,
                 'post_name': post_idea.post.name,
@@ -459,7 +454,6 @@ def edit_post_idea(request, idea_id):
             user=request.user,
             action='content_updated',
             status='success',
-            resource_id=post_idea.id,
             details={
                 'post_id': post_idea.post.id,
                 'post_name': post_idea.post.name,
@@ -552,7 +546,6 @@ def regenerate_image_for_idea(request, idea_id):
             user=request.user,
             action='image_updated',
             status='success',
-            resource_id=post_idea.id,
             details={
                 'post_id': post_idea.post.id,
                 'post_name': post_idea.post.name,

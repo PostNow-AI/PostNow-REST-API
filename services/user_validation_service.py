@@ -34,7 +34,4 @@ class UserValidationService:
         if not self.credit_service.validate_user_subscription(user[0]):
             return {"status": "ineligible", "reason": "no_active_subscription"}
 
-        if not user[0].id == 78:
-            return {"status": "ineligible", "reason": "not_test_user"}
-
         return {"status": "eligible", "user": user[0], "profile": user[1]}

@@ -237,14 +237,12 @@ class GeminiService(BaseAIService):
 
             # Try different model names for image generation with fallbacks
             model_names = [
+                'gemini-3-pro-image-preview',
+                'gemini-3-pro-image-preview',
+                'gemini-2.5-flash-image',
                 'gemini-2.5-flash-image',
                 'gemini-2.5-flash-image-preview',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image-preview',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image-preview',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image-preview',
+                'gemini-2.5-flash-image-preview'
             ]
 
             for model_name in model_names:
@@ -252,6 +250,9 @@ class GeminiService(BaseAIService):
                     client = genai.Client(
                         api_key=os.environ.get("GEMINI_API_KEY"),
                     )
+                    # Set user on prompt service before calling get_creator_profile_data
+                    if user:
+                        prompt_service.set_user(user)
                     creator_profile_data = prompt_service.get_creator_profile_data()
                     logo = creator_profile_data.get('logo_image', None)
 

@@ -24,10 +24,24 @@ class CreatorProfileService:
             # Update only the fields that were provided
             for key, value in data.items():
                 if hasattr(profile, key):
-                    # Clean the value before setting
-                    if isinstance(value, str):
-                        value = value.strip() if value else None
-                    setattr(profile, key, value)
+                    # Special handling for ForeignKey fields
+                    if key == 'visual_style_id':
+                        if value:
+                            try:
+                                from .models import VisualStylePreference
+                                instance = VisualStylePreference.objects.get(
+                                    id=value)
+                                setattr(profile, key, instance)
+                            except VisualStylePreference.DoesNotExist:
+                                # This shouldn't happen since serializer validates it
+                                setattr(profile, key, None)
+                        else:
+                            setattr(profile, key, None)
+                    else:
+                        # Clean the value before setting
+                        if isinstance(value, str):
+                            value = value.strip() if value else None
+                        setattr(profile, key, value)
 
             # Force save to trigger the custom save method
             profile.save()
@@ -41,7 +55,6 @@ class CreatorProfileService:
             CreatorProfile.objects.filter(user=user).update(
                 step_1_completed=False,
                 step_2_completed=False,
-                step_3_completed=False,
                 onboarding_completed=False,
             )
 
@@ -56,7 +69,6 @@ class CreatorProfileService:
             CreatorProfile.objects.filter(user=user).update(
                 step_1_completed=True,
                 step_2_completed=True,
-                step_3_completed=True,
                 onboarding_completed=True,
             )
 

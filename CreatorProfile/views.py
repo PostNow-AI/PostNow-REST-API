@@ -4,14 +4,13 @@ from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import UserBehavior
+from .models import VisualStylePreference
 from .serializers import (
     CreatorProfileSerializer,
     OnboardingStatusSerializer,
-    Step1PersonalSerializer,
-    Step2BusinessSerializer,
-    Step3BrandingSerializer,
-    UserBehaviorSerializer,
+    Step1BusinessSerializer,
+    Step2BrandingSerializer,
+    VisualStylePreferenceSerializer,
 )
 from .services import CreatorProfileService
 
@@ -27,7 +26,6 @@ class OnboardingStatusView(generics.RetrieveAPIView):
                 'current_step': profile.current_step,
                 'step_1_completed': profile.step_1_completed,
                 'step_2_completed': profile.step_2_completed,
-                'step_3_completed': profile.step_3_completed,
                 'onboarding_completed': profile.onboarding_completed,
                 'profile_exists': True
             }
@@ -37,7 +35,6 @@ class OnboardingStatusView(generics.RetrieveAPIView):
                 'current_step': 1,
                 'step_1_completed': False,
                 'step_2_completed': False,
-                'step_3_completed': False,
                 'onboarding_completed': False,
                 'profile_exists': False
             }
@@ -46,10 +43,10 @@ class OnboardingStatusView(generics.RetrieveAPIView):
         return Response(serializer.data)
 
 
-class Step1PersonalView(generics.RetrieveUpdateAPIView):
-    """Handle Step 1: Personal information (professional_name, profession, instagram_handle, whatsapp_number)"""
+class Step1BusinessView(generics.RetrieveUpdateAPIView):
+    """Handle Step 1: Business information (business_name, specialization, description)"""
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = Step1PersonalSerializer
+    serializer_class = Step1BusinessSerializer
 
     def get_object(self):
         return CreatorProfileService.get_or_create_profile(self.request.user)
@@ -57,55 +54,6 @@ class Step1PersonalView(generics.RetrieveUpdateAPIView):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', True)
         instance = self.get_object()
-        serializer = self.get_serializer(
-            instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-
-        # Update the profile with step 1 data
-        updated_profile = CreatorProfileService.update_profile_data(
-            request.user, serializer.validated_data
-        )
-
-        # Log profile step 1 completion
-        AuditService.log_profile_operation(
-            user=request.user,
-            action='profile_updated',
-            status='success',
-            resource_type='CreatorProfile',
-            resource_id=updated_profile.id,
-            details={
-                'step': 1,
-                'step_completed': updated_profile.step_1_completed,
-                'current_step': updated_profile.current_step
-            }
-        )
-
-        response_serializer = CreatorProfileSerializer(updated_profile)
-        return Response({
-            'message': 'Dados pessoais salvos com sucesso!',
-            'step_completed': updated_profile.step_1_completed,
-            'current_step': updated_profile.current_step,
-            'profile': response_serializer.data
-        })
-
-
-class Step2BusinessView(generics.RetrieveUpdateAPIView):
-    """Handle Step 2: Business information (business_name, specialization, business_instagram_handle, business_website, business_city, business_description, target demographics)"""
-    permission_classes = [permissions.IsAuthenticated]
-    serializer_class = Step2BusinessSerializer
-
-    def get_object(self):
-        return CreatorProfileService.get_or_create_profile(self.request.user)
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', True)
-        instance = self.get_object()
-
-        # Check if step 1 is completed
-        if not instance.step_1_completed:
-            return Response({
-                'error': 'Complete o passo 1 antes de prosseguir para o passo 2.'
-            }, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = self.get_serializer(
             instance, data=request.data, partial=partial)
@@ -121,8 +69,6 @@ class Step2BusinessView(generics.RetrieveUpdateAPIView):
             user=request.user,
             action='profile_updated',
             status='success',
-            resource_type='CreatorProfile',
-            resource_id=updated_profile.id,
             details={
                 'step': 2,
                 'step_completed': updated_profile.step_2_completed,
@@ -139,10 +85,10 @@ class Step2BusinessView(generics.RetrieveUpdateAPIView):
         })
 
 
-class Step3BrandingView(generics.RetrieveUpdateAPIView):
-    """Handle Step 3: Branding information (logo, voice_tone, colors)"""
+class Step2BrandingView(generics.RetrieveUpdateAPIView):
+    """Handle Step 2: Branding information (logo, voice_tone, colors)"""
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = Step3BrandingSerializer
+    serializer_class = Step2BrandingSerializer
 
     def get_object(self):
         return CreatorProfileService.get_or_create_profile(self.request.user)
@@ -151,10 +97,10 @@ class Step3BrandingView(generics.RetrieveUpdateAPIView):
         partial = kwargs.pop('partial', True)
         instance = self.get_object()
 
-        # Check if step 2 is completed
-        if not instance.step_2_completed:
+        # Check if step 1 is completed
+        if not instance.step_1_completed:
             return Response({
-                'error': 'Complete o passo 2 antes de prosseguir para o passo 3.'
+                'error': 'Complete o passo 1 antes de prosseguir para o passo 2.'
             }, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = self.get_serializer(
@@ -175,8 +121,6 @@ class Step3BrandingView(generics.RetrieveUpdateAPIView):
             user=request.user,
             action=action,
             status='success',
-            resource_type='CreatorProfile',
-            resource_id=updated_profile.id,
             details={
                 'step': 3,
                 'step_completed': updated_profile.step_3_completed,
@@ -218,8 +162,6 @@ class CreatorProfileView(generics.RetrieveUpdateAPIView):
             user=request.user,
             action='profile_updated',
             status='success',
-            resource_type='CreatorProfile',
-            resource_id=updated_profile.id,
             details={
                 'changes': list(serializer.validated_data.keys()),
                 'onboarding_completed': updated_profile.onboarding_completed
@@ -246,7 +188,6 @@ class ResetCreatorProfileStatusView(generics.GenericAPIView):
                     user=request.user,
                     action='profile_deleted',
                     status='success',
-                    resource_type='CreatorProfile',
                     details={'action': 'reset_profile'}
                 )
 
@@ -280,7 +221,6 @@ class CompleteCreatorProfileStatusView(generics.GenericAPIView):
                     user=request.user,
                     action='profile_created',
                     status='success',
-                    resource_type='CreatorProfile',
                     details={'action': 'complete_onboarding'}
                 )
 
@@ -299,44 +239,6 @@ class CompleteCreatorProfileStatusView(generics.GenericAPIView):
                 'reset': False,
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class UserBehaviorView(generics.RetrieveUpdateAPIView):
-    """Manage user behavioral data for personalization."""
-    permission_classes = [permissions.IsAuthenticated]
-    serializer_class = UserBehaviorSerializer
-
-    def get_object(self):
-        behavior, created = UserBehavior.objects.get_or_create(
-            user=self.request.user)
-        return behavior
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', True)
-        instance = self.get_object()
-        serializer = self.get_serializer(
-            instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-
-        serializer.save()
-
-        # Log behavior update
-        AuditService.log_system_operation(
-            user=request.user,
-            action='system_operation',
-            status='success',
-            resource_type='UserBehavior',
-            resource_id=instance.id,
-            details={
-                'behavior_updated': True,
-                'changes': list(serializer.validated_data.keys())
-            }
-        )
-
-        return Response({
-            'message': 'Dados comportamentais atualizados!',
-            'behavior': serializer.data
-        })
 
 
 @api_view(['POST'])
@@ -404,7 +306,25 @@ def test_structure(request):
             "/api/v1/creator-profile/",
             "/api/v1/creator-profile/onboarding/step1/",
             "/api/v1/creator-profile/onboarding/step2/",
-            "/api/v1/creator-profile/onboarding/step3/",
             "/api/v1/creator-profile/suggestions/"
         ]
     })
+
+
+class VisualStylePreferenceView(generics.GenericAPIView):
+    """View to handle Visual Style Preferences."""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = VisualStylePreferenceSerializer
+
+    def get(self, request):
+        """Retrieve all visual style preferences."""
+        preferences = VisualStylePreference.objects.all()
+        serializer = self.get_serializer(preferences, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        """Create a new visual style preference."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)

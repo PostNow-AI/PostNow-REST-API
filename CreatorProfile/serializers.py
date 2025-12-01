@@ -1,7 +1,9 @@
+import re
+
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import CreatorProfile, UserBehavior
+from .models import CreatorProfile, VisualStylePreference
 
 
 class UserBasicSerializer(serializers.ModelSerializer):
@@ -15,136 +17,169 @@ class UserBasicSerializer(serializers.ModelSerializer):
 
 # === STEP-BASED SERIALIZERS FOR ONBOARDING ===
 
-class Step1PersonalSerializer(serializers.ModelSerializer):
-    """Step 1: Personal information - professional_name, profession, instagram_handle, whatsapp_number"""
 
-    class Meta:
-        model = CreatorProfile
-        fields = [
-            'professional_name',
-            'profession',
-            'instagram_handle',
-            'whatsapp_number'
-        ]
-
-    def validate_professional_name(self, value):
-        """Validate professional name is required and has minimum length."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Nome profissional é obrigatório e deve ter pelo menos 2 caracteres."
-            )
-        return value.strip()
-
-    def validate_profession(self, value):
-        """Validate profession is required and has minimum length."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Profissão é obrigatória e deve ter pelo menos 2 caracteres."
-            )
-        return value.strip()
-
-    def validate_whatsapp_number(self, value):
-        """Validate WhatsApp number is required."""
-        if not value or len(value.strip()) < 10:
-            raise serializers.ValidationError(
-                "Número do WhatsApp é obrigatório e deve ter pelo menos 10 dígitos."
-            )
-        return value.strip()
-
-    def validate_instagram_handle(self, value):
-        """Clean instagram handle by removing @ if present."""
-        if value:
-            value = value.strip()
-            if value.startswith('@'):
-                value = value[1:]
-        return value if value else None
-
-
-class Step2BusinessSerializer(serializers.ModelSerializer):
-    """Step 2: Business information - business_name, specialization, business_instagram_handle, business_website, business_city, business_description, target demographics"""
+class Step1BusinessSerializer(serializers.ModelSerializer):
+    """Step 1: Business information - business_name, specialization, business_instagram_handle, business_website, business_city, business_description, target demographics"""
 
     class Meta:
         model = CreatorProfile
         fields = [
             'business_name',
-            'specialization',
-            'business_instagram_handle',
+            'business_phone',
             'business_website',
-            'business_city',
+            'business_instagram_handle',
+            'specialization',
             'business_description',
-            'target_gender',
-            'target_age_range',
+            'business_purpose',
+            'brand_personality',
+            'products_services',
+            'business_location',
+            'target_audience',
             'target_interests',
-            'target_location'
+            'main_competitors',
+            'reference_profiles'
         ]
 
     def validate_business_name(self, value):
-        """Validate business name is required."""
+        """Validate business name is required and has proper length."""
         if not value or len(value.strip()) < 2:
             raise serializers.ValidationError(
                 "Nome do negócio é obrigatório e deve ter pelo menos 2 caracteres."
             )
-        return value.strip()
-
-    def validate_specialization(self, value):
-        """Validate specialization is required."""
-        if not value or len(value.strip()) < 2:
+        if len(value.strip()) > 200:
             raise serializers.ValidationError(
-                "Especialização é obrigatória e deve ter pelo menos 2 caracteres."
+                "Nome do negócio não pode ter mais de 200 caracteres."
             )
         return value.strip()
 
-    def validate_business_city(self, value):
-        """Validate business city is required."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Cidade do negócio é obrigatória."
-            )
-        return value.strip()
+    def validate_business_phone(self, value):
+        """Validate business phone format."""
+        if value:
+            # Remove common separators
+            cleaned = ''.join(filter(str.isdigit, value))
+            if len(cleaned) < 10 or len(cleaned) > 15:
+                raise serializers.ValidationError(
+                    "Número de telefone deve ter entre 10 e 15 dígitos."
+                )
+        return value.strip() if value else value
 
-    def validate_business_description(self, value):
-        """Validate business description is required."""
-        if not value or len(value.strip()) < 10:
+    def validate_business_website(self, value):
+        """Validate website URL format."""
+        if value and not value.startswith(('http://', 'https://')):
             raise serializers.ValidationError(
-                "Descrição do negócio é obrigatória e deve ter pelo menos 10 caracteres."
+                "Website deve começar com http:// ou https://"
             )
-        return value.strip()
-
-    def validate_target_gender(self, value):
-        """Validate target gender is required."""
-        if not value or len(value.strip()) < 1:
-            raise serializers.ValidationError(
-                "Gênero do público-alvo é obrigatório."
-            )
-        return value.strip()
-
-    def validate_target_age_range(self, value):
-        """Validate target age range is required."""
-        if not value or len(value.strip()) < 1:
-            raise serializers.ValidationError(
-                "Faixa etária do público-alvo é obrigatória."
-            )
-        return value.strip()
-
-    def validate_target_location(self, value):
-        """Validate target location is required."""
-        if not value or len(value.strip()) < 2:
-            raise serializers.ValidationError(
-                "Localização do público-alvo é obrigatória."
-            )
-        return value.strip()
+        return value
 
     def validate_business_instagram_handle(self, value):
-        """Clean business instagram handle by removing @ if present."""
+        """Validate Instagram handle format."""
         if value:
-            value = value.strip()
-            if value.startswith('@'):
-                value = value[1:]
-        return value if value else None
+            # Remove @ if present
+            cleaned = value.strip().lstrip('@')
+            if not cleaned.replace('_', '').replace('.', '').isalnum():
+                raise serializers.ValidationError(
+                    "Handle do Instagram deve conter apenas letras, números, pontos e underscores."
+                )
+            if len(cleaned) > 30:
+                raise serializers.ValidationError(
+                    "Handle do Instagram não pode ter mais de 30 caracteres."
+                )
+            return cleaned
+        return value
+
+    def validate_specialization(self, value):
+        """Validate specialization field."""
+        if value and len(value.strip()) > 200:
+            raise serializers.ValidationError(
+                "Nicho de atuação não pode ter mais de 200 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_business_description(self, value):
+        """Validate business description."""
+        if value:
+            if len(value.strip()) < 10:
+                raise serializers.ValidationError(
+                    "Descrição do negócio deve ter pelo menos 10 caracteres."
+                )
+            if len(value.strip()) > 2000:
+                raise serializers.ValidationError(
+                    "Descrição do negócio não pode ter mais de 2000 caracteres."
+                )
+        return value.strip() if value else value
+
+    def validate_business_purpose(self, value):
+        """Validate business purpose."""
+        if value and len(value.strip()) > 1000:
+            raise serializers.ValidationError(
+                "Propósito do negócio não pode ter mais de 1000 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_brand_personality(self, value):
+        """Validate brand personality."""
+        if value and len(value.strip()) > 1000:
+            raise serializers.ValidationError(
+                "Personalidade da marca não pode ter mais de 1000 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_products_services(self, value):
+        """Validate products/services description."""
+        if value and len(value.strip()) > 2000:
+            raise serializers.ValidationError(
+                "Descrição de produtos/serviços não pode ter mais de 2000 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_business_location(self, value):
+        """Validate business location."""
+        if value and len(value.strip()) > 100:
+            raise serializers.ValidationError(
+                "Localização do negócio não pode ter mais de 100 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_target_audience(self, value):
+        """Validate target audience description."""
+        if value and len(value.strip()) > 50:
+            raise serializers.ValidationError(
+                "Descrição do público-alvo não pode ter mais de 50 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_target_interests(self, value):
+        """Validate target interests."""
+        if value and len(value.strip()) > 1000:
+            raise serializers.ValidationError(
+                "Interesses do público-alvo não pode ter mais de 1000 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_main_competitors(self, value):
+        """Validate main competitors."""
+        if value and len(value.strip()) > 1000:
+            raise serializers.ValidationError(
+                "Lista de principais concorrentes não pode ter mais de 1000 caracteres."
+            )
+        return value.strip() if value else value
+
+    def validate_reference_profiles(self, value):
+        """Validate reference profiles."""
+        if value and len(value.strip()) > 1000:
+            raise serializers.ValidationError(
+                "Perfis de referência não pode ter mais de 1000 caracteres."
+            )
+        return value.strip() if value else value
 
 
-class Step3BrandingSerializer(serializers.ModelSerializer):
+class Step2BrandingSerializer(serializers.ModelSerializer):
     """Step 3: Branding information - logo, voice_tone, colors (optional, default to random)"""
+
+    visual_style_id = serializers.IntegerField(
+        required=False,
+        allow_null=True
+    )
 
     class Meta:
         model = CreatorProfile
@@ -155,7 +190,8 @@ class Step3BrandingSerializer(serializers.ModelSerializer):
             'color_2',
             'color_3',
             'color_4',
-            'color_5'
+            'color_5',
+            'visual_style_id'
         ]
 
     def validate_voice_tone(self, value):
@@ -166,44 +202,50 @@ class Step3BrandingSerializer(serializers.ModelSerializer):
             )
         return value.strip()
 
-    def validate_color_1(self, value):
-        """Validate color format if provided."""
-        if value and not value.startswith('#'):
+    def _validate_hex_color(self, value, field_name):
+        """Helper method to validate hex color format."""
+        if not value:
+            return value
+
+        # Check if it's a valid hex color (with or without #)
+        if not value.startswith('#'):
+            value = f"#{value}"
+
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', value):
             raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
+                f"{field_name} deve estar no formato hexadecimal válido (ex: #FFFFFF)."
             )
-        return value
+        return value.upper()
+
+    def validate_color_1(self, value):
+        """Validate color 1 format if provided."""
+        return self._validate_hex_color(value, "Cor 1")
 
     def validate_color_2(self, value):
-        """Validate color format if provided."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
-            )
-        return value
+        """Validate color 2 format if provided."""
+        return self._validate_hex_color(value, "Cor 2")
 
     def validate_color_3(self, value):
-        """Validate color format if provided."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
-            )
-        return value
+        """Validate color 3 format if provided."""
+        return self._validate_hex_color(value, "Cor 3")
 
     def validate_color_4(self, value):
-        """Validate color format if provided."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
-            )
-        return value
+        """Validate color 4 format if provided."""
+        return self._validate_hex_color(value, "Cor 4")
 
     def validate_color_5(self, value):
-        """Validate color format if provided."""
-        if value and not value.startswith('#'):
-            raise serializers.ValidationError(
-                "Cor deve estar no formato hexadecimal (ex: #FFFFFF)."
-            )
+        """Validate color 5 format if provided."""
+        return self._validate_hex_color(value, "Cor 5")
+
+    def validate_visual_style_id(self, value):
+        """Validate visual style id exists if provided."""
+        if value:
+            try:
+                VisualStylePreference.objects.get(id=value)
+            except VisualStylePreference.DoesNotExist:
+                raise serializers.ValidationError(
+                    "Estilo visual selecionado não existe."
+                )
         return value
 
 
@@ -213,6 +255,10 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
     """Complete Creator Profile serializer with all fields and step status."""
 
     user = UserBasicSerializer(read_only=True)
+    visual_style_id = serializers.SerializerMethodField()
+
+    def get_visual_style_id(self, obj):
+        return obj.visual_style_id.id if obj.visual_style_id else None
 
     class Meta:
         model = CreatorProfile
@@ -220,22 +266,23 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
             # User relationship
             'user',
 
-            # Step 1: Personal information
-            'professional_name',
-            'profession',
-            'instagram_handle',
-            'whatsapp_number',
-
-            # Step 2: Business information
+            # Step 1: Business information
             'business_name',
+            'business_phone',
+            'business_website',
+            'business_instagram_handle',
             'specialization',
             'business_description',
-            'target_gender',
-            'target_age_range',
+            'business_purpose',
+            'brand_personality',
+            'products_services',
+            'business_location',
+            'target_audience',
             'target_interests',
-            'target_location',
+            'main_competitors',
+            'reference_profiles',
 
-            # Step 3: Branding
+            # Step 2: Branding
             'logo',
             'voice_tone',
             'color_1',
@@ -243,12 +290,45 @@ class CreatorProfileSerializer(serializers.ModelSerializer):
             'color_3',
             'color_4',
             'color_5',
+            'visual_style_id',
 
+            # Status fields
+            'step_1_completed',
+            'step_2_completed',
+            'onboarding_completed',
 
             # Metadata
             'created_at',
             'updated_at',
+            'onboarding_completed_at',
         ]
+        read_only_fields = [
+            'created_at',
+            'updated_at',
+            'onboarding_completed_at',
+            'step_1_completed',
+            'step_2_completed',
+            'onboarding_completed'
+        ]
+
+    def validate(self, attrs):
+        """Cross-field validation."""
+        # Validate that if Instagram handle is provided, it doesn't conflict with business name
+        instagram_handle = attrs.get('business_instagram_handle')
+        business_name = attrs.get('business_name')
+
+        if instagram_handle and business_name:
+            # Clean both for comparison
+            clean_handle = instagram_handle.lower().replace('_', '').replace('.', '')
+            clean_business = business_name.lower().replace(
+                ' ', '').replace('_', '').replace('.', '')
+
+            # Warn if they're too similar (might be confusing)
+            if clean_handle == clean_business:
+                # This is actually good - they match
+                pass
+
+        return attrs
 
 
 # === ONBOARDING STATUS SERIALIZER ===
@@ -259,77 +339,13 @@ class OnboardingStatusSerializer(serializers.Serializer):
     current_step = serializers.IntegerField()
     step_1_completed = serializers.BooleanField()
     step_2_completed = serializers.BooleanField()
-    step_3_completed = serializers.BooleanField()
     onboarding_completed = serializers.BooleanField()
     profile_exists = serializers.BooleanField()
 
 
-# === USER BEHAVIOR SERIALIZER ===
-
-class UserBehaviorSerializer(serializers.ModelSerializer):
-    """
-    Serializer for user behavioral data tracking.
-    Used for personalization and analytics.
-    """
-
-    user = UserBasicSerializer(read_only=True)
+class VisualStylePreferenceSerializer(serializers.ModelSerializer):
+    """Serializer for Visual Style Preference."""
 
     class Meta:
-        model = UserBehavior
-        fields = [
-            'user',
-            'ideas_selected',
-            'ideas_rejected',
-            'avg_time_per_idea',
-            'preferred_topics',
-            'preferred_complexity',
-            'preferred_length',
-            'peak_hours',
-            'usage_frequency',
-            'avg_session_duration',
-            'total_interactions',
-            'last_activity',
-            'created_at',
-            'updated_at',
-        ]
-        read_only_fields = ['created_at', 'updated_at', 'last_activity']
-
-    def validate_preferred_complexity(self, value):
-        """Validate complexity is within valid range."""
-        if value < 1 or value > 10:
-            raise serializers.ValidationError(
-                "Complexidade preferida deve estar entre 1 e 10."
-            )
-        return value
-
-    def validate_ideas_selected(self, value):
-        """Validate ideas selected is a list."""
-        if not isinstance(value, list):
-            raise serializers.ValidationError(
-                "Ideias selecionadas deve ser uma lista."
-            )
-        return value
-
-    def validate_ideas_rejected(self, value):
-        """Validate ideas rejected is a list."""
-        if not isinstance(value, list):
-            raise serializers.ValidationError(
-                "Ideias rejeitadas deve ser uma lista."
-            )
-        return value
-
-    def validate_preferred_topics(self, value):
-        """Validate preferred topics is a list."""
-        if not isinstance(value, list):
-            raise serializers.ValidationError(
-                "Tópicos preferidos deve ser uma lista."
-            )
-        return value
-
-    def validate_peak_hours(self, value):
-        """Validate peak hours is a list."""
-        if not isinstance(value, list):
-            raise serializers.ValidationError(
-                "Horários de pico deve ser uma lista."
-            )
-        return value
+        model = VisualStylePreference
+        fields = '__all__'

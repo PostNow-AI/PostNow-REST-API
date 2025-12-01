@@ -1,9 +1,15 @@
 from typing import Dict
 
+from CreatorProfile.models import CreatorProfile
+
 
 class PromptService:
     def __init__(self):
         self.user = None
+
+    def set_user(self, user):
+        """Set the user for this PromptService instance."""
+        self.user = user
 
     def build_content_prompt(self, post_data: Dict) -> str:
         """Build the prompt for content generation based on post type."""
@@ -26,66 +32,37 @@ class PromptService:
         return ""
 
     def get_creator_profile_data(self) -> dict:
-        """Get creator profile data for prompt personalization."""
+        """Fetch and return the creator profile data for the current user."""
+        if not self.user:
+            raise ValueError(
+                "User is not set for PromptService. Call set_user(user) first or pass user parameter when creating prompts.")
+
+        profile = CreatorProfile.objects.filter(user=self.user).first()
+        if not profile:
+            raise CreatorProfile.DoesNotExist(
+                f"CreatorProfile not found for user {self.user.id if hasattr(self.user, 'id') else 'unknown'}")
         profile_data = {
-            'professional_name': 'Não informado',
-            'profession': 'Não informado',
-            'whatsapp_number': 'Não informado',
-            'business_name': 'Não informado',
-            'specialization': 'Não informado',
-            'business_description': 'Não informado',
-            'target_gender': 'Não informado',
-            'target_age_range': 'Não informado',
-            'target_interests': 'Não informado',
-            'target_location': 'Não informado',
-            'logo': 'Não fornecido',
-            'color_palette': 'Não definida',
-            'voice_tone': 'Profissional'
+            "business_name": profile.business_name,
+            "business_phone": profile.business_phone,
+            "business_website": profile.business_website,
+            "business_instagram_handle": profile.business_instagram_handle,
+            "specialization": profile.specialization,
+            "business_description": profile.business_description,
+            "business_purpose": profile.business_purpose,
+            "brand_personality": profile.brand_personality,
+            "products_services": profile.products_services,
+            "business_location": profile.business_location,
+            "target_audience": profile.target_audience,
+            "target_interests": profile.target_interests,
+            "main_competitors": profile.main_competitors,
+            "reference_profiles": profile.reference_profiles,
+            "voice_tone": profile.voice_tone,
+            "visual_style": {"name": profile.visual_style_id.name, "description": profile.visual_style_id.description} if profile.visual_style_id else None,
+            'color_palette': [color for color in [
+                profile.color_1, profile.color_2,
+                profile.color_3, profile.color_4, profile.color_5
+            ] if color],
         }
-
-        if hasattr(self, 'user') and self.user:
-            from CreatorProfile.models import CreatorProfile
-            profile = CreatorProfile.objects.filter(user=self.user).first()
-            if profile:
-                if profile.professional_name:
-                    profile_data['professional_name'] = profile.professional_name
-                if profile.profession:
-                    profile_data['profession'] = profile.profession
-                if profile.whatsapp_number:
-                    profile_data['whatsapp_number'] = profile.whatsapp_number
-                if profile.business_name:
-                    profile_data['business_name'] = profile.business_name
-                if profile.specialization:
-                    profile_data['specialization'] = profile.specialization
-                if profile.business_description:
-                    profile_data['business_description'] = profile.business_description
-                if profile.target_gender:
-                    if profile.target_gender == 'all':
-                        profile_data['target_gender'] = 'Todos'
-                    else:
-                        profile_data['target_gender'] = profile.target_gender
-                if profile.target_age_range:
-                    if profile.target_age_range == 'all':
-                        profile_data['target_age_range'] = 'Todos'
-                    else:
-                        profile_data['target_age_range'] = profile.target_age_range
-                if profile.target_interests:
-                    profile_data['target_interests'] = profile.target_interests
-                if profile.target_location:
-                    profile_data['target_location'] = profile.target_location
-                if profile.logo:
-                    profile_data['logo'] = 'Logo disponível'
-                if profile.voice_tone:
-                    profile_data['voice_tone'] = profile.voice_tone
-
-                # Color palette
-                colors = [profile.color_1, profile.color_2,
-                          profile.color_3, profile.color_4, profile.color_5]
-                valid_colors = [
-                    color for color in colors if color and color.strip()]
-                if valid_colors:
-                    profile_data['color_palette'] = ', '.join(valid_colors)
-
         return profile_data
 
     def _build_feed_post_prompt(self, post_data: Dict) -> str:
@@ -106,11 +83,6 @@ O texto deve ser fluido, natural, relevante e alinhado às tendências atuais do
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
-Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
-
-Profissão: {creator_profile_data.get('profession', 'Não informado')}
-
-Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
 
 Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
 
@@ -118,15 +90,7 @@ Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
 
 Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
 
-Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
-
-Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
-
 Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
-
-Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
-
-Logo: {creator_profile_data.get('logo', 'Não fornecido')}
 
 Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
 
@@ -170,7 +134,7 @@ Respeite o tom de voz ({creator_profile_data.get('voice_tone', 'Profissional')})
 
 Use expressões e referências em alta no tema e no nicho.
 
-Adapte a linguagem ao público-alvo ({creator_profile_data.get('target_gender', 'Não informado')}, {creator_profile_data.get('target_age_range', 'Não informado')}, {creator_profile_data.get('target_location', 'Não informado')}).
+Adapte a linguagem ao público-alvo ({creator_profile_data.get('target_audience', 'Não informado')}) e localização ({creator_profile_data.get('business_location', 'Não informado')}).
 
 Evite sensacionalismo e exageros.
 
@@ -233,27 +197,19 @@ O roteiro deve ser atual, estratégico, dinâmico e conectado às tendências do
 
  DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
-Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
-
-Profissão: {creator_profile_data.get('profession', 'Não informado')}
-
-Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
-
 Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
+
+Telefone do negócio: {creator_profile_data.get('business_phone', 'Não informado')}
 
 Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
 
 Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
 
-Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
-
-Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
+Público-alvo: {creator_profile_data.get('target_audience', 'Não informado')}
 
 Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
 
-Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
-
-Logo: {creator_profile_data.get('logo', 'Não fornecido')}
+Localização do negócio: {creator_profile_data.get('business_location', 'Não informado')}
 
 Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
 
@@ -373,27 +329,19 @@ Cada ideia deve ser prática, atual e coerente com o tema principal da campanha,
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
-Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
-
-Profissão: {creator_profile_data.get('profession', 'Não informado')}
-
-Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
-
 Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
+
+Telefone do negócio: {creator_profile_data.get('business_phone', 'Não informado')}
 
 Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
 
 Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
 
-Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
-
-Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
+Público-alvo: {creator_profile_data.get('target_audience', 'Não informado')}
 
 Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
 
-Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
-
-Logo: {creator_profile_data.get('logo', 'Não fornecido')}
+Localização do negócio: {creator_profile_data.get('business_location', 'Não informado')}
 
 Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
 
@@ -423,7 +371,7 @@ O conteúdo deve ser coerente com o post de Feed e/ou Reels do mesmo dia.
 
 Estilo e Tom:
 
-Adapte as ideias ao tom de voz da marca ({creator_profile_data.get('voice_tone', 'Profissional')}) e ao perfil do público ({creator_profile_data.get('target_gender', 'Não informado')}, {creator_profile_data.get('target_age_range', 'Não informado')}).
+Adapte as ideias ao tom de voz da marca ({creator_profile_data.get('voice_tone', 'Profissional')}) e ao perfil do público ({creator_profile_data.get('target_audience', 'Não informado')}).
 
 As ideias devem parecer naturais e autênticas, como se o próprio cliente estivesse falando.
 
@@ -518,27 +466,19 @@ Essa imagem será usada como ilustração principal do post e deve parecer ter s
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
-Nome profissional: {creator_profile_data.get('professional_name', 'Não informado')}
-
-Profissão: {creator_profile_data.get('profession', 'Não informado')}
-
-Número de celular: {creator_profile_data.get('whatsapp_number', 'Não informado')}
-
 Nome do negócio: {creator_profile_data.get('business_name', 'Não informado')}
+
+Telefone do negócio: {creator_profile_data.get('business_phone', 'Não informado')}
 
 Setor/Nicho: {creator_profile_data.get('specialization', 'Não informado')}
 
 Descrição do negócio: {creator_profile_data.get('business_description', 'Não informado')}
 
-Gênero do público-alvo: {creator_profile_data.get('target_gender', 'Não informado')}
-
-Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', 'Não informado')}
+Público-alvo: {creator_profile_data.get('target_audience', 'Não informado')}
 
 Interesses do público-alvo: {creator_profile_data.get('target_interests', 'Não informado')}
 
-Localização do público-alvo: {creator_profile_data.get('target_location', 'Não informado')}
-
-Logo: {creator_profile_data.get('logo', 'Não fornecido')}
+Localização do negócio: {creator_profile_data.get('business_location', 'Não informado')}
 
 Paleta de cores: {creator_profile_data.get('color_palette', 'Não definida')}
 
@@ -971,27 +911,19 @@ O resultado deve ser obrigatoriamente retornado no formato JSON descrito no fina
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 
-Nome profissional: {creator_profile_data.get('professional_name', '')}
-
-Profissão: {creator_profile_data.get('profession', '')}
-
-Número de celular: {creator_profile_data.get('whatsapp_number', '')}
-
 Nome do negócio: {creator_profile_data.get('business_name', '')}
+
+Telefone do negócio: {creator_profile_data.get('business_phone', '')}
 
 Setor/Nicho: {creator_profile_data.get('specialization', '')}
 
 Descrição do negócio: {creator_profile_data.get('business_description', '')}
 
-Gênero do público-alvo: {creator_profile_data.get('target_gender', '')}
-
-Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', '')}
+Público-alvo: {creator_profile_data.get('target_audience', '')}
 
 Interesses do público-alvo: {creator_profile_data.get('target_interests', '')}
 
-Localização do público-alvo: {creator_profile_data.get('target_location', '')}
-
-Logo: {creator_profile_data.get('logo', '')}
+Localização do negócio: {creator_profile_data.get('business_location', '')}
 
 Paleta de cores: {creator_profile_data.get('color_palette', '')}
 
@@ -1027,7 +959,7 @@ Parágrafos curtos e bem espaçados.
 
 Média de 5 emojis por texto, usados de forma natural e coerente.
 
-Linguagem ajustada ao tom de voz ({creator_profile_data.get('voice_tone', '')}) e público-alvo ({creator_profile_data.get('target_gender', '')}, {creator_profile_data.get('target_age_range', '')}).
+Linguagem ajustada ao tom de voz ({creator_profile_data.get('voice_tone', '')}) e público-alvo ({creator_profile_data.get('target_audience', '')}).
 
 Use referências, expressões e temas em alta nas trends do nicho.
 
@@ -1035,7 +967,7 @@ Evite sensacionalismo e exageros.
 
 Personalização:
 
-Adapte a linguagem e exemplos conforme o nicho e localização do cliente ({creator_profile_data.get('specialization', '')}, {creator_profile_data.get('target_location', '')}).
+Adapte a linguagem e exemplos conforme o nicho e localização do cliente ({creator_profile_data.get('specialization', '')}, {creator_profile_data.get('business_location', '')}).
 
 Faça alusões sutis ao negócio ({creator_profile_data.get('business_name', '')}) quando couber.
 
@@ -1146,25 +1078,19 @@ Função de cada campo:
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE (do onboarding):
 
-Nome profissional: {creator_profile_data.get('professional_name', '')}
-
-Profissão: {creator_profile_data.get('profession', '')}
-
-Número de celular: {creator_profile_data.get('whatsapp_number', '')}
-
 Nome do negócio: {creator_profile_data.get('business_name', '')}
+
+Telefone do negócio: {creator_profile_data.get('business_phone', '')}
 
 Setor/Nicho: {creator_profile_data.get('specialization', '')}
 
 Descrição do negócio: {creator_profile_data.get('business_description', '')}
 
-Gênero do público-alvo: {creator_profile_data.get('target_gender', '')}
-
-Faixa etária do público-alvo: {creator_profile_data.get('target_age_range', '')}
+Público-alvo: {creator_profile_data.get('target_audience', '')}
 
 Interesses do público-alvo: {creator_profile_data.get('target_interests', '')}
 
-Localização do público-alvo: {creator_profile_data.get('target_location', '')}
+Localização do negócio: {creator_profile_data.get('business_location', '')}
 
 Paleta de cores: {creator_profile_data.get('color_palette', '')}
 
@@ -1197,7 +1123,7 @@ Estilo e tom:
 - Texto fluido e natural, pronto para o Feed;
 - Média de 5 emojis, aplicados com naturalidade;
 - Parágrafos curtos e escaneáveis;
-- Linguagem adaptada ao público ({creator_profile_data.get('target_gender', '')}, {creator_profile_data.get('target_age_range', '')});
+- Linguagem adaptada ao público ({creator_profile_data.get('target_audience', '')});
 - Sempre alinhado ao tom de voz ({creator_profile_data.get('voice_tone', '')});
 - Títulos, subtítulos e CTAs devem variar diariamente, seguindo o JSON atual.
 
@@ -1220,7 +1146,7 @@ Descrição para gerar a imagem (sem texto):
 - Sem texto, número, fonte, logotipo, borda, moldura ou watermark;
 - Realista e de alta qualidade, com aparência de design premiado;
 - Coerente com a paleta de cores ({creator_profile_data.get('color_palette', '')});
-- Representando o público e localização ({creator_profile_data.get('target_gender', '')}, {creator_profile_data.get('target_age_range', '')}, {creator_profile_data.get('target_location', '')});
+- Representando o público ({creator_profile_data.get('target_audience', '')}) e localização do negócio ({creator_profile_data.get('business_location', '')});
 - Inspirada em tendências visuais do momento;
 - Estilo profissional, harmônico e natural, como se fosse criada por um designer de alto nível.
 

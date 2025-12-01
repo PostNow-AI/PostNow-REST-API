@@ -54,7 +54,6 @@ class UserSubscriptionCancelView(APIView):
                 action='subscription_cancelled',
                 status='failure',
                 error_message='No active subscription found',
-                resource_type='UserSubscription',
                 details={
                     'attempted_action': 'cancellation',
                     'reason': 'no_active_subscription'
@@ -77,8 +76,6 @@ class UserSubscriptionCancelView(APIView):
                     user=user,
                     action='subscription_cancelled',
                     status='success',
-                    resource_type='UserSubscription',
-                    resource_id=sub.id,
                     details={
                         'plan_name': sub.plan.name,
                         'plan_interval': sub.plan.interval,
@@ -109,8 +106,6 @@ class UserSubscriptionCancelView(APIView):
                             user=user,
                             action='subscription_cancelled',
                             status='success',
-                            resource_type='UserSubscription',
-                            resource_id=sub.id,
                             details={
                                 'plan_name': sub.plan.name,
                                 'plan_interval': sub.plan.interval,
@@ -137,8 +132,6 @@ class UserSubscriptionCancelView(APIView):
                             user=user,
                             action='subscription_cancelled',
                             status='success',
-                            resource_type='UserSubscription',
-                            resource_id=sub.id,
                             details={
                                 'plan_name': sub.plan.name,
                                 'plan_interval': sub.plan.interval,
@@ -167,8 +160,6 @@ class UserSubscriptionCancelView(APIView):
                             user=user,
                             action='subscription_cancelled',
                             status='success',
-                            resource_type='UserSubscription',
-                            resource_id=sub.id,
                             details={
                                 'plan_name': sub.plan.name,
                                 'plan_interval': sub.plan.interval,
@@ -197,8 +188,6 @@ class UserSubscriptionCancelView(APIView):
                     user=user,
                     action='subscription_cancelled',
                     status='success',
-                    resource_type='UserSubscription',
-                    resource_id=sub.id,
                     details={
                         'plan_name': sub.plan.name,
                         'plan_interval': sub.plan.interval,
@@ -218,8 +207,6 @@ class UserSubscriptionCancelView(APIView):
                 action='subscription_cancelled',
                 status='failure',
                 error_message=str(e),
-                resource_type='UserSubscription',
-                resource_id=sub.id if sub else None,
                 details={
                     'stripe_error': True,
                     'error_type': type(e).__name__,
@@ -240,8 +227,6 @@ class UserSubscriptionCancelView(APIView):
                 action='subscription_cancelled',
                 status='failure',
                 error_message=str(e),
-                resource_type='UserSubscription',
-                resource_id=sub.id if sub else None,
                 details={
                     'error_type': type(e).__name__,
                     'plan_name': sub.plan.name if sub else None,
@@ -478,7 +463,6 @@ class CreateStripeCheckoutSessionView(APIView):
                 action='subscription_created',
                 status='failure',
                 error_message='Missing plan_id parameter',
-                resource_type='StripeCheckoutSession',
                 details={
                     'error_type': 'missing_plan_id',
                     'request_data': request.data
@@ -498,8 +482,6 @@ class CreateStripeCheckoutSessionView(APIView):
                 action='subscription_created',
                 status='failure',
                 error_message='Plan not found or inactive',
-                resource_type='SubscriptionPlan',
-                resource_id=plan_id,
                 details={
                     'error_type': 'plan_not_found',
                     'requested_plan_id': plan_id
@@ -520,8 +502,6 @@ class CreateStripeCheckoutSessionView(APIView):
                 action='subscription_created',
                 status='failure',
                 error_message='Plan unavailable - no Stripe price ID',
-                resource_type='SubscriptionPlan',
-                resource_id=plan.id,
                 details={
                     'error_type': 'plan_unavailable',
                     'plan_name': plan.name,
@@ -544,8 +524,6 @@ class CreateStripeCheckoutSessionView(APIView):
                     user=user,
                     action='subscription_updated',
                     status='success',
-                    resource_type='UserSubscription',
-                    resource_id=existing_sub.id,
                     details={
                         'action': 'same_plan_requested',
                         'plan_name': existing_sub.plan.name
@@ -566,8 +544,6 @@ class CreateStripeCheckoutSessionView(APIView):
                     user=user,
                     action='subscription_updated',
                     status='failure',
-                    resource_type='UserSubscription',
-                    resource_id=existing_sub.id,
                     details={
                         'action': 'lifetime_upgrade_prevented',
                         'current_plan': existing_sub.plan.name,
@@ -653,8 +629,6 @@ class CreateStripeCheckoutSessionView(APIView):
                         user=user,
                         action='subscription_updated',
                         status='success',
-                        resource_type='UserSubscription',
-                        resource_id=existing_sub.id,
                         details={
                             'action': 'plan_upgraded',
                             'previous_plan': previous_plan.name,
@@ -679,8 +653,6 @@ class CreateStripeCheckoutSessionView(APIView):
                         action='subscription_updated',
                         status='failure',
                         error_message=str(e),
-                        resource_type='UserSubscription',
-                        resource_id=existing_sub.id,
                         details={
                             'error_type': 'stripe_upgrade_error',
                             'action': 'plan_upgraded',
@@ -701,8 +673,6 @@ class CreateStripeCheckoutSessionView(APIView):
                         action='subscription_updated',
                         status='failure',
                         error_message=str(e),
-                        resource_type='UserSubscription',
-                        resource_id=existing_sub.id,
                         details={
                             'error_type': 'upgrade_error',
                             'action': 'plan_upgraded',
@@ -732,8 +702,6 @@ class CreateStripeCheckoutSessionView(APIView):
                     action='subscription_created',
                     status='failure',
                     error_message='Test environment - real payments not available',
-                    resource_type='SubscriptionPlan',
-                    resource_id=plan.id,
                     details={
                         'error_type': 'test_environment',
                         'plan_name': plan.name,
@@ -800,7 +768,6 @@ class CreateStripeCheckoutSessionView(APIView):
                 user=user,
                 action='subscription_created',
                 status='success',
-                resource_type='StripeCheckoutSession',
                 details={
                     'plan_name': plan.name,
                     'plan_interval': plan.interval,
@@ -820,7 +787,6 @@ class CreateStripeCheckoutSessionView(APIView):
                 action='subscription_created',
                 status='failure',
                 error_message=str(e),
-                resource_type='StripeCheckoutSession',
                 details={
                     'error_type': 'stripe_error',
                     'plan_name': plan.name,
@@ -840,7 +806,6 @@ class CreateStripeCheckoutSessionView(APIView):
                 action='subscription_created',
                 status='failure',
                 error_message=str(e),
-                resource_type='StripeCheckoutSession',
                 details={
                     'error_type': 'unexpected_error',
                     'plan_name': plan.name,
@@ -907,12 +872,11 @@ class StripeCheckoutView(APIView):
         serializer = StripeCheckoutSerializer(data=request.data)
         if not serializer.is_valid():
             # Log validation error in credit checkout
-            AuditService.log_credit_operation(
+            AuditService.log_subscription_operation(
                 user=request.user,
                 action='credit_purchased',
                 status='failure',
                 error_message='Serializer validation failed',
-                resource_type='StripeCheckoutSession',
                 details={
                     'error_type': 'validation_error',
                     'validation_errors': serializer.errors
@@ -933,11 +897,10 @@ class StripeCheckoutView(APIView):
             )
 
             # Log credit purchase checkout creation
-            AuditService.log_credit_operation(
+            AuditService.log_subscription_operation(
                 user=request.user,
                 action='credit_purchased',
                 status='success',
-                resource_type='StripeCheckoutSession',
                 details={
                     'package_id': serializer.validated_data['package_id'],
                     'checkout_session_id': checkout_data.get('id'),
@@ -953,12 +916,11 @@ class StripeCheckoutView(APIView):
 
         except ValidationError as e:
             # Log ValidationError in credit checkout
-            AuditService.log_credit_operation(
+            AuditService.log_subscription_operation(
                 user=request.user,
                 action='credit_purchased',
                 status='failure',
                 error_message=str(e),
-                resource_type='StripeCheckoutSession',
                 details={
                     'error_type': 'validation_error',
                     'package_id': serializer.validated_data.get('package_id') if serializer.is_valid() else None
@@ -970,12 +932,11 @@ class StripeCheckoutView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             # Log general error in credit checkout
-            AuditService.log_credit_operation(
+            AuditService.log_subscription_operation(
                 user=request.user,
                 action='credit_purchased',
                 status='failure',
                 error_message=str(e),
-                resource_type='StripeCheckoutSession',
                 details={
                     'error_type': 'unexpected_error',
                     'package_id': serializer.validated_data.get('package_id') if serializer.is_valid() else None,
@@ -1278,11 +1239,10 @@ def deduct_credits_view(request):
 
         if success:
             # Log successful credit deduction
-            AuditService.log_credit_operation(
+            AuditService.log_subscription_operation(
                 user=request.user,
                 action='credit_used',
                 status='success',
-                resource_type='CreditTransaction',
                 details={
                     'ai_model': ai_model,
                     'credits_deducted': actual_cost,
@@ -1301,12 +1261,11 @@ def deduct_credits_view(request):
             }, status=status.HTTP_200_OK)
         else:
             # Log failed credit deduction (insufficient funds)
-            AuditService.log_credit_operation(
+            AuditService.log_subscription_operation(
                 user=request.user,
                 action='credit_used',
                 status='failure',
                 error_message='Insufficient credits',
-                resource_type='CreditTransaction',
                 details={
                     'ai_model': ai_model,
                     'required_credits': actual_cost,
