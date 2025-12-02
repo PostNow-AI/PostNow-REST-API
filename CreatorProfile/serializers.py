@@ -142,9 +142,9 @@ class Step1BusinessSerializer(serializers.ModelSerializer):
 
     def validate_target_audience(self, value):
         """Validate target audience description."""
-        if value and len(value.strip()) > 50:
+        if value and len(value.strip()) > 2000:
             raise serializers.ValidationError(
-                "Descrição do público-alvo não pode ter mais de 50 caracteres."
+                "Descrição do público-alvo não pode ter mais de 2000 caracteres."
             )
         return value.strip() if value else value
 
