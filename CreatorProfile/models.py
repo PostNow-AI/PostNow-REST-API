@@ -95,7 +95,7 @@ class CreatorProfile(models.Model):
 
     # Target Audience Fields
     target_audience = models.CharField(
-        max_length=2000,
+        max_length=500,
         default='',
         verbose_name="Público-Alvo",
         help_text="Descrição geral do seu público-alvo"
