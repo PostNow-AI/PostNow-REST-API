@@ -17,22 +17,34 @@ class RetryIdeasService:
         self.daily_ideas_service = DailyIdeasService()
 
     @sync_to_async
-    def _get_users_with_errors(self):
+    def _get_users_with_errors(self, offset: int, limit: int) -> list[User]:
         """Get all users who have daily generation errors."""
+        if limit is None:
+            return list(
+                User.objects.extra(
+                    where=["daily_generation_error IS NOT NULL"]
+                ).filter(
+                    usersubscription__status='active',
+                    is_active=True
+                ).distinct().values('id', 'email', 'username', 'first_name')[offset:]
+            )
+
         return list(
             User.objects.extra(
                 where=["daily_generation_error IS NOT NULL"]
             ).filter(
                 usersubscription__status='active',
                 is_active=True
-            ).distinct().values('id', 'email', 'username', 'first_name')
+            ).distinct().values('id', 'email', 'username', 'first_name')[offset:offset + limit]
         )
 
-    async def process_daily_ideas_for_failed_users(self) -> Dict[str, Any]:
+    async def process_daily_ideas_for_failed_users(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
         """Process daily ideas generation for a batch of users"""
         start_time = timezone.now()
+        offset = (batch_number - 1) * batch_size
+        limit = batch_size
 
-        eligible_users = await self._get_users_with_errors()
+        eligible_users = await self._get_users_with_errors(offset=offset, limit=limit)
         total = len(eligible_users)
 
         if total == 0:

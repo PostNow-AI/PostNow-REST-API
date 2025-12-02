@@ -17,21 +17,32 @@ class RetryClientContext:
         self.weekly_context_service = WeeklyContextService()
 
     @sync_to_async
-    def _get_eligible_users(self) -> list[User]:
+    def _get_eligible_users(self, offset: int, limit: int) -> list[User]:
         """Get a batch of users with weekly context errors"""
+        if limit is None:
+            return list(
+                User.objects.filter(
+                    usersubscription__status='active',
+                    is_active=True,
+                    client_context__weekly_context_error__isnull=False
+                ).distinct().values('id', 'email', 'username')[offset:]
+            )
+
         return list(
             User.objects.filter(
                 usersubscription__status='active',
                 is_active=True,
                 client_context__weekly_context_error__isnull=False
-            ).distinct().values('id', 'email', 'username')
+            ).distinct().values('id', 'email', 'username')[offset:offset + limit]
         )
 
-    async def process_all_users_context(self) -> Dict[str, Any]:
+    async def process_all_users_context(self, batch_number: int = 1, batch_size: int = 0) -> Dict[str, Any]:
         """Process weekly context gen for all eligible users."""
         start_time = timezone.now()
+        offset = (batch_number - 1) * batch_size
+        limit = batch_size
 
-        eligible_users = await self._get_eligible_users()
+        eligible_users = await self._get_eligible_users(offset, limit)
         total = len(eligible_users)
 
         if total == 0:

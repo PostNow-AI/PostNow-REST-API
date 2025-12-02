@@ -842,6 +842,9 @@ def vercel_cron_retry_failed_users(request):
     """
 
     try:
+        # Get batch number from query params (default to 1)
+        batch_number = int(request.GET.get('batch', 1))
+        batch_size = 2  # Process 2 users per batch, to avoid vercel timeouts
         service = RetryIdeasService()
 
         loop = asyncio.new_event_loop()
@@ -856,7 +859,8 @@ def vercel_cron_retry_failed_users(request):
 
         try:
             result = loop.run_until_complete(
-                service.process_daily_ideas_for_failed_users()
+                service.process_daily_ideas_for_failed_users(
+                    batch_number=batch_number, batch_size=batch_size)
             )
             AuditService.log_system_operation(
                 user=None,

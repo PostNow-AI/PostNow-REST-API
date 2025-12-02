@@ -2,18 +2,18 @@ name: Retry Weekly Context Generation - Failed Users
 
 on:
   schedule:
-    - cron: "0 1 * * *" # Run at 1:00 AM UTC
-    - cron: "0 3 * * *" # Run at 3:00 AM UTC
-    - cron: "0 5 * * *" # Run at 5:00 AM UTC
-    - cron: "0 7 * * *" # Run at 7:00 AM UTC
-    - cron: "0 9 * * *" # Run at 9:00 AM UTC
-    - cron: "0 11 * * *" # Run at 11:00 AM UTC
-    - cron: "0 13 * * *" # Run at 1:00 PM UTC
-    - cron: "0 15 * * *" # Run at 3:00 PM UTC
-    - cron: "0 17 * * *" # Run at 5:00 PM UTC
-    - cron: "0 19 * * *" # Run at 7:00 PM UTC
-    - cron: "0 21 * * *" # Run at 9:00 PM UTC
-    - cron: "0 23 * * *" # Run at 11:00 PM UTC
+    - cron: "0 1 * * 1" # Run at 1:00 AM UTC
+    - cron: "0 3 * * 1" # Run at 3:00 AM UTC
+    - cron: "0 5 * * 1" # Run at 5:00 AM UTC
+    - cron: "0 7 * * 1" # Run at 7:00 AM UTC
+    - cron: "0 9 * * 1" # Run at 9:00 AM UTC
+    - cron: "0 11 * * 1" # Run at 11:00 AM UTC
+    - cron: "0 13 * * 1" # Run at 1:00 PM UTC
+    - cron: "0 15 * * 1" # Run at 3:00 PM UTC
+    - cron: "0 17 * * 1" # Run at 5:00 PM UTC
+    - cron: "0 19 * * 1" # Run at 7:00 PM UTC
+    - cron: "0 21 * * 1" # Run at 9:00 PM UTC
+    - cron: "0 23 * * 1" # Run at 11:00 PM UTC
   workflow_dispatch:
 
 jobs:
@@ -23,11 +23,11 @@ jobs:
     strategy:
       matrix:
         batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-      max-parallel: 3 # Limit concurrent batches to avoid overwhelming your API
+      max-parallel: 2 # Limit concurrent batches to avoid overwhelming your API
 
     steps:
       - name: Debug URL
-        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/retry-generate-weekly-context/"
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/retry-generate-weekly-context/?batch=${{ matrix.batch }}"
       - name: Wait for staggered execution
         run: |
           # Stagger the batches by 5 minutes each
@@ -39,7 +39,7 @@ jobs:
         run: |
           echo "Processing batch ${{ matrix.batch }}"
           curl -X GET \
-            "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/retry-generate-weekly-context/" \
+            "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/retry-generate-weekly-context/?batch=${{ matrix.batch }}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             -w "HTTP Status: %{http_code}\n" \

@@ -78,6 +78,7 @@ def manual_generate_client_context(request):
     """Generate client context view."""
 
     try:
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -126,6 +127,9 @@ def retry_generate_client_context(request):
     """Retry generate client context view."""
 
     try:
+       # Get batch number from query params (default to 1)
+        batch_number = int(request.GET.get('batch', 1))
+        batch_size = 2  # Process 2 users per batch, to avoid vercel timeouts
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -139,7 +143,8 @@ def retry_generate_client_context(request):
         try:
             retry_context_service = RetryClientContext()
             result = loop.run_until_complete(
-                retry_context_service.process_all_users_context()
+                retry_context_service.process_all_users_context(
+                    batch_number=1, batch_size=0)
             )
             AuditService.log_system_operation(
                 user=None,
