@@ -524,8 +524,6 @@ Luz: natural e bem equilibrada (suave e inspiradora)
 
 Textura: limpa e nítida, com foco em contraste, harmonia e composição
 
-Sem textos escritos ou sobreposições gráficas
-
 Sem marcas d’água ou elementos de interface
 
 Pode conter pessoas reais ou elementos simbólicos relacionados ao tema, conforme adequado.
@@ -564,7 +562,6 @@ O resultado visual deve ser tão bom que pareça criado por um designer de elite
 
 Crie uma imagem de marketing profissional e visualmente atraente, adequada para redes sociais, no formato vertical Tamanho: 1080 x 1350 px (Proporção: 4:5 (vertical – formato de post para Feed), utilizando a imagem anexada como canvas base para a arte. 
 
-NÃO DEIXE BORDAS BRANCAS AO REDOR DA IMAGEM, PREENCHA TODO O ESPAÇO, E NEM ADICIONE TEXTOS NA IMAGEM. NÃO QUEREMOS TEXTO E NEM BORDA BRANCA, APENAS A IMAGEM NO FORMATO 4:5, 1080X1350 PX
 
 """
         return prompt.strip()

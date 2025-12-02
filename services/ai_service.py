@@ -37,8 +37,8 @@ class AiService:
                 "IMAGE",
             ],
             image_config=types.ImageConfig(
-                aspect_ratio="4:5",  # Add this
-                image_size="1K",     # Add this
+                aspect_ratio="4:5",
+                image_size="1K",
             ),
         )
 

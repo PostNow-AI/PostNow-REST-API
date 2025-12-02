@@ -239,18 +239,20 @@ class GeminiService(BaseAIService):
             model_names = [
                 'gemini-3-pro-image-preview',
                 'gemini-3-pro-image-preview',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image',
-                'gemini-2.5-flash-image-preview',
-                'gemini-2.5-flash-image-preview'
+                'gemini-3-pro-image-preview',
+                'gemini-3-pro-image-preview',
+                'gemini-3-pro-image-preview',
+                'gemini-3-pro-image-preview',
             ]
 
+            # Accumulate any text responses from models in case no inline image is returned
+            global_accumulated_text = ""
+            text_only_retry_done = False
             for model_name in model_names:
                 try:
                     client = genai.Client(
                         api_key=os.environ.get("GEMINI_API_KEY"),
                     )
-                    # Set user on prompt service before calling get_creator_profile_data
                     if user:
                         prompt_service.set_user(user)
                     creator_profile_data = prompt_service.get_creator_profile_data()
@@ -268,6 +270,7 @@ class GeminiService(BaseAIService):
                                         mime_type="image/jpeg",
                                         data=fetch_image_bytes(logo),
                                     ) if logo else None,
+
                                     types.Part.from_bytes(
                                         mime_type="image/jpeg",
                                         data=fetch_image_bytes(current_image),
@@ -278,24 +281,48 @@ class GeminiService(BaseAIService):
                         ),
                     ]
 
+                    effective_prompt = prompt
+
+                    # Build the content parts so we can inspect them before sending
+                    # For older 2.5 models, some do not accept inline image parts; keep only text
+
+                    parts_list = [
+                        part for part in [
+                            types.Part.from_bytes(
+                                mime_type="image/jpeg",
+                                data=fetch_image_bytes(logo),
+                            ) if logo else None,
+                            types.Part.from_bytes(
+                                mime_type="image/jpeg",
+                                data=fetch_image_bytes(current_image),
+                            ) if current_image else None,
+                            types.Part.from_text(text=effective_prompt),
+                        ] if part is not None
+                    ]
+
+                    contents = [types.Content(role="user", parts=parts_list)]
+
+                    # Some older image models such as gemini-2.5 variants may also expect TEXT
+                    # as part of 'response_modalities', so add TEXT as a fallback to increase compatibility.
+                    # Replace '1K' with '1024' (more standard numeric value)
+                    image_size_value = "1024"
+                    # Some older models may have stricter input length limits
+
                     generate_content_config = types.GenerateContentConfig(
-                        response_modalities=[
-                            "IMAGE",
-                            "TEXT",
-                        ],
+                        response_modalities=["IMAGE", "TEXT"],
                         image_config=types.ImageConfig(
                             aspect_ratio=aspect_ratio,
-                            image_size="1K",
+                            image_size=image_size_value,
                         ),
                     )
 
                     file_index = 0
+                    accumulated_text = ""
                     for chunk in client.models.generate_content_stream(
                         model=model_name,
                         contents=contents,
                         config=generate_content_config,
                     ):
-                        # Skip if chunk is not a response object with candidates
                         if not hasattr(chunk, 'candidates') or chunk.candidates is None:
                             continue
                         if (
@@ -330,7 +357,14 @@ class GeminiService(BaseAIService):
                                 print(
                                     f"❌ No image bytes extracted for model: {model_name}")
                         else:
+                            # Accumulate any text parts for fallback usage and debugging
+                            if hasattr(chunk, 'text') and chunk.text:
+                                accumulated_text += chunk.text + "\n"
                             print(chunk.text)
+
+                    # Merge accumulated text into global buffer for final fallback
+                    if accumulated_text.strip():
+                        global_accumulated_text += accumulated_text
 
                 except Exception as e:
                     error_str = str(e)
@@ -349,11 +383,133 @@ class GeminiService(BaseAIService):
                     elif 'not found' in error_str.lower() or 'invalid' in error_str.lower():
                         print(
                             f"⚠️ Model {model_name} not available, trying next model...")
+                    # After streaming for this model:
+                    # if we did not get inline data but we collected text, try generating from that text
+                    if file_index == 0 and accumulated_text.strip():
+                        try:
+                            print(
+                                f"🔁 No inline image returned by {model_name}, attempting text-only image generation using the model output as prompt")
+                            # Make a smaller image size to improve compatibility
+                            text_only_contents = [types.Content(
+                                role="user", parts=[types.Part.from_text(text=accumulated_text)])]
+                            fb_image_size = "512"
+                            fb_config = types.GenerateContentConfig(
+                                response_modalities=["IMAGE", "TEXT"],
+                                image_config=types.ImageConfig(
+                                    aspect_ratio=aspect_ratio, image_size=fb_image_size),
+                            )
+                            for chunk in client.models.generate_content_stream(model=model_name, contents=text_only_contents, config=fb_config):
+                                if not hasattr(chunk, 'candidates') or chunk.candidates is None:
+                                    continue
+                                if (
+                                    len(chunk.candidates) == 0
+                                    or chunk.candidates[0].content is None
+                                    or chunk.candidates[0].content.parts is None
+                                    or len(chunk.candidates[0].content.parts) == 0
+                                ):
+                                    continue
+                                part = chunk.candidates[0].content.parts[0]
+                                if hasattr(part, 'inline_data') and part.inline_data and hasattr(part.inline_data, 'data') and part.inline_data.data:
+                                    image_bytes = part.inline_data.data
+                                    image_url = self._save_image_to_s3(
+                                        image_bytes, user, post_data)
+                                    if image_url:
+                                        deduct_credits_for_image(
+                                            " (text-output fallback)")
+                                        return image_url
+                                    else:
+                                        print(
+                                            f"❌ Failed to save image to S3 for model fallback: {model_name}")
+                                else:
+                                    # Still text-only, append to debug
+                                    print(chunk.text)
+                        except Exception as fb_e:
+                            print(
+                                f"⚠️ Fallback generate failed for model {model_name}: {fb_e}")
+                    if 'invalid argument' in error_str.lower() or 'invalid' in error_str.lower():
+                        # Build text only pieces
+                        try:
+                            print(
+                                f"🔁 INVALID_ARGUMENT on model {model_name}, trying text-only fallback")
+                            text_only_contents = [types.Content(
+                                role="user", parts=[types.Part.from_text(text=effective_prompt)])]
+                            fb_config = types.GenerateContentConfig(response_modalities=[
+                                                                    "IMAGE", "TEXT"], image_config=types.ImageConfig(aspect_ratio=aspect_ratio, image_size="512"))
+                            # Try streaming again with a text-only content (some image models prefer only text input)
+                            for chunk in client.models.generate_content_stream(model=model_name, contents=text_only_contents, config=fb_config):
+                                if not hasattr(chunk, 'candidates') or chunk.candidates is None:
+                                    continue
+                                if (
+                                    len(chunk.candidates) == 0
+                                    or chunk.candidates[0].content is None
+                                    or chunk.candidates[0].content.parts is None
+                                    or len(chunk.candidates[0].content.parts) == 0
+                                ):
+                                    continue
+                                part = chunk.candidates[0].content.parts[0]
+                                if hasattr(part, 'inline_data') and part.inline_data and hasattr(part.inline_data, 'data') and part.inline_data.data:
+                                    image_bytes = part.inline_data.data
+                                    image_url = self._save_image_to_s3(
+                                        image_bytes, user, post_data)
+                                    if image_url:
+                                        deduct_credits_for_image(
+                                            " (text-only fallback)")
+                                        return image_url
+                                    else:
+                                        print(
+                                            f"❌ Failed to save image to S3 for model fallback: {model_name}")
+                                else:
+                                    print(chunk.text)
+                        except Exception as fb_e:
+                            print(
+                                f"⚠️ Fallback generate failed for model {model_name}: {fb_e}")
                     else:
                         # For other errors, add a small delay
                         time.sleep(1)
 
                     continue
+
+            # After trying models with their default inputs, if we collected any text and didn't get an inline image,
+            # attempt a single global text-only image generation pass across candidate models.
+            if not text_only_retry_done and global_accumulated_text.strip():
+                print("🔁 No inline image found in initial model pass; attempting global text-only image generation using accumulated text output...")
+                for fb_model in model_names:
+                    try:
+                        client = genai.Client(
+                            api_key=os.environ.get("GEMINI_API_KEY"))
+                        print(f"🔁 Global fallback trying model {fb_model}")
+                        try_contents = [types.Content(
+                            role="user", parts=[types.Part.from_text(text=global_accumulated_text)])]
+                        try_config = types.GenerateContentConfig(response_modalities=[
+                                                                 "IMAGE", "TEXT"], image_config=types.ImageConfig(aspect_ratio=aspect_ratio, image_size="512"))
+                        for chunk in client.models.generate_content_stream(model=fb_model, contents=try_contents, config=try_config):
+                            if not hasattr(chunk, 'candidates') or chunk.candidates is None:
+                                continue
+                            if (
+                                len(chunk.candidates) == 0
+                                or chunk.candidates[0].content is None
+                                or chunk.candidates[0].content.parts is None
+                                or len(chunk.candidates[0].content.parts) == 0
+                            ):
+                                continue
+                            part = chunk.candidates[0].content.parts[0]
+                            if hasattr(part, 'inline_data') and part.inline_data and hasattr(part.inline_data, 'data') and part.inline_data.data:
+                                image_bytes = part.inline_data.data
+                                image_url = self._save_image_to_s3(
+                                    image_bytes, user, post_data)
+                                if image_url:
+                                    deduct_credits_for_image(
+                                        " (global text-only fallback)")
+                                    return image_url
+                                else:
+                                    print(
+                                        f"❌ Failed to save image to S3 for model fallback: {fb_model}")
+                            else:
+                                print(chunk.text)
+                    except Exception as fb_e:
+                        print(
+                            f"⚠️ Global fallback attempt failed for {fb_model}: {fb_e}")
+                text_only_retry_done = True
 
             # If we reach here, no models worked
             print("❌ All models failed to generate image")

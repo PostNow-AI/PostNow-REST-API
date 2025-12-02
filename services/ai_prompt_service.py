@@ -47,7 +47,6 @@ class AIPromptService:
                 profile.color_3, profile.color_4, profile.color_5
             ],
             'desired_post_types': ['Nenhum'],
-
         }
 
         return profile_data
