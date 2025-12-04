@@ -1,4 +1,5 @@
 from dj_rest_auth.registration.serializers import RegisterSerializer
+from django.contrib.auth.models import User
 from rest_framework import serializers
 
 
@@ -12,3 +13,14 @@ class CustomRegisterSerializer(RegisterSerializer):
         user.last_name = self.data.get('last_name', '')
         user.save()
         return user
+
+
+class CustomUserDetailsSerializer(serializers.ModelSerializer):
+    """Serializer for User model including UserProfile."""
+
+    class Meta:
+        model = User
+        fields = ['id',  'email',
+                  'first_name', 'last_name', 'is_superuser', 'is_staff']
+        read_only_fields = ['id', 'email',
+                            'first_name', 'last_name', 'is_superuser', 'is_staff']
