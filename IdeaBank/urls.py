@@ -20,6 +20,8 @@ urlpatterns = [
          views.PostIdeaListView.as_view(), name='post-idea-list'),
     path('ideas/<int:pk>/', views.PostIdeaDetailView.as_view(),
          name='post-idea-detail'),
+    path('admin/fetch-all-daily/', views.admin_fetch_all_daily_posts,
+         name='admin-fetch-all-daily-posts'),
 
     # AI-powered generation endpoints
     path('generate/post-idea/', views.generate_post_idea,

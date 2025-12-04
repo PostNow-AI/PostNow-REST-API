@@ -26,7 +26,7 @@ class RetryIdeasService:
                 ).filter(
                     usersubscription__status='active',
                     is_active=True
-                ).distinct().values('id', 'email', 'username', 'first_name')[offset:]
+                ).distinct().values('id', 'email', 'username', 'first_name')
             )
 
         return list(
@@ -38,10 +38,11 @@ class RetryIdeasService:
             ).distinct().values('id', 'email', 'username', 'first_name')[offset:offset + limit]
         )
 
-    async def process_daily_ideas_for_failed_users(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
+    async def process_daily_ideas_for_failed_users(self, batch_number: int = None, batch_size: int = None) -> Dict[str, Any]:
         """Process daily ideas generation for a batch of users"""
         start_time = timezone.now()
-        offset = (batch_number - 1) * batch_size
+        offset = (batch_number - 1) * \
+            batch_size if batch_size is not None else 0
         limit = batch_size
 
         eligible_users = await self._get_users_with_errors(offset=offset, limit=limit)

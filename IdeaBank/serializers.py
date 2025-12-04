@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from .models import (
@@ -66,6 +67,14 @@ class PostIdeaCreateSerializer(serializers.ModelSerializer):
         fields = ['content', 'image_url']
 
 
+class PostIdeaMinimalSerializer(serializers.ModelSerializer):
+    """Minimal serializer returning only content and image URL for an idea."""
+
+    class Meta:
+        model = PostIdea
+        fields = ['content', 'image_url']
+
+
 class PostWithIdeasSerializer(serializers.ModelSerializer):
     """Serializer for Post with all its ideas."""
     objective_display = serializers.CharField(
@@ -80,6 +89,42 @@ class PostWithIdeasSerializer(serializers.ModelSerializer):
             'id', 'name', 'objective', 'objective_display', 'type', 'type_display', 'ideas', 'further_details',
             'include_image', 'created_at', 'updated_at'
         ]
+
+
+class CompletePostWithIdeasSerializer(serializers.ModelSerializer):
+    """Serializer for Post with all its ideas."""
+    ideas = PostIdeaMinimalSerializer(many=True, read_only=True, )
+    user = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Post
+        fields = [
+            'id', 'name', 'objective', 'type', 'ideas', 'further_details',
+            'include_image', 'created_at', 'updated_at', 'user'
+        ]
+
+    def get_user(self, obj):
+        user = getattr(obj, 'user', None)
+        if not user:
+            return None
+        return {
+            'id': user.id,
+            'name': getattr(user, 'first_name', '') + ' ' + getattr(user, 'last_name', ''),
+            'email': getattr(user, 'email', '') if hasattr(user, 'email') else None,
+        }
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Basic nested serializer for user info."""
+
+    class Meta:
+        model = get_user_model()
+        fields = ['id', 'username', 'email', 'first_name', 'last_name']
+        read_only_fields = ['id', 'username',
+                            'email', 'first_name', 'last_name']
+
+
+CompletePostWithIdeasSerializer.user = UserSerializer(read_only=True)
 
 
 class PostGenerationRequestSerializer(serializers.Serializer):

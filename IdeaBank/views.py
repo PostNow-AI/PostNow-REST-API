@@ -20,6 +20,7 @@ from rest_framework.response import Response
 
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
+    CompletePostWithIdeasSerializer,
     ImageGenerationRequestSerializer,
     PostCreateSerializer,
     PostGenerationRequestSerializer,
@@ -940,5 +941,34 @@ def manual_trigger_retry_failed(request):
         )
         return JsonResponse({
             'error': 'Failed to generate daily content',
+            'details': str(e)
+        }, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAdminUser, permissions.IsAuthenticated])
+def admin_fetch_all_daily_posts(request):
+    """Admin endpoint to fetch all daily posts for all users."""
+    try:
+        from django.utils import timezone
+
+        today = timezone.now().date()
+
+        daily_posts = Post.objects.filter(
+            user__is_active=True,
+            created_at__date=today
+        ).select_related('user').prefetch_related('ideas').order_by('user__id')
+
+        serialized_posts = CompletePostWithIdeasSerializer(
+            daily_posts, many=True).data
+
+        return JsonResponse({
+            "date": today,
+            "posts": serialized_posts
+        }, status=200)
+
+    except Exception as e:
+        return JsonResponse({
+            'error': 'Failed to fetch daily posts',
             'details': str(e)
         }, status=500)
