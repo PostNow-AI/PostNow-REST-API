@@ -172,13 +172,24 @@ class DailyReport(models.Model):
         default=0, help_text="Operações do sistema")
 
     # Content generation specific metrics
-    content_generation_attempts = models.PositiveIntegerField(default=0,
-                                                              help_text="Tentativas de geração de conteúdo")
-    content_generation_successes = models.PositiveIntegerField(default=0,
-                                                               help_text="Gerações de conteúdo bem-sucedidas")
-    content_generation_failures = models.PositiveIntegerField(default=0,
-                                                              help_text="Gerações de conteúdo com falha")
-
+    content_generation_attempts = models.PositiveIntegerField(
+        default=0,
+        help_text="Tentativas de geração de conteúdo")
+    content_generation_successes = models.PositiveIntegerField(
+        default=0,
+        help_text="Gerações de conteúdo bem-sucedidas")
+    content_generation_failures = models.PositiveIntegerField(
+        default=0,
+        help_text="Gerações de conteúdo com falha")
+    total_users_active = models.PositiveIntegerField(
+        default=0,
+        help_text="Número total de usuários ativos")
+    automatic_expected_posts_amount = models.PositiveIntegerField(
+        default=0,
+        help_text="Número esperado de posts automáticos")
+    actual_automatic_posts_amount = models.PositiveIntegerField(
+        default=0,
+        help_text="Número real de posts automáticos gerados")
     # Error summary
     top_errors = models.JSONField(default=list, blank=True,
                                   help_text="Erros mais comuns encontrados")

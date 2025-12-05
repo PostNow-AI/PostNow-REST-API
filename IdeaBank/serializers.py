@@ -93,25 +93,14 @@ class PostWithIdeasSerializer(serializers.ModelSerializer):
 
 class CompletePostWithIdeasSerializer(serializers.ModelSerializer):
     """Serializer for Post with all its ideas."""
-    ideas = PostIdeaMinimalSerializer(many=True, read_only=True, )
-    user = serializers.SerializerMethodField()
+    ideas = PostIdeaMinimalSerializer(many=True, read_only=True)
 
     class Meta:
         model = Post
         fields = [
-            'id', 'name', 'objective', 'type', 'ideas', 'further_details',
-            'include_image', 'created_at', 'updated_at', 'user'
+            'id', 'name', 'objective', 'type', 'ideas', 'further_details', 'is_automatically_generated',
+            'include_image', 'created_at', 'updated_at'
         ]
-
-    def get_user(self, obj):
-        user = getattr(obj, 'user', None)
-        if not user:
-            return None
-        return {
-            'id': user.id,
-            'name': getattr(user, 'first_name', '') + ' ' + getattr(user, 'last_name', ''),
-            'email': getattr(user, 'email', '') if hasattr(user, 'email') else None,
-        }
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -122,9 +111,6 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'first_name', 'last_name']
         read_only_fields = ['id', 'username',
                             'email', 'first_name', 'last_name']
-
-
-CompletePostWithIdeasSerializer.user = UserSerializer(read_only=True)
 
 
 class PostGenerationRequestSerializer(serializers.Serializer):

@@ -17,10 +17,10 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from services.daily_post_amount_service import DailyPostAmountService
 
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
-    CompletePostWithIdeasSerializer,
     ImageGenerationRequestSerializer,
     PostCreateSerializer,
     PostGenerationRequestSerializer,
@@ -950,23 +950,9 @@ def manual_trigger_retry_failed(request):
 def admin_fetch_all_daily_posts(request):
     """Admin endpoint to fetch all daily posts for all users."""
     try:
-        from django.utils import timezone
+        result = DailyPostAmountService.get_daily_post_amounts()
 
-        today = timezone.now().date()
-
-        daily_posts = Post.objects.filter(
-            user__is_active=True,
-            created_at__date=today
-        ).select_related('user').prefetch_related('ideas').order_by('user__id')
-
-        serialized_posts = CompletePostWithIdeasSerializer(
-            daily_posts, many=True).data
-
-        return JsonResponse({
-            "date": today,
-            "posts": serialized_posts
-        }, status=200)
-
+        return JsonResponse(result, status=200)
     except Exception as e:
         return JsonResponse({
             'error': 'Failed to fetch daily posts',

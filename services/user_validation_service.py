@@ -28,9 +28,6 @@ class UserValidationService:
         if not user[1].onboarding_completed:
             return {'status': 'ineligible', 'reason': 'incomplete_onboarding'}
 
-        if not self.credit_service.has_sufficient_credits(user[0], required_amount=1):
-            return {"status": "ineligible", "reason": "insufficient_credits"}
-
         if not self.credit_service.validate_user_subscription(user[0]):
             return {"status": "ineligible", "reason": "no_active_subscription"}
 

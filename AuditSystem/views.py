@@ -12,6 +12,7 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from services.daily_post_amount_service import DailyPostAmountService
 
 from .models import AuditLog, DailyReport
 from .services import AuditService
@@ -149,6 +150,10 @@ def _generate_report(report_date):
         Q(action__in=['account_deleted', 'subscription_cancelled'])
     ).order_by('-timestamp')[:50]
 
+    # Generated posts amount
+    generated_posts_amount = DailyPostAmountService.get_daily_post_amounts(
+        report_date)
+
     # Build report data
     report_data = {
         'report_date': str(report_date),
@@ -177,6 +182,7 @@ def _generate_report(report_date):
             }
             for op in critical_ops
         ],
+        'generated_posts_amount': generated_posts_amount,
     }
 
     return report_data
@@ -208,6 +214,9 @@ def _save_report(report_date, report_data):
             'content_generation_failures': report_data['content_generation']['failures'],
             'top_errors': report_data['top_errors'],
             'report_data': report_data,
+            'total_users_active': report_data['generated_posts_amount']['user_amount'],
+            'automatic_expected_posts_amount': report_data['generated_posts_amount']['automatic_expected_posts_amount'],
+            'actual_automatic_posts_amount': report_data['generated_posts_amount']['actual_automatic_posts_amount'],
         }
     )
 
@@ -338,6 +347,39 @@ def _generate_html_report(report):
                     <!-- Body -->
                     <tr>
                         <td style="padding: 40px;">
+                        <!-- Daily Posts Generation Section -->
+                        <table role="presentation" style="width: 100%; margin-bottom: 40px;">
+                            <tr>
+                                <td>
+                                    <h2 style="margin: 0 0 8px 0; color: #8b5cf6; font-size: 20px; font-weight: 600;">Geração de Posts Diários</h2>
+                                    <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">
+                                        Estatísticas da geração (automática e manual) de posts para usuários ativos.
+                                    </p>
+                                    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                                        <tr>
+                                            <td style="padding: 15px; background-color: #f8fafc; border-radius: 8px; margin: 10px; display: inline-block; min-width: 150px;">
+                                                <div style="text-align: center;">
+                                                    <div style="font-size: 24px; font-weight: bold; color: #8b5cf6;">{data['generated_posts_amount']['user_amount']}</div>
+                                                    <div style="font-size: 12px; color: #64748b;">Usuários Ativos</div>
+                                                </div>
+                                            </td>
+                                            <td style="padding: 15px; background-color: #f8fafc; border-radius: 8px; margin: 10px; display: inline-block; min-width: 150px;">
+                                                <div style="text-align: center;">
+                                                    <div style="font-size: 24px; font-weight: bold; color: #17a2b8;">{data['generated_posts_amount']['automatic_expected_posts_amount']}</div>
+                                                    <div style="font-size: 12px; color: #64748b;">Expectativa de posts automáticos</div>
+                                                </div>
+                                            </td>
+                                            <td style="padding: 15px; background-color: #f8fafc; border-radius: 8px; margin: 10px; display: inline-block; min-width: 150px;">
+                                                <div style="text-align: center;">
+                                                    <div style="font-size: 24px; font-weight: bold; color: #28a745;">{data['generated_posts_amount']['actual_automatic_posts_amount']}</div>
+                                                    <div style="font-size: 12px; color: #64748b;">Posts Gerados</div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
                             <!-- Summary Section -->
                             <table role="presentation" style="width: 100%; margin-bottom: 40px;">
                                 <tr>
@@ -346,6 +388,7 @@ def _generate_html_report(report):
                                         <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">
                                             Visão geral das operações realizadas no sistema.
                                         </p>
+                                     
                                         <table role="presentation" style="width: 100%; border-collapse: collapse;">
                                             <tr>
                                                 <td style="padding: 15px; background-color: #f8fafc; border-radius: 8px; margin: 10px; display: inline-block; min-width: 150px;">
