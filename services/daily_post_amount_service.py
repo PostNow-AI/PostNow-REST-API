@@ -15,7 +15,7 @@ class DailyPostAmountService:
             total_users = User.objects.filter(
                 is_active=True,
                 usersubscription__status='active',
-                creator_profile__onboarding_completed=True).distinct()
+                creator_profile__step_1_completed=True).distinct()
             total_user_amount = total_users.count()
             expected_posts_amount = 3 * total_user_amount
 
