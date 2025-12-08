@@ -1,7 +1,6 @@
 import logging
-import random
 
-from CreatorProfile.models import CreatorProfile, VisualStylePreference
+from services.get_creator_profile_data import get_creator_profile_data
 
 logger = logging.getLogger(__name__)
 
@@ -14,62 +13,9 @@ class AIPromptService:
         """Set the user for whom the prompts will be generated."""
         self.user = user
 
-    def _get_creator_profile_data(self) -> dict:
-        """Fetch and return the creator profile data for the current user."""
-        if not self.user:
-            raise ValueError("User is not set for PromptService.")
-
-        profile = CreatorProfile.objects.filter(user=self.user).first()
-        if not profile:
-            raise CreatorProfile.DoesNotExist
-        profile_data = {
-            "business_name": profile.business_name,
-            "business_phone": profile.business_phone,
-            "business_website": profile.business_website,
-            "business_instagram_handle": profile.business_instagram_handle,
-            "specialization": profile.specialization,
-            "business_description": profile.business_description,
-            "business_purpose": profile.business_purpose,
-            "brand_personality": profile.brand_personality,
-            "products_services": profile.products_services,
-            "business_location": profile.business_location,
-            "target_audience": profile.target_audience,
-            "target_interests": profile.target_interests,
-            "main_competitors": profile.main_competitors,
-            "reference_profiles": profile.reference_profiles,
-            "voice_tone": profile.voice_tone,
-            "visual_style": self._get_random_visual_style(profile),
-            'color_palette': [] if not any([
-                profile.color_1, profile.color_2,
-                profile.color_3, profile.color_4, profile.color_5
-            ]) else [
-                profile.color_1, profile.color_2,
-                profile.color_3, profile.color_4, profile.color_5
-            ],
-            'desired_post_types': ['Nenhum'],
-        }
-
-        return profile_data
-
-    def _get_random_visual_style(self, profile) -> dict:
-        """Randomly select and fetch one visual style from the user's visual_style_ids list."""
-        if not profile.visual_style_ids or len(profile.visual_style_ids) == 0:
-            return {"name": None, "description": None}
-
-        random_style_id = random.choice(profile.visual_style_ids)
-
-        try:
-            visual_style = VisualStylePreference.objects.get(
-                id=random_style_id)
-            return f'{visual_style.name} - {visual_style.description}'
-        except VisualStylePreference.DoesNotExist:
-            logger.warning(
-                f"VisualStylePreference with id {random_style_id} not found for user {self.user.id if self.user else 'unknown'}")
-            return {"name": None, "description": None}
-
     def build_context_prompts(self) -> dict:
         """Build context prompts based on the user's creator profile."""
-        profile_data = self._get_creator_profile_data()
+        profile_data = get_creator_profile_data(self.user)
 
         return [
             """
@@ -138,7 +84,7 @@ class AIPromptService:
 
     def build_content_prompts(self, context: dict, posts_quantity: str) -> dict:
         """Build content generation prompts based on the user's creator profile."""
-        profile_data = self._get_creator_profile_data()
+        profile_data = get_creator_profile_data(self.user)
 
         return [
             """
@@ -244,7 +190,7 @@ class AIPromptService:
 
     def adapted_semantic_analysis_prompt(self, semantic_analysis: dict) -> str:
         """Prompt for semantic analysis adapted to creator profile."""
-        profile_data = self._get_creator_profile_data()
+        profile_data = get_creator_profile_data(self.user)
 
         return [
             """
@@ -288,7 +234,7 @@ class AIPromptService:
 
     def image_generation_prompt(self, semantic_analysis: dict) -> str:
         """Prompt for AI image generation based on semantic analysis."""
-        profile_data = self._get_creator_profile_data()
+        profile_data = get_creator_profile_data(self.user)
 
         return f"""
           Crie uma imagem em estilo {profile_data['visual_style']}.

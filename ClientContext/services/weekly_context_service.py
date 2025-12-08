@@ -43,7 +43,7 @@ class WeeklyContextService:
             ).distinct().values('id', 'email', 'username')[offset:offset + limit]
         )
 
-    async def _process_single_user(self, user_data: dict) -> Dict[str, Any]:
+    async def process_single_user(self, user_data: dict) -> Dict[str, Any]:
         """Wrapper method to process a single user from the user data."""
         user_id = user_data.get('id') or user_data.get('user_id')
         if not user_data:
@@ -77,7 +77,7 @@ class WeeklyContextService:
         try:
             results = await self.semaphore_service.process_concurrently(
                 users=eligible_users,
-                function=self._process_single_user
+                function=self.process_single_user
             )
 
             processed_count = sum(
@@ -230,7 +230,6 @@ class WeeklyContextService:
         try:
             self.prompt_service.set_user(user)
             prompt = self.prompt_service.build_context_prompts()
-
             context_result = self.ai_service.generate_text(prompt, user)
 
             return context_result

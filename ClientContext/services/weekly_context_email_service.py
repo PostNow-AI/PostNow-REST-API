@@ -5,8 +5,8 @@ from typing import Any, Dict
 from asgiref.sync import sync_to_async
 from ClientContext.models import ClientContext
 from ClientContext.utils.weekly_context import generate_weekly_context_email_template
-from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
+from services.get_creator_profile_data import get_creator_profile_data
 from services.mailjet_service import MailjetService
 
 logger = logging.getLogger(__name__)
@@ -72,9 +72,7 @@ class WeeklyContextEmailService:
         """Send weekly context email to a single user."""
         try:
             # Get user profile data
-            user_data = await self._get_user_profile_data(user)
-
-            print(context_data)
+            user_data = await sync_to_async(get_creator_profile_data)(user)
 
             # Generate email content
             subject = f"📈 Seu Contexto Semanal de Mercado - {user_data['business_name']}"
@@ -116,38 +114,4 @@ class WeeklyContextEmailService:
                 'user_id': user.id,
                 'email': user.email,
                 'error': str(e)
-            }
-
-    @sync_to_async
-    def _get_user_profile_data(self, user: User) -> Dict[str, str]:
-        """Get user profile data for email personalization."""
-        try:
-            profile = CreatorProfile.objects.filter(user=user).first()
-
-            if profile:
-                return {
-                    'user_name': user.first_name or user.username,
-                    'business_name': profile.business_name or 'Sua Empresa',
-                    'professional_name': profile.professional_name or user.first_name or user.username,
-                    'profession': profile.profession or 'Profissional',
-                    'specialization': profile.specialization or 'Mercado'
-                }
-            else:
-                return {
-                    'user_name': user.first_name or user.username,
-                    'business_name': 'Sua Empresa',
-                    'professional_name': user.first_name or user.username,
-                    'profession': 'Profissional',
-                    'specialization': 'Mercado'
-                }
-
-        except Exception as e:
-            logger.error(
-                f"Error getting user profile data for user {user.id}: {str(e)}")
-            return {
-                'user_name': user.first_name or user.username or 'Usuário',
-                'business_name': 'Sua Empresa',
-                'professional_name': user.first_name or user.username or 'Usuário',
-                'profession': 'Profissional',
-                'specialization': 'Mercado'
             }
