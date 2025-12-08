@@ -154,6 +154,127 @@ class AIPromptService:
             '''
         ]
 
+    def build_campaign_prompts(self, context: dict) -> dict:
+        """Build campaign generation prompts based on the user's creator profile."""
+        profile_data = get_creator_profile_data(self.user)
+
+        return [
+            """
+            Você é um estrategista de conteúdo e redator de marketing digital especializado em redes sociais. Sua função é criar posts para o Instagram totalmente personalizados, usando dados reais e verificados sobre a empresa, seu público e o mercado. Se alguma informação estiver ausente ou marcada como 'sem dados disponíveis', você deve ignorar essa parte sem criar suposições. Não invente dados, tendências, números ou nomes de concorrentes. Baseie todas as decisões de conteúdo nas informações recebidas do onboarding e no contexto pesquisado, sempre respeitando o tom e propósito da marca.
+            """,
+            f"""
+            ============================================================
+            📊 CONTEXTO PESQUISADO (dados externos e verificados)
+            → INPUT: {context}
+            ============================================================
+
+            🏢 INFORMAÇÕES DA EMPRESA (dados internos do onboarding)
+
+            - Nome: {profile_data['business_name']}
+            - Descrição: {profile_data['business_description']}
+            - Setor / nicho: {profile_data['specialization']}
+            - Propósito: {profile_data['business_purpose']}
+            - Valores e personalidade: {profile_data['brand_personality']}
+            - Tom de voz: {profile_data['voice_tone']}
+            - Público-alvo: {profile_data['target_audience']}
+            - Interesses do Público: {profile_data['target_interests']}
+            - Produtos ou serviços prioritários: {profile_data['products_services']}
+            ============================================================
+            📌 TAREFA PRINCIPAL
+
+            Criar **3 posts para o Instagram**, combinando:
+            ✔ dados da empresa  
+            ✔ contexto pesquisado  
+            ✔ tom de voz e objetivosOs 3 posts devem ser:- 1 Post para Feed (post_text_feed)- 1 Post para Stories (post_text_stories)- 1 Post para Reels (post_text_reels)
+
+            O “post_text_feed” deve incluir:
+
+            1. **Título curto e atrativo**
+              - máximo 6 palavras  
+              - alinhado ao tom da marca
+
+            2. **Legenda completa**
+              - Baseada apenas em dados confirmados  
+              - Ignorar itens sem dados disponíveis  
+              - Pode citar fontes reais quando relevante  
+
+            3. **Sugestão visual**
+              - Descrição da imagem, layout, estilo  
+              - Coerente com a identidade visual
+              - Adicionar “Título do post” à “sugestão visual”  é obrigado       - Adicionar “Sub Título do post” à sugestão visual  é facultativo. Você pode escolher de acordo com o conceito e estética desejados
+              - Adicionar “Chamada para ação” à sugestão visual é facultativo. Você pode escolher de acordo com o conceito e estética desejados.
+              - Nunca adicione o texto de “Texto completo da legenda” à sugestão visual.
+              - Nunca adicione o texto de “Hashtags” à sugestão visual.
+
+            4. **Hashtags recomendadas**, combinando:
+              - tendências verificadas: {context['tendencies_popular_themes']}
+              - Não criar hashtags inventadas
+
+            5. **CTA (chamada para ação)**
+              - coerente com o objetivo: {profile_data['business_purpose']}
+
+            O “post_text_stories” deve incluir:- Roteiro diário para geração de stories baseados no contexto pesquisado.
+
+            O “post_text_reels” deve incluir:- Roteiro diário para geração de um video de reels baseados no contexto pesquisado.
+
+            ============================================================
+                🧭 DIRETRIZES DE QUALIDADE E CONFIABILIDADE
+
+                - Não inventar estatísticas, datas ou referências.  
+                - Linguagem natural, persuasiva e compatível com {{tom_voz}}.  
+                - Se faltar dados → focar na proposta de valor.  
+                - Storytelling só quando houver base real.  
+                - Nunca mencionar “sem dados disponíveis” no texto final.  
+                - Conteúdo deve soar autêntico e profissional.  
+
+            ============================================================
+
+            💬 FORMATO DE SAÍDA (JSON)
+
+            {{
+              "post_text_feed": {{
+                "titulo": "Título do post",        
+                "sub_titulo": "Sub Título do post",
+                "tipo": "feed",
+                "legenda": "Texto completo da legenda",
+                "sugestao_visual": "Descrição da imagem ou layout",
+                "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
+                "cta": "Chamada para ação"
+              }}
+              "post_text_stories": {{
+                "titulo": "Título do post",     
+                "tipo": "stories",
+                "sub_titulo": "Sub Título do post",
+                "cta": "Chamada para ação",
+                "roteiro": "Texto completo do roteiro para stories"
+              }}
+              "post_text_reels": {{
+                "titulo": "Título do post",
+                "tipo": "reels",
+                "sub_titulo": "Sub Título do post",
+                "legenda": "Texto completo da legenda",
+                "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
+                "cta": "Chamada para ação"
+                "roteiro": "Texto completo do roteiro para reels"
+              }}
+            }}
+            ============================================================
+            ⚙️ CONFIGURAÇÕES RECOMENDADAS (para geração)
+
+            - temperature: 0.7  
+            - top_p: 0.9  
+            - max_tokens: 2000  
+            - presence_penalty: 0.2  
+            - frequency_penalty: 0.1  
+
+            (Essas configurações ajudam a gerar textos criativos,
+            mas ainda assim baseados em dados verificados.)
+
+            ============================================================
+
+          """
+        ]
+
     def semantic_analysis_prompt(self, post_text: str) -> str:
         """Prompt for semantic analysis of user input."""
         return [
@@ -202,10 +323,11 @@ class AIPromptService:
               {semantic_analysis}
 
               #### 2. PERFIL DA MARCA (Estilo e Identidade)
-              // Cole o conteúdo do seu JSON "brand_profile" aqui.
-              // Esta seção define COMO DEVE SER MOSTRADO (Estilo prioritário).
 
-              {profile_data}
+              - Tom de voz: {profile_data['voice_tone']}
+              - Estilo Visual: {profile_data['visual_style']}
+              - Cores da Marca: {profile_data['color_palette']}
+
 
               ### INSTRUÇÕES PARA ADAPTAÇÃO
               1.  **Prioridade Absoluta:** O resultado final deve priorizar o **"Estilo Visual"** e as **"Cores da Marca"** definidos no `brand_profile`.
@@ -236,21 +358,35 @@ class AIPromptService:
         """Prompt for AI image generation based on semantic analysis."""
         profile_data = get_creator_profile_data(self.user)
 
-        return f"""
-          Crie uma imagem em estilo {profile_data['visual_style']}.
+        return [
+            '''
+          Você deve gerar uma imagem, combinando estilo visual, análise semântica e diretrizes da marca
+          ''',
+            f"""
+          Crie uma imagem seguindo o estilo e contexto descritos abaixo.
 
-          {semantic_analysis['contexto_visual_sugerido']}.
+          "estilo_visual": {{
+            "tipo_estilo": "{profile_data['visual_style'].split(' - ')[0] if profile_data['visual_style'] else ''}",
+            "descricao_completa": "{profile_data['visual_style'].split(' - ')[1] if profile_data['visual_style'] else ''}"
+          }},
 
-          Inclua elementos como {semantic_analysis['objetos_relevantes']}.
 
-          Transmita as emoções de {semantic_analysis['emoções_associadas']} e a sensação geral de {semantic_analysis['sensação_geral']}.
+          "contexto_e_conteudo": {{
+            "contexto_visual_sugerido": "{semantic_analysis['contexto_visual_sugerido']}",
+            "elementos_relevantes": "{', '.join(semantic_analysis['objetos_relevantes'])}",
+            "tema_principal_do_post": "{semantic_analysis['tema_principal']}",
+            "marca": "{profile_data['business_name']}",
+            "paleta_de_cor_da_marca": "{profile_data['color_palette']}"
+          }},
 
-          Use tons de {semantic_analysis['tons_de_cor_sugeridos']}.
-
-          O post fala sobre: {semantic_analysis['tema_principal']}.
-
-          A marca é {profile_data['business_name']}, cujo estilo é {profile_data['visual_style']} e paleta é {profile_data['color_palette']}.
-
-          REGRAS/RESTRIÇÕES:
-          NÃO GERE OU ADICIONE LOGOMARCAS OU MARCAS D'ÁGUA
+          "emocao_e_estetica": {{
+            "emocoes_associadas": "{', '.join(semantic_analysis['emoções_associadas'])}",
+            "sensacao_geral": "{semantic_analysis['sensação_geral']}",
+            "tons_de_cor_sugeridos": "{', '.join(semantic_analysis['tons_de_cor_sugeridos']) if semantic_analysis['tons_de_cor_sugeridos'] else profile_data['color_palette']}"
+          }},
+          
+          "restricoes": [
+            "NÃO gerar ou adicionar logomarcas."
+          ],
         """
+        ]

@@ -146,45 +146,28 @@ class DailyIdeasService:
                     'user_id': user_id
                 }
 
-            for post_type in ["feed", 'reels', 'story']:
-                content_result = await sync_to_async(self._generate_content_for_user)(user, post_type=post_type)
-                content_json = content_result.replace(
-                    'json', '', 1).strip('`').strip()
-                content_loaded = json.loads(content_json)
+            content_result = await sync_to_async(self._generate_content_for_user)(user)
 
-                content_data = content_loaded[0] if isinstance(
-                    content_loaded, list) and len(content_loaded) > 0 else {}
+            content_json = content_result.replace(
+                'json', '', 1).strip('`').strip()
+            content_loaded = json.loads(content_json)
 
-                post_content = f"""{content_data.get('legenda', '').strip()}\n\n\n{' '.join(content_data.get('hashtags', []))}\n\n\n{content_data.get('cta', '').strip()}
-                """
+            post_text_feed = content_loaded.get('post_text_feed')
+            post_text_stories = content_loaded.get('post_text_stories')
+            post_text_reels = content_loaded.get('post_text_reels')
 
-                if post_type == 'feed':
-                    image_url = await sync_to_async(self._generate_image_for_feed_post)(
-                        user, post_content)
+            post_content_feed = f"""{post_text_feed.get('legenda', '').strip()}\n\n\n{' '.join(post_text_feed.get('hashtags', []))}\n\n\n{post_text_feed.get('cta', '').strip()}
+            """
 
-                post = await sync_to_async(Post.objects.create)(
-                    user=user,
-                    name=content_data.get('titulo', 'Conteúdo Diário'),
-                    type=post_type,
-                    further_details='',
-                    include_image=True if post_type in [
-                        'feed'] else False,
-                    is_automatically_generated=True,
-                    is_active=False
-                )
+            post_content_stories = f"""{post_text_stories.get('roteiro', '').strip()}\n\n\n{' '.join(post_text_stories.get('hashtags', []))}\n\n\n{post_text_stories.get('cta', '').strip()}
+            """
 
-                post_idea = await sync_to_async(PostIdea.objects.create)(
-                    post=post,
-                    content=post_content,
-                    image_url=image_url if post_type == 'feed' else '',
-                    image_description=content_data.get('sugestao_visual', '')
-                )
-                user_posts.append({
-                    'post_id': post.id,
-                    'post_idea_id': post_idea.id,
-                    'type': post.type,
-                    'title': post.name
-                })
+            post_content_reels = f"""{post_text_reels.get('roteiro', '').strip()}\n\n\n{post_text_reels.get('legenda', '').strip()}\n\n\n{' '.join(post_text_reels.get('hashtags', []))}\n\n\n{post_text_reels.get('cta', '').strip()}
+            """
+
+            await self._save_text_to_db(user, post_text_feed, post_content_feed, user_posts)
+            await self._save_text_to_db(user, post_text_stories, post_content_stories, user_posts)
+            await self._save_text_to_db(user, post_text_reels, post_content_reels, user_posts)
 
             await self._clear_user_error(user)
 
@@ -201,6 +184,38 @@ class DailyIdeasService:
                 'error': str(e),
                 'user_id': user_id
             }
+
+    async def _save_text_to_db(self, user: User, post_data: dict, post_content: str, user_posts: list) -> PostIdea:
+        post_type = post_data['tipo']
+        image_url = ''
+        sugestao_visual = post_data.get('sugestao_visual', '')
+        if post_type == 'feed':
+            image_url = await sync_to_async(self._generate_image_for_feed_post)(
+                user, post_content)
+
+        post = await sync_to_async(Post.objects.create)(
+            user=user,
+            name=post_data.get('titulo', 'Conteúdo Diário'),
+            type=post_data['tipo'],
+            further_details='',
+            include_image=True if post_data['tipo'] == 'feed' else False,
+            is_automatically_generated=True,
+            is_active=False
+        )
+
+        post_idea = await sync_to_async(PostIdea.objects.create)(
+            post=post,
+            content=post_content,
+            image_url=image_url,
+            image_description=sugestao_visual
+        )
+
+        user_posts.append({
+            'post_id': post_idea.id,
+            'post_idea_id': post_idea.id,
+            'type': post.type,
+            'title': post.name
+        })
 
     def _generate_image_for_feed_post(self, user: User, post_content: str) -> str:
         """AI service call to generate image for feed post."""
@@ -231,7 +246,9 @@ class DailyIdeasService:
             image_prompt = self.prompt_service.image_generation_prompt(
                 semantic_analysis)
 
-            image_result = self.ai_service.generate_image([image_prompt], user, types.GenerateContentConfig(
+            image_result = self.ai_service.generate_image(image_prompt, user, types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
                 response_modalities=[
                     "IMAGE",
                 ],
@@ -251,7 +268,7 @@ class DailyIdeasService:
             raise Exception(
                 f"Failed to generate image for user {user.id}: {str(e)}")
 
-    def _generate_content_for_user(self, user: User, post_type: str) -> None:
+    def _generate_content_for_user(self, user: User) -> None:
         """AI service call to generate daily ideas for a user."""
         try:
             self.prompt_service.set_user(user)
@@ -260,12 +277,15 @@ class DailyIdeasService:
 
             context_data = serializer.data if serializer else {}
 
-            prompt = self.prompt_service.build_content_prompts(
-                context_data, f"1 ({post_type})")
+            prompt = self.prompt_service.build_campaign_prompts(
+                context_data)
 
             content_result = self.ai_service.generate_text(prompt, user, types.GenerateContentConfig(
                 temperature=0.7,
                 top_p=0.9,
+                response_modalities=[
+                    "TEXT",
+                ],
             ))
 
             return content_result

@@ -915,7 +915,8 @@ def manual_trigger_retry_failed(request):
 
         try:
             result = loop.run_until_complete(
-                service.process_daily_ideas_for_failed_users()
+                service.process_daily_ideas_for_failed_users(
+                    batch_number=1, batch_size=10000)
             )
             AuditService.log_system_operation(
                 user=None,
