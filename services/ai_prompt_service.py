@@ -1,5 +1,7 @@
 import logging
 
+from format_semantic_analysis import format_semantic_analysis_output
+from format_weekly_context import format_weekly_context_output
 from services.get_creator_profile_data import get_creator_profile_data
 
 logger = logging.getLogger(__name__)
@@ -158,6 +160,7 @@ class AIPromptService:
         """Build campaign generation prompts based on the user's creator profile."""
         profile_data = get_creator_profile_data(self.user)
 
+        formatted_context = format_weekly_context_output(context)
         return [
             """
             Você é um estrategista de conteúdo e redator de marketing digital especializado em redes sociais. Sua função é criar posts para o Instagram totalmente personalizados, usando dados reais e verificados sobre a empresa, seu público e o mercado. Se alguma informação estiver ausente ou marcada como 'sem dados disponíveis', você deve ignorar essa parte sem criar suposições. Não invente dados, tendências, números ou nomes de concorrentes. Baseie todas as decisões de conteúdo nas informações recebidas do onboarding e no contexto pesquisado, sempre respeitando o tom e propósito da marca.
@@ -165,7 +168,7 @@ class AIPromptService:
             f"""
             ============================================================
             📊 CONTEXTO PESQUISADO (dados externos e verificados)
-            → INPUT: {context}
+            → INPUT: {formatted_context}
             ============================================================
 
             🏢 INFORMAÇÕES DA EMPRESA (dados internos do onboarding)
@@ -183,25 +186,26 @@ class AIPromptService:
             📌 TAREFA PRINCIPAL
 
             Criar **3 posts para o Instagram**, combinando:
-            ✔ dados da empresa  
-            ✔ contexto pesquisado  
+            ✔ dados da empresa
+            ✔ contexto pesquisado
             ✔ tom de voz e objetivosOs 3 posts devem ser:- 1 Post para Feed (post_text_feed)- 1 Post para Stories (post_text_stories)- 1 Post para Reels (post_text_reels)
 
             O “post_text_feed” deve incluir:
 
             1. **Título curto e atrativo**
-              - máximo 6 palavras  
+              - máximo 6 palavras
               - alinhado ao tom da marca
 
             2. **Legenda completa**
-              - Baseada apenas em dados confirmados  
-              - Ignorar itens sem dados disponíveis  
-              - Pode citar fontes reais quando relevante  
+              - Baseada apenas em dados confirmados
+              - Ignorar itens sem dados disponíveis
+              - Pode citar fontes reais quando relevante
 
             3. **Sugestão visual**
-              - Descrição da imagem, layout, estilo  
+              - Descrição da imagem, layout, estilo
               - Coerente com a identidade visual
-              - Adicionar “Título do post” à “sugestão visual”  é obrigado       - Adicionar “Sub Título do post” à sugestão visual  é facultativo. Você pode escolher de acordo com o conceito e estética desejados
+              - Adicionar “Título do post” à “sugestão visual”  é obrigado
+              - Adicionar “Sub Título do post” à sugestão visual  é facultativo. Você pode escolher de acordo com o conceito e estética desejados
               - Adicionar “Chamada para ação” à sugestão visual é facultativo. Você pode escolher de acordo com o conceito e estética desejados.
               - Nunca adicione o texto de “Texto completo da legenda” à sugestão visual.
               - Nunca adicione o texto de “Hashtags” à sugestão visual.
@@ -220,12 +224,12 @@ class AIPromptService:
             ============================================================
                 🧭 DIRETRIZES DE QUALIDADE E CONFIABILIDADE
 
-                - Não inventar estatísticas, datas ou referências.  
-                - Linguagem natural, persuasiva e compatível com {{tom_voz}}.  
-                - Se faltar dados → focar na proposta de valor.  
-                - Storytelling só quando houver base real.  
-                - Nunca mencionar “sem dados disponíveis” no texto final.  
-                - Conteúdo deve soar autêntico e profissional.  
+                - Não inventar estatísticas, datas ou referências.
+                - Linguagem natural, persuasiva e compatível com {{tom_voz}}.
+                - Se faltar dados → focar na proposta de valor.
+                - Storytelling só quando houver base real.
+                - Nunca mencionar “sem dados disponíveis” no texto final.
+                - Conteúdo deve soar autêntico e profissional.
 
             ============================================================
 
@@ -233,7 +237,7 @@ class AIPromptService:
 
             {{
               "post_text_feed": {{
-                "titulo": "Título do post",        
+                "titulo": "Título do post",
                 "sub_titulo": "Sub Título do post",
                 "tipo": "feed",
                 "legenda": "Texto completo da legenda",
@@ -242,7 +246,7 @@ class AIPromptService:
                 "cta": "Chamada para ação"
               }}
               "post_text_stories": {{
-                "titulo": "Título do post",     
+                "titulo": "Título do post",
                 "tipo": "stories",
                 "sub_titulo": "Sub Título do post",
                 "cta": "Chamada para ação",
@@ -261,11 +265,11 @@ class AIPromptService:
             ============================================================
             ⚙️ CONFIGURAÇÕES RECOMENDADAS (para geração)
 
-            - temperature: 0.7  
-            - top_p: 0.9  
-            - max_tokens: 2000  
-            - presence_penalty: 0.2  
-            - frequency_penalty: 0.1  
+            - temperature: 0.7
+            - top_p: 0.9
+            - max_tokens: 2000
+            - presence_penalty: 0.2
+            - frequency_penalty: 0.1
 
             (Essas configurações ajudam a gerar textos criativos,
             mas ainda assim baseados em dados verificados.)
@@ -313,6 +317,8 @@ class AIPromptService:
         """Prompt for semantic analysis adapted to creator profile."""
         profile_data = get_creator_profile_data(self.user)
 
+        formatted_analysis = format_semantic_analysis_output(semantic_analysis)
+
         return [
             """
               Você é um Diretor de Arte Sênior de Inteligência Artificial. Sua tarefa é fundir uma análise semântica de conteúdo com um perfil de marca específico, garantindo que o resultado seja uma diretriz visual coesa, priorizando **integralmente** o estilo e a paleta de cores da marca, mesmo que os temas originais sejam de naturezas diferentes (ex: Café com estilo Futurista).
@@ -320,7 +326,7 @@ class AIPromptService:
             f"""
               ### DADOS DE ENTRADA  ####
               1. ANÁLISE SEMÂNTICA (Conteúdo e Mensagem)
-              {semantic_analysis}
+              {formatted_analysis}
 
               #### 2. PERFIL DA MARCA (Estilo e Identidade)
 
