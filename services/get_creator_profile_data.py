@@ -37,7 +37,6 @@ def get_creator_profile_data(user: User) -> dict:
             profile.color_1, profile.color_2,
             profile.color_3, profile.color_4, profile.color_5
         ],
-        'desired_post_types': ['Nenhum'],
     }
 
     return profile_data

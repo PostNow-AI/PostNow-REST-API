@@ -137,7 +137,8 @@ class WeeklyContextService:
             context_json = context_result.replace(
                 'json', '', 1).strip('`').strip()
 
-            context_data = json.loads(context_json)
+            context_data = json.loads(context_json).get(
+                'contexto_pesquisado', {})
 
             client_context, created = await sync_to_async(ClientContext.objects.get_or_create)(user=user)
 

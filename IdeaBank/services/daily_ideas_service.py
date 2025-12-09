@@ -165,9 +165,9 @@ class DailyIdeasService:
             post_content_reels = f"""{post_text_reels.get('roteiro', '').strip()}\n\n\n{post_text_reels.get('legenda', '').strip()}\n\n\n{' '.join(post_text_reels.get('hashtags', []))}\n\n\n{post_text_reels.get('cta', '').strip()}
             """
 
-            await self._save_text_to_db(user, post_text_feed, post_content_feed, user_posts)
-            await self._save_text_to_db(user, post_text_stories, post_content_stories, user_posts)
-            await self._save_text_to_db(user, post_text_reels, post_content_reels, user_posts)
+            await self._save_text_to_db(user, post_text_feed, post_content_feed, user_posts, 'feed')
+            await self._save_text_to_db(user, post_text_stories, post_content_stories, user_posts, 'stories')
+            await self._save_text_to_db(user, post_text_reels, post_content_reels, user_posts, 'reels')
 
             await self._clear_user_error(user)
 
@@ -185,8 +185,7 @@ class DailyIdeasService:
                 'user_id': user_id
             }
 
-    async def _save_text_to_db(self, user: User, post_data: dict, post_content: str, user_posts: list) -> PostIdea:
-        post_type = post_data['tipo']
+    async def _save_text_to_db(self, user: User, post_data: dict, post_content: str, user_posts: list, post_type: str) -> PostIdea:
         image_url = ''
         sugestao_visual = post_data.get('sugestao_visual', '')
         if post_type == 'feed':
@@ -196,9 +195,9 @@ class DailyIdeasService:
         post = await sync_to_async(Post.objects.create)(
             user=user,
             name=post_data.get('titulo', 'Conteúdo Diário'),
-            type=post_data['tipo'],
+            type=post_type,
             further_details='',
-            include_image=True if post_data['tipo'] == 'feed' else False,
+            include_image=True if post_type == 'feed' else False,
             is_automatically_generated=True,
             is_active=False
         )
@@ -234,6 +233,7 @@ class DailyIdeasService:
 
             adapted_semantic_analysis_prompt = self.prompt_service.adapted_semantic_analysis_prompt(
                 semantic_loaded)
+
             adapted_semantic_json = self.ai_service.generate_text(
                 adapted_semantic_analysis_prompt, user)
             adapted_semantic_str = adapted_semantic_json.replace(
@@ -245,6 +245,11 @@ class DailyIdeasService:
 
             image_prompt = self.prompt_service.image_generation_prompt(
                 semantic_analysis)
+
+            # image_generated_prompt = self.ai_service.generate_text(
+            #     image_prompt, user)
+
+            # print(image_generated_prompt)
 
             image_result = self.ai_service.generate_image(image_prompt, user, types.GenerateContentConfig(
                 temperature=0.7,

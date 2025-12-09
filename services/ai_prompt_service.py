@@ -1,6 +1,5 @@
 import logging
 
-from format_semantic_analysis import format_semantic_analysis_output
 from format_weekly_context import format_weekly_context_output
 from services.get_creator_profile_data import get_creator_profile_data
 
@@ -21,67 +20,87 @@ class AIPromptService:
 
         return [
             """
-            Você é um analista de mercado especializado em marketing digital e pesquisa competitiva. Sua função é coletar informações atualizadas e factuais sobre empresas, setores e públicos, para gerar um contexto confiável usado na criação de conteúdo personalizado. Sempre que possível, baseie suas respostas em fontes verificáveis encontradas na internet. Se uma informação não estiver disponível, diga explicitamente 'não encontrado' ou 'sem dados disponíveis' — nunca invente ou suponha dados.
-            """,
+            Você é um analista de mercado especializado em marketing digital e pesquisa competitiva. Sua função é coletar informações atualizadas e factuais sobre empresas, setores e públicos, para gerar um contexto confiável usado na criação de conteúdo personalizado. Sempre que possível, baseie suas respostas em fontes verificáveis encontradas na internet. Se uma informação não estiver disponível, diga explicitamente 'não encontrado' ou 'sem dados disponíveis' — nunca invente ou suponha dados.            """,
             f"""
-            A seguir estão as informações coletadas no onboarding da empresa:
+            🏢 DADOS DO ONBOARDING DA EMPRESA
             - Nome da empresa: {profile_data['business_name']}
+            - Site da empresa: {profile_data['business_website']}
+            - Nome da empresa: {profile_data['business_website']}
+
             - Descrição do negócio: {profile_data['business_description']}
             - Setor / nicho de mercado: {profile_data['specialization']}
             - Localização principal: {profile_data['business_location']}
-            - Público-alvo: {profile_data['target_audience']}, interesses em {profile_data['target_interests']}
+            - Público-alvo: {profile_data['target_audience']}
+            - Interesses do público: {profile_data['target_interests']}
             - Concorrentes conhecidos: {profile_data['main_competitors']}
             - Perfis de referência: {profile_data['reference_profiles']}
 
-            Com base nessas informações, realize uma pesquisa online (via web.search) e elabore um **relatório factual e sintetizado**, retornando apenas dados verificáveis. Inclua links das fontes quando possível.
+            ============================================================
+            📌 TAREFA
+            Realizar pesquisa online (via web.search) e gerar um
+            **relatório factual, sintetizado e confiável**, com links das fontes.
+            ============================================================
+            ⚠️ INSTRUÇÕES RÍGIDAS
+            1. Não fazer inferências ou suposições sem fonte real.
+            2. Citar fontes em cada seção (preferir oficiais / mercado).
+            3. Se algo não for encontrado → escrever: "sem dados disponíveis".
+            4. Priorizar fontes brasileiras se a localização for {profile_data['business_location']} (BR).
+            5. Manter linguagem neutra, objetiva e sem opiniões.
 
-            ---## INSTRUÇÕES RÍGIDAS
+            ============================================================
 
-            1. Não faça inferências, previsões ou generalizações sem base em fontes reais.
-            2. Cite as fontes em cada seção, preferindo domínios oficiais, publicações de mercado ou notícias recentes.
-            3. Se alguma informação não puder ser encontrada, escreva: "sem dados disponíveis".
-            4. Priorize fontes brasileiras se {profile_data['business_location']} for no Brasil; caso contrário, use fontes regionais relevantes.
-            5. Mantenha linguagem neutra e objetiva, evitando opiniões ou suposições.
-
-            ---## ESTRUTURA DE SAÍDA (JSON)
+            📤 ESTRUTURA DE SAÍDA (JSON)
+            O resultado deve seguir EXATAMENTE este formato:
 
             {{
-                "mercado": {{
-                  "panorama": "Resumo factual do setor com dados e referências.",
-                  "tendencias": ["Tendência 1", "Tendência 2"],
-                  "desafios": ["Desafio 1", "Desafio 2"],
-                  "fontes": ["URL 1", "URL 2"]
-                }},
-                "concorrencia": {{
-                  "principais": ["Concorrente 1", "Concorrente 2"],
-                  "estrategias": "Síntese factual das abordagens observadas.",
-                  "oportunidades": "Possíveis diferenciais com base nos fatos.",
-                  "fontes": ["URL 1", "URL 2"]
-                }},
-                "publico": {{
-                  "perfil": "Descrição factual do público baseada em pesquisas.",
-                  "comportamento_online": "Principais hábitos e plataformas com dados reais.",
-                  "interesses": ["Interesse 1", "Interesse 2"],
-                  "fontes": ["URL 1", "URL 2"]
-                }},
-                "tendencias": {{
-                  "temas_populares": ["Tema 1", "Tema 2"],
-                  "hashtags": ["#hashtag1", "#hashtag2"],
-                  "palavras_chave": ["keyword1", "keyword2"],
-                  "fontes": ["URL 1", "URL 2"]
-                }},
-                "sazonalidade": {{
-                  "datas_relevantes": ["Data 1", "Data 2"],
-                  "eventos_locais": ["Evento 1", "Evento 2"],
-                  "fontes": ["URL 1", "URL 2"]
-                }},
-                "marca": {{
-                  "presenca_online": "Resumo factual das aparições online.",
-                  "reputacao": "Sentimento geral encontrado em menções ou avaliações.",
-                  "tom_comunicacao_atual": "Descrição objetiva do estilo de comunicação.",
-                  "fontes": ["URL 1", "URL 2"]
+            "contexto_pesquisado":
+              "mercado": {{
+                "panorama": "Resumo factual do setor com dados e referências.",
+                "tendencias": ["Tendência 1", "Tendência 2"],
+                "desafios": ["Desafio 1", "Desafio 2"],
+                "fontes": ["URL 1", "URL 2"]
+              }},
+
+              "concorrencia": {{
+                "principais": ["Concorrente 1", "Concorrente 2"],
+                "estrategias": "Síntese factual das abordagens observadas.",
+                "oportunidades": "Possíveis diferenciais com base nos fatos.",
+                "fontes": ["URL 1", "URL 2"]
+              }},
+
+              "publico": {{
+                "perfil": "Descrição factual do público baseada em pesquisas.",
+                "comportamento_online": "Principais hábitos e plataformas.",
+                "interesses": ["Interesse 1", "Interesse 2"],
+                "fontes": ["URL 1", "URL 2"]
+              }},
+
+              "tendencias": {{
+                "temas_populares": ["Tema 1", "Tema 2"],
+                "hashtags": ["#hashtag1", "#hashtag2"],
+                "palavras_chave": ["keyword1", "keyword2"],
+                "fontes": ["URL 1", "URL 2"]
+              }},
+
+              "sazonalidade": {{
+                "datas_relevantes": ["Data 1", "Data 2"],
+                "eventos_locais": ["Evento 1", "Evento 2"],
+                "fontes": ["URL 1", "URL 2"]
+              }},          
+
+              "marca": {{
+                "presenca_online": "Resumo factual das aparições online.",
+                "reputacao": "Sentimento geral encontrado.",
+                "tom_comunicacao_atual": "Descrição objetiva do tom atual.",
+                "fontes": ["URL 1", "URL 2"]
               }}
             }}
+            ============================================================
+
+            📝 OBSERVAÇÕES FINAIS
+            Geração deve ser 100% factual, objetiva e baseada em fontes.
+            ============================================================
+
             """]
 
     def build_content_prompts(self, context: dict, posts_quantity: str) -> dict:
@@ -168,68 +187,82 @@ class AIPromptService:
             f"""
             ============================================================
             📊 CONTEXTO PESQUISADO (dados externos e verificados)
-            → INPUT: {formatted_context}
+
+            → INPUT: 
+            {formatted_context}
+            
             ============================================================
 
             🏢 INFORMAÇÕES DA EMPRESA (dados internos do onboarding)
 
             - Nome: {profile_data['business_name']}
             - Descrição: {profile_data['business_description']}
-            - Setor / nicho: {profile_data['specialization']}
-            - Propósito: {profile_data['business_purpose']}
+            - Site da empresa: {profile_data['business_website']}
+            - Setor / nicho de mercado: {profile_data['specialization']}
+            - Propósito da empresa: {profile_data['business_purpose']}
             - Valores e personalidade: {profile_data['brand_personality']}
             - Tom de voz: {profile_data['voice_tone']}
             - Público-alvo: {profile_data['target_audience']}
             - Interesses do Público: {profile_data['target_interests']}
             - Produtos ou serviços prioritários: {profile_data['products_services']}
+            
             ============================================================
             📌 TAREFA PRINCIPAL
 
             Criar **3 posts para o Instagram**, combinando:
-            ✔ dados da empresa
-            ✔ contexto pesquisado
-            ✔ tom de voz e objetivosOs 3 posts devem ser:- 1 Post para Feed (post_text_feed)- 1 Post para Stories (post_text_stories)- 1 Post para Reels (post_text_reels)
+              ✔ dados da empresa  
+              ✔ contexto pesquisado  
+              ✔ tom de voz e objetivosOs 3 posts devem ser:
+              - 1 Post para Feed (post_text_feed)- 1 Post para Stories (post_text_stories)- 1 Post para Reels (post_text_reels)
+              - 1 Post para Stories (post_text_stories)
+              - 1 Post para Reels (post_text_reels)
 
             O “post_text_feed” deve incluir:
 
             1. **Título curto e atrativo**
-              - máximo 6 palavras
-              - alinhado ao tom da marca
+              - Entre 2 e 5 palavras  
+              - Alinhado ao tom da marca
+              - Deve aparecer escrito na imagem
 
             2. **Legenda completa**
-              - Baseada apenas em dados confirmados
+              - Baseada nos dados de contexto pesquisado, crie uma legenda criativa para o post
               - Ignorar itens sem dados disponíveis
-              - Pode citar fontes reais quando relevante
+              - Limite máximo de 600 caracteres
+              - Pode citar fontes reais quando relevante 
 
             3. **Sugestão visual**
-              - Descrição da imagem, layout, estilo
-              - Coerente com a identidade visual
-              - Adicionar “Título do post” à “sugestão visual”  é obrigado
-              - Adicionar “Sub Título do post” à sugestão visual  é facultativo. Você pode escolher de acordo com o conceito e estética desejados
+              - Descrição da imagem, layout, estilo  
+              - Coerente com o propósito e valores da empresa.
+              - Adicionar “Título do post” à “sugestão visual” é obrigatório       
+              - Adicionar “Sub Título do post” à sugestão visual é facultativo. Você pode escolher de acordo com o conceito e estética desejados
               - Adicionar “Chamada para ação” à sugestão visual é facultativo. Você pode escolher de acordo com o conceito e estética desejados.
-              - Nunca adicione o texto de “Texto completo da legenda” à sugestão visual.
+              - Nunca adicione o texto de “legenda completa” à sugestão visual.
               - Nunca adicione o texto de “Hashtags” à sugestão visual.
 
-            4. **Hashtags recomendadas**, combinando:
-              - tendências verificadas: {context['tendencies_popular_themes']}
+            4. **Hashtags recomendadas**:
+              - Adicione as hashtags de tendências verificadas: {', '.join(context['tendencies_hashtags'])}
               - Não criar hashtags inventadas
 
             5. **CTA (chamada para ação)**
-              - coerente com o objetivo: {profile_data['business_purpose']}
+              - coerente com o conteúdo do post
 
-            O “post_text_stories” deve incluir:- Roteiro diário para geração de stories baseados no contexto pesquisado.
+            O “post_text_stories” deve incluir:
+            - Roteiro diário para geração de stories baseados no contexto pesquisado.
 
-            O “post_text_reels” deve incluir:- Roteiro diário para geração de um video de reels baseados no contexto pesquisado.
+            O “post_text_reels” deve incluir:
+            - Roteiro diário para geração de um video de reels baseados no contexto pesquisado.
+            - Roteiro deve ser escrito baseado no método de criação de conteúdo AIDA.
 
             ============================================================
-                🧭 DIRETRIZES DE QUALIDADE E CONFIABILIDADE
+            🧭 DIRETRIZES DE QUALIDADE E CONFIABILIDADE
 
-                - Não inventar estatísticas, datas ou referências.
-                - Linguagem natural, persuasiva e compatível com {{tom_voz}}.
-                - Se faltar dados → focar na proposta de valor.
-                - Storytelling só quando houver base real.
-                - Nunca mencionar “sem dados disponíveis” no texto final.
-                - Conteúdo deve soar autêntico e profissional.
+            - Não inventar estatísticas, datas ou referências.  
+            - Linguagem natural, persuasiva e compatível com {profile_data['voice_tone']}.  
+            - Se faltar dados → focar na proposta de valor.  
+            - Storytelling só quando houver base real.  
+            - Nunca mencionar “sem dados disponíveis” no texto final.  
+            - Conteúdo deve soar autêntico e profissional.  
+
 
             ============================================================
 
@@ -237,44 +270,22 @@ class AIPromptService:
 
             {{
               "post_text_feed": {{
-                "titulo": "Título do post",
+                "titulo": "Título do post",        
                 "sub_titulo": "Sub Título do post",
-                "tipo": "feed",
                 "legenda": "Texto completo da legenda",
                 "sugestao_visual": "Descrição da imagem ou layout",
                 "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
                 "cta": "Chamada para ação"
-              }}
+              }},      
               "post_text_stories": {{
-                "titulo": "Título do post",
-                "tipo": "stories",
-                "sub_titulo": "Sub Título do post",
-                "cta": "Chamada para ação",
-                "roteiro": "Texto completo do roteiro para stories"
-              }}
+                "titulo": "Igual ao título do feed",        
+                "roteiro": "Roteiro do Stories”
+              }},
               "post_text_reels": {{
-                "titulo": "Título do post",
-                "tipo": "reels",
-                "sub_titulo": "Sub Título do post",
-                "legenda": "Texto completo da legenda",
-                "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
-                "cta": "Chamada para ação"
-                "roteiro": "Texto completo do roteiro para reels"
+                "titulo": "Igual ao título do feed",
+                "roteiro": "Roteiro do Reels”
               }}
             }}
-            ============================================================
-            ⚙️ CONFIGURAÇÕES RECOMENDADAS (para geração)
-
-            - temperature: 0.7
-            - top_p: 0.9
-            - max_tokens: 2000
-            - presence_penalty: 0.2
-            - frequency_penalty: 0.1
-
-            (Essas configurações ajudam a gerar textos criativos,
-            mas ainda assim baseados em dados verificados.)
-
-            ============================================================
 
           """
         ]
@@ -317,32 +328,52 @@ class AIPromptService:
         """Prompt for semantic analysis adapted to creator profile."""
         profile_data = get_creator_profile_data(self.user)
 
-        formatted_analysis = format_semantic_analysis_output(semantic_analysis)
-
         return [
             """
               Você é um Diretor de Arte Sênior de Inteligência Artificial. Sua tarefa é fundir uma análise semântica de conteúdo com um perfil de marca específico, garantindo que o resultado seja uma diretriz visual coesa, priorizando **integralmente** o estilo e a paleta de cores da marca, mesmo que os temas originais sejam de naturezas diferentes (ex: Café com estilo Futurista).
             """,
             f"""
-              ### DADOS DE ENTRADA  ####
-              1. ANÁLISE SEMÂNTICA (Conteúdo e Mensagem)
-              {formatted_analysis}
+              ### DADOS DE ENTRADA ####
 
-              #### 2. PERFIL DA MARCA (Estilo e Identidade)
+              1. PERSONALIDADE DA MARCA (Emoções)
+              {profile_data['brand_personality']}
 
-              - Tom de voz: {profile_data['voice_tone']}
-              - Estilo Visual: {profile_data['visual_style']}
-              - Cores da Marca: {profile_data['color_palette']}
+              2. ANÁLISE SEMÂNTICA (Conteúdo e Mensagem
+              {semantic_analysis}
+
+              3. PERFIL DA MARCA (Estilo e Identidade)
+
+              - Cores da Marca:
+                {profile_data['color_palette']} - podem ser usadas variações mais escuras, mais claras e gradientes baseadas nas cores da marca.
+              - Estilo visual: 
+                {profile_data['visual_style']}
 
 
               ### INSTRUÇÕES PARA ADAPTAÇÃO
-              1.  **Prioridade Absoluta:** O resultado final deve priorizar o **"Estilo Visual"** e as **"Cores da Marca"** definidos no `brand_profile`.
-              2.  **Mapeamento Visual:** Adapte os `objetos_relevantes` e o `contexto_visual_sugerido` da análise semântica para o `Estilo Visual` da marca. Por exemplo, se o tema é 'natureza' e o estilo é '3D Futurista', a natureza deve ser renderizada em 3D, com brilhos e linhas geométricas.
-              3.  **Mapeamento de Emoções:** Use a `Personalidade da Marca` para refinar a `ação_sugerida` e as `emoções_associadas`. (Ex: Uma marca 'educadora' deve ter personagens em postura de clareza e acolhimento).
-              4.  **Paleta de Cores:** Substitua os `tons_de_cor_sugeridos` originais pelas **Cores da Marca** fornecidas. Use as cores da marca para destaques, iluminação e elementos de fundo, mantendo a consistência.
-              5.  **Geração:** Gere o novo JSON final com a estrutura `analise_semantica` abaixo, refletindo as alterações e a priorização do `brand_profile`.
+              1. **Prioridade Absoluta:**  
+                O resultado final deve priorizar o **"Estilo Visual"** e as **"Cores da Marca"**.
 
-              ### SAÍDA REQUERIDA (NOVO JSON ADAPTADO)
+              2. **Mapeamento Visual:**  
+                Adapte os `objetos_relevantes` e o `contexto_visual_sugerido` da análise semântica 
+                para o `Estilo Visual` da marca.  
+                Exemplo: se o tema é *natureza* e o estilo é *3D Futurista*, 
+                a natureza deve ser renderizada em 3D, com brilhos e linhas geométricas.
+
+              3. **Mapeamento de Emoções:**  
+                Use a `Personalidade da Marca` para refinar a `ação_sugerida` e as `emoções_associadas`.  
+                Exemplo: uma marca *educadora* deve ter personagens em postura de clareza e acolhimento.
+
+              4. **Paleta de Cores:**  
+                Substitua os `tons_de_cor_sugeridos` originais pelas **Cores da Marca**.  
+                Utilize as cores da marca para destaques, iluminação e elementos de fundo.
+
+              5. **Geração:**  
+                Gere o novo JSON final com a estrutura `analise_semantica_adaptada` abaixo, 
+                refletindo as adaptações e a priorização do `Perfil da Marca`.
+
+
+
+              ### SAÍDA REQUERIDA (APENAS RETORNE O NOVO JSON ADAPTADO, NADA MAIS)
               {{
                 "analise_semantica": {{
                     "tema_principal": "[Tema principal adaptado ao contexto da marca]",
@@ -365,34 +396,23 @@ class AIPromptService:
         profile_data = get_creator_profile_data(self.user)
 
         return [
-            '''
-          Você deve gerar uma imagem, combinando estilo visual, análise semântica e diretrizes da marca
-          ''',
             f"""
           Crie uma imagem seguindo o estilo e contexto descritos abaixo.
 
-          "estilo_visual": {{
-            "tipo_estilo": "{profile_data['visual_style'].split(' - ')[0] if profile_data['visual_style'] else ''}",
-            "descricao_completa": "{profile_data['visual_style'].split(' - ')[1] if profile_data['visual_style'] else ''}"
-          }},
-
-
-          "contexto_e_conteudo": {{
-            "contexto_visual_sugerido": "{semantic_analysis['contexto_visual_sugerido']}",
-            "elementos_relevantes": "{', '.join(semantic_analysis['objetos_relevantes'])}",
-            "tema_principal_do_post": "{semantic_analysis['tema_principal']}",
-            "marca": "{profile_data['business_name']}",
-            "paleta_de_cor_da_marca": "{profile_data['color_palette']}"
-          }},
-
-          "emocao_e_estetica": {{
-            "emocoes_associadas": "{', '.join(semantic_analysis['emoções_associadas'])}",
-            "sensacao_geral": "{semantic_analysis['sensação_geral']}",
-            "tons_de_cor_sugeridos": "{', '.join(semantic_analysis['tons_de_cor_sugeridos']) if semantic_analysis['tons_de_cor_sugeridos'] else profile_data['color_palette']}"
-          }},
+          - Estilo visual:
+            - Tipo estilo: {profile_data['visual_style'].split(' - ')[0] if profile_data['visual_style'] else ''},
+            - Descrição completa: {profile_data['visual_style'].split(' - ')[1] if profile_data['visual_style'] else ''},
+          - Contexto e conteudo:
+            - Contexto visual sugerido: {semantic_analysis['contexto_visual_sugerido']},
+            - Elementos relevantes: {', '.join(semantic_analysis['objetos_relevantes'])},
+            - Tema principal do post: {semantic_analysis['tema_principal']},
+          - Emoção e estética:
+            - Emoções associadas: {', '.join(semantic_analysis['emoções_associadas'])},
+            - Sensação geral: {semantic_analysis['sensação_geral']},
+            - Tons de cor sugeridos: {', '.join(semantic_analysis['tons_de_cor_sugeridos'])}
           
-          "restricoes": [
-            "NÃO gerar ou adicionar logomarcas."
-          ],
+          - Restricoes:
+            - NÃO gerar ou adicionar logomarca a não ser que seja anexada pelo usuário
+            - Textos renderizados na imagem devem sempre ser escritos em português do Brasil (PT-BR)
         """
         ]
