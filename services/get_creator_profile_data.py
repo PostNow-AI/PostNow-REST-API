@@ -42,10 +42,10 @@ def get_creator_profile_data(user: User) -> dict:
     return profile_data
 
 
-def get_random_visual_style(profile: CreatorProfile, user: User) -> dict:
+def get_random_visual_style(profile: CreatorProfile, user: User) -> str:
     """Randomly select and fetch one visual style from the user's visual_style_ids list."""
     if not profile.visual_style_ids or len(profile.visual_style_ids) == 0:
-        return {"name": None, "description": None}
+        return ""
 
     random_style_id = random.choice(profile.visual_style_ids)
 
@@ -56,4 +56,4 @@ def get_random_visual_style(profile: CreatorProfile, user: User) -> dict:
     except VisualStylePreference.DoesNotExist:
         logger.warning(
             f"VisualStylePreference with id {random_style_id} not found for user {user.id if user else 'unknown'}")
-        return {"name": None, "description": None}
+        return ""

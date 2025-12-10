@@ -346,7 +346,7 @@ class AIPromptService:
               - Cores da Marca:
                 {profile_data['color_palette']} - podem ser usadas variações mais escuras, mais claras e gradientes baseadas nas cores da marca.
               - Estilo visual: 
-                {profile_data['visual_style']}
+                {str(profile_data['visual_style']) if profile_data.get('visual_style') else 'Não definido'}
 
 
               ### INSTRUÇÕES PARA ADAPTAÇÃO
@@ -395,13 +395,34 @@ class AIPromptService:
         """Prompt for AI image generation based on semantic analysis."""
         profile_data = get_creator_profile_data(self.user)
 
+        def get_visual_style_info():
+            visual_style = profile_data.get('visual_style', '')
+            if isinstance(visual_style, str) and ' - ' in visual_style:
+                parts = visual_style.split(' - ', 1)
+                return {
+                    'tipo_estilo': parts[0],
+                    'descricao_completa': parts[1] if len(parts) > 1 else ''
+                }
+            elif isinstance(visual_style, dict):
+                return {
+                    'tipo_estilo': visual_style.get('tipo_estilo', ''),
+                    'descricao_completa': visual_style.get('descricao_completa', '')
+                }
+            else:
+                return {
+                    'tipo_estilo': str(visual_style) if visual_style else '',
+                    'descricao_completa': ''
+                }
+
+        visual_style_info = get_visual_style_info()
+
         return [
             f"""
           Crie uma imagem seguindo o estilo e contexto descritos abaixo.
 
           - Estilo visual:
-            - Tipo estilo: {profile_data['visual_style'].split(' - ')[0] if profile_data['visual_style'] else ''},
-            - Descrição completa: {profile_data['visual_style'].split(' - ')[1] if profile_data['visual_style'] else ''},
+            - Tipo estilo: {visual_style_info['tipo_estilo']},
+            - Descrição completa: {visual_style_info['descricao_completa']},
           - Contexto e conteudo:
             - Contexto visual sugerido: {semantic_analysis['contexto_visual_sugerido']},
             - Elementos relevantes: {', '.join(semantic_analysis['objetos_relevantes'])},
@@ -410,7 +431,7 @@ class AIPromptService:
             - Emoções associadas: {', '.join(semantic_analysis['emoções_associadas'])},
             - Sensação geral: {semantic_analysis['sensação_geral']},
             - Tons de cor sugeridos: {', '.join(semantic_analysis['tons_de_cor_sugeridos'])}
-          
+
           - Restricoes:
             - NÃO gerar ou adicionar logomarca a não ser que seja anexada pelo usuário
             - Textos renderizados na imagem devem sempre ser escritos em português do Brasil (PT-BR)
