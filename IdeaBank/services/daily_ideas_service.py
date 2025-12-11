@@ -6,6 +6,7 @@ from asgiref.sync import sync_to_async
 from AuditSystem.services import AuditService
 from ClientContext.models import ClientContext
 from ClientContext.serializers import ClientContextSerializer
+from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
 from django.db import connection
 from django.utils import timezone
@@ -220,6 +221,11 @@ class DailyIdeasService:
         """AI service call to generate image for feed post."""
         # TODO: Fix image gen config to better one
         try:
+            user_logo = CreatorProfile.objects.filter(user=user).first().logo
+
+            if user_logo and "data:image/" in user_logo and ";base64," in user_logo:
+                user_logo = user_logo.split(",")[1]
+
             image_url = ''
             self.prompt_service.set_user(user)
 
@@ -251,7 +257,7 @@ class DailyIdeasService:
 
             # print(image_generated_prompt)
 
-            image_result = self.ai_service.generate_image(image_prompt, user, types.GenerateContentConfig(
+            image_result = self.ai_service.generate_image(image_prompt, user_logo, user, types.GenerateContentConfig(
                 temperature=0.7,
                 top_p=0.9,
                 response_modalities=[

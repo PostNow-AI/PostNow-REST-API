@@ -668,7 +668,7 @@ def vercel_cron_daily_content_generation(request):
     try:
         # Get batch number from query params (default to 1)
         batch_number = int(request.GET.get('batch', 1))
-        batch_size = 2  # Process 2 users per batch, to avoid vercel timeouts
+        batch_size = 4  # Process 2 users per batch, to avoid vercel timeouts
 
         # Run async processing
         service = DailyIdeasService()

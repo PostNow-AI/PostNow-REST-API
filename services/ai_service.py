@@ -1,3 +1,4 @@
+import base64
 import os
 from time import sleep
 
@@ -96,7 +97,7 @@ class AiService:
             )
             raise Exception(f"Error generating text: {str(e)}")
 
-    def generate_image(self, prompt_list: list[str], user: User, config: types.GenerateContentConfig = None) -> str:
+    def generate_image(self, prompt_list: list[str], image_attachment: str, user: User, config: types.GenerateContentConfig = None) -> str:
         try:
             effective_config = self.generate_image_config
 
@@ -112,7 +113,7 @@ class AiService:
             model, result = self._try_model_with_retries(
                 models=self.image_models,
                 generate_function=lambda model: self._try_generate_image(
-                    model, prompt_list, effective_config),
+                    model, prompt_list, image_attachment, effective_config),
                 max_retries=3
             )
             self._deduct_credits(
@@ -204,13 +205,21 @@ class AiService:
                 response_text += part.text
         return response_text
 
-    def _try_generate_image(self, model: str, prompt_list: list[str], config: types.GenerateContentConfig) -> bytes:
+    def _try_generate_image(self, model: str, prompt_list: list[str], image_attachment: str, config: types.GenerateContentConfig) -> bytes:
         """Try generating an image using the specified model."""
         image_bytes = None
         contents = types.Content(
             role='user',
             parts=[]
         )
+
+        if image_attachment:
+            contents.parts.append(types.Part.from_bytes(
+                mime_type="image/png",
+                data=base64.b64decode(
+                    f"""{image_attachment}""",
+                ))
+            )
 
         for prompt in prompt_list:
             contents.parts.append(types.Part.from_text(text=prompt))

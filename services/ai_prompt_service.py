@@ -433,7 +433,8 @@ class AIPromptService:
             - Tons de cor sugeridos: {', '.join(semantic_analysis['tons_de_cor_sugeridos'])}
 
           - Restricoes:
-            - NÃO gerar ou adicionar logomarca a não ser que seja anexada pelo usuário
+            - Caso uma logomarca seja anexada, INCLUA a logomarca na imagem de forma harmoniosa e integrada ao design
+            - Caso uma logomarca não seja anexada, NÃO gerar ou adicionar logomarca
             - Textos renderizados na imagem devem sempre ser escritos em português do Brasil (PT-BR)
         """
         ]
