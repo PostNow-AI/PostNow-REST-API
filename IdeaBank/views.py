@@ -951,7 +951,8 @@ def manual_trigger_retry_failed(request):
 def admin_fetch_all_daily_posts(request):
     """Admin endpoint to fetch all daily posts for all users."""
     try:
-        result = DailyPostAmountService.get_daily_post_amounts()
+        date = request.GET.get('date', None)
+        result = DailyPostAmountService.get_daily_post_amounts(date=date)
 
         return JsonResponse(result, status=200)
     except Exception as e:
