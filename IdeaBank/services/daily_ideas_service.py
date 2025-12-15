@@ -167,7 +167,7 @@ class DailyIdeasService:
             """
 
             await self._save_text_to_db(user, post_text_feed, post_content_feed, user_posts, 'feed')
-            await self._save_text_to_db(user, post_text_stories, post_content_stories, user_posts, 'stories')
+            await self._save_text_to_db(user, post_text_stories, post_content_stories, user_posts, 'story')
             await self._save_text_to_db(user, post_text_reels, post_content_reels, user_posts, 'reels')
 
             await self._clear_user_error(user)
