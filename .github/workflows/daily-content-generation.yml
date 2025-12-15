@@ -61,22 +61,21 @@ jobs:
             "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/daily-content-generation/?batch=${{ matrix.batch }}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            --max-time 800 \
+            --max-time 1200 \
             --retry 3 \
             --retry-delay 10 \
             -w "\nHTTP Status: %{http_code}" \
             -s -S)
-          
+
           echo "$RESPONSE"
-          
+
           # Extract HTTP status code
           HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP Status:" | awk '{print $3}')
-          
+
           # Check if successful (2xx status codes)
           if [[ "$HTTP_CODE" =~ ^2 ]]; then
             echo "Batch ${{ matrix.batch }} completed successfully"
             exit 0
           else
             echo "Batch ${{ matrix.batch }} failed with status $HTTP_CODE"
-            exit 1
-          fi
+            exit
