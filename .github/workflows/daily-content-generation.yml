@@ -78,4 +78,5 @@ jobs:
             exit 0
           else
             echo "Batch ${{ matrix.batch }} failed with status $HTTP_CODE"
-            exit
+            exit 1
+          fi
