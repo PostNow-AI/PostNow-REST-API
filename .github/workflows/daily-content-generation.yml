@@ -50,7 +50,7 @@ jobs:
       - name: Wait for staggered execution
         run: |
           # Stagger the batches by 5 minutes each
-          DELAY=$(( (${{ matrix.batch }} - 1) * 300 ))
+          DELAY=$(( (${{ matrix.batch }} - 1) * 800 ))
           echo "Waiting $DELAY seconds before executing batch ${{ matrix.batch }}"
           sleep $DELAY
 
