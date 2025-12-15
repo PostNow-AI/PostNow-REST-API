@@ -3,14 +3,15 @@ import logging
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
-from AuditSystem.services import AuditService
-from ClientContext.models import ClientContext
-from ClientContext.serializers import ClientContextSerializer
-from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
 from django.db import connection
 from django.utils import timezone
 from google.genai import types
+
+from AuditSystem.services import AuditService
+from ClientContext.models import ClientContext
+from ClientContext.serializers import ClientContextSerializer
+from CreatorProfile.models import CreatorProfile
 from IdeaBank.models import Post, PostIdea
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
@@ -31,29 +32,53 @@ class DailyIdeasService:
         self.s3_service = S3Service()
 
     @sync_to_async
-    def _get_eligible_users(self, offset: int, limit: int) -> list[User]:
+    def _get_eligible_users(
+        self, offset: int, limit: int, target_week: str
+    ) -> list[dict[str, Any]]:
         """Get a batch of users eligible for weekly context generation"""
 
         if limit is None:
             return list(
                 User.objects.extra(
-                    where=["daily_generation_error IS NULL"]
-                ).filter(
-                    usersubscription__status='active',
-                    is_active=True
-                ).distinct().values('id', 'email', 'username')[offset:]
+                    where=[
+                        "daily_generation_error IS NULL",
+                        "(weekly_generation_week != %s OR weekly_generation_week IS NULL OR weekly_generation_progress < 7)",
+                    ],
+                    params=[target_week],
+                )
+                .filter(usersubscription__status="active", is_active=True)
+                .distinct()
+                .values(
+                    "id",
+                    "email",
+                    "username",
+                    "weekly_generation_progress",
+                    "weekly_generation_week",
+                )[offset:]
             )
 
         return list(
             User.objects.extra(
-                where=["daily_generation_error IS NULL"]
-            ).filter(
-                usersubscription__status='active',
-                is_active=True
-            ).distinct().values('id', 'email', 'username')[offset:offset + limit]
+                where=[
+                    "daily_generation_error IS NULL",
+                    "(weekly_generation_week != %s OR weekly_generation_week IS NULL OR weekly_generation_progress < 7)",
+                ],
+                params=[target_week],
+            )
+            .filter(usersubscription__status="active", is_active=True)
+            .distinct()
+            .values(
+                "id",
+                "email",
+                "username",
+                "weekly_generation_progress",
+                "weekly_generation_week",
+            )[offset : offset + limit]
         )
 
-    async def process_daily_ideas_for_users(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
+    async def process_daily_ideas_for_users(
+        self, batch_number: int, batch_size: int
+    ) -> Dict[str, Any]:
         """Process daily ideas generation for a batch of users"""
         start_time = timezone.now()
         offset = (batch_number - 1) * batch_size
@@ -63,159 +88,253 @@ class DailyIdeasService:
             offset = 0
             limit = None  # Process all users
 
-        eligible_users = await self._get_eligible_users(offset=offset, limit=limit)
+        # Calculate current week in format YYYY-Www (e.g., "2025-W50")
+        target_week = start_time.strftime("%Y-W%W")
+
+        eligible_users = await self._get_eligible_users(
+            offset=offset, limit=limit, target_week=target_week
+        )
         total = len(eligible_users)
 
         if total == 0:
             return {
-                'status': 'completed',
-                'processed': 0,
-                'total_users': 0,
-                'message': 'No eligible users found',
+                "status": "completed",
+                "processed": 0,
+                "total_users": 0,
+                "message": "No eligible users found",
             }
 
         try:
             results = await self.semaphore_service.process_concurrently(
-                users=eligible_users,
-                function=self._process_single_user
+                users=eligible_users, function=self.process_single_user
             )
 
-            processed_count = sum(
-                1 for r in results if r.get('status') == 'success')
-            failed_count = sum(
-                1 for r in results if r.get('status') == 'failed')
-            skipped_count = sum(
-                1 for r in results if r.get('status') == 'skipped')
+            processed_count = sum(1 for r in results if r.get("status") == "success")
+            partial_count = sum(1 for r in results if r.get("status") == "partial")
+            failed_count = sum(1 for r in results if r.get("status") == "failed")
+            skipped_count = sum(1 for r in results if r.get("status") == "skipped")
             created_posts_count = sum(
-                len(r.get('created_posts', [])) for r in results if r.get('status') == 'success'
+                len(r.get("created_posts", []))
+                for r in results
+                if r.get("status") in ["success", "partial"]
             )
 
             end_time = timezone.now()
             duration = (end_time - start_time).total_seconds()
 
             result = {
-                'status': 'completed',
-                'processed': processed_count,
-                'created_posts': created_posts_count,
-                'failed': failed_count,
-                'skipped': skipped_count,
-                'total_users': total,
-                'duration_seconds': duration,
-                'details': results,
+                "status": "completed",
+                "processed": processed_count,
+                "partial": partial_count,
+                "created_posts": created_posts_count,
+                "failed": failed_count,
+                "skipped": skipped_count,
+                "total_users": total,
+                "duration_seconds": duration,
+                "details": results,
             }
 
             return result
         except Exception as e:
             return {
-                'status': 'error',
-                'processed': 0,
-                'total_users': total,
-                'message': f'Error processing users: {str(e)}',
+                "status": "error",
+                "processed": 0,
+                "total_users": total,
+                "message": f"Error processing users: {str(e)}",
             }
 
-    async def _process_single_user(self, user_data: dict) -> Dict[str, Any]:
+    async def process_single_user(self, user_data: dict) -> Dict[str, Any]:
         """Process daily ideas generation for a single user"""
-        user_id = user_data.get('id') or user_data.get('user_id')
+        user_id = user_data.get("id") or user_data.get("user_id")
         if not user_data:
-            return {'status': 'failed', 'reason': 'no_user_data'}
+            return {"status": "failed", "reason": "no_user_data"}
         if not user_id:
-            return {'status': 'failed', 'reason': 'no_user_id', 'user_data': user_data}
+            return {"status": "failed", "reason": "no_user_id", "user_data": user_data}
 
         return await self._process_user_daily_ideas(user_id)
 
     async def _process_user_daily_ideas(self, user_id: int) -> Dict[str, Any]:
-        """Generate daily ideas to the user"""
+        """Generate daily ideas to the user - processes 2 iterations per execution"""
         user = await sync_to_async(User.objects.get)(id=user_id)
+        current_week = timezone.now().strftime("%Y-W%W")
+
         try:
-            user_posts = []
+            # Get current progress from database
             user_data = await self.user_validation_service.get_user_data(user_id)
             if not user_data:
-                return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
+                return {
+                    "status": "failed",
+                    "reason": "user_not_found",
+                    "user_id": user_id,
+                }
+
+            # Get current progress
+            progress = await sync_to_async(
+                lambda: User.objects.filter(id=user_id)
+                .values("weekly_generation_progress", "weekly_generation_week")
+                .first()
+            )()
+
+            current_progress = progress.get("weekly_generation_progress") or 0
+            stored_week = progress.get("weekly_generation_week")
+
+            # Reset progress if it's a new week
+            if stored_week != current_week:
+                current_progress = 0
+
+            # Calculate how many iterations to process (max 2, but don't exceed 7 total)
+            iterations_to_process = min(2, 7 - current_progress)
+
+            if iterations_to_process <= 0:
+                return {
+                    "status": "skipped",
+                    "reason": "weekly_content_complete",
+                    "user_id": user_id,
+                    "progress": "7/7",
+                }
 
             await sync_to_async(self.audit_service.log_daily_content_generation)(
                 user=user,
-                action='daily_content_generation_started',
-                status='info',
+                action="daily_content_generation_started",
+                status="info",
             )
 
-            validation_result = await self.user_validation_service.validate_user_eligibility(user_data)
+            validation_result = (
+                await self.user_validation_service.validate_user_eligibility(user_data)
+            )
 
-            if validation_result['status'] != 'eligible':
+            if validation_result["status"] != "eligible":
                 return {
-                    'status': 'skipped',
-                    'reason': validation_result['reason'],
-                    'user_id': user_id
+                    "status": "skipped",
+                    "reason": validation_result["reason"],
+                    "user_id": user_id,
                 }
 
-            content_result = await sync_to_async(self._generate_content_for_user)(user)
+            user_posts = []
 
-            content_json = content_result.replace(
-                'json', '', 1).strip('`').strip()
-            content_loaded = json.loads(content_json)
+            # Process iterations (up to 2 per execution)
+            for iteration in range(iterations_to_process):
+                try:
+                    content_result = await sync_to_async(
+                        self._generate_content_for_user
+                    )(user)
 
-            post_text_feed = content_loaded.get('post_text_feed')
-            post_text_stories = content_loaded.get('post_text_stories')
-            post_text_reels = content_loaded.get('post_text_reels')
+                    content_json = (
+                        content_result.replace("json", "", 1).strip("`").strip()
+                    )
+                    content_loaded = json.loads(content_json)
 
-            post_content_feed = f"""{post_text_feed.get('legenda', '').strip()}\n\n\n{' '.join(post_text_feed.get('hashtags', []))}\n\n\n{post_text_feed.get('cta', '').strip()}
-            """
+                    post_text_feed = content_loaded.get("post_text_feed")
+                    post_text_stories = content_loaded.get("post_text_stories")
+                    post_text_reels = content_loaded.get("post_text_reels")
 
-            post_content_stories = f"""{post_text_stories.get('roteiro', '').strip()}\n\n\n{' '.join(post_text_stories.get('hashtags', []))}\n\n\n{post_text_stories.get('cta', '').strip()}
-            """
+                    post_content_feed = f"""{post_text_feed.get('legenda', '').strip()}\n\n\n{' '.join(post_text_feed.get('hashtags', []))}\n\n\n{post_text_feed.get('cta', '').strip()}
+                    """
 
-            post_content_reels = f"""{post_text_reels.get('roteiro', '').strip()}\n\n\n{post_text_reels.get('legenda', '').strip()}\n\n\n{' '.join(post_text_reels.get('hashtags', []))}\n\n\n{post_text_reels.get('cta', '').strip()}
-            """
+                    post_content_stories = f"""{post_text_stories.get('roteiro', '').strip()}\n\n\n{' '.join(post_text_stories.get('hashtags', []))}\n\n\n{post_text_stories.get('cta', '').strip()}
+                    """
 
-            await self._save_text_to_db(user, post_text_feed, post_content_feed, user_posts, 'feed')
-            await self._save_text_to_db(user, post_text_stories, post_content_stories, user_posts, 'story')
-            await self._save_text_to_db(user, post_text_reels, post_content_reels, user_posts, 'reels')
+                    post_content_reels = f"""{post_text_reels.get('roteiro', '').strip()}\n\n\n{post_text_reels.get('legenda', '').strip()}\n\n\n{' '.join(post_text_reels.get('hashtags', []))}\n\n\n{post_text_reels.get('cta', '').strip()}
+                    """
+
+                    await self._save_text_to_db(
+                        user, post_text_feed, post_content_feed, user_posts, "feed"
+                    )
+                    await self._save_text_to_db(
+                        user,
+                        post_text_stories,
+                        post_content_stories,
+                        user_posts,
+                        "story",
+                    )
+                    await self._save_text_to_db(
+                        user, post_text_reels, post_content_reels, user_posts, "reels"
+                    )
+
+                    # Update progress after successful iteration
+                    current_progress += 1
+                    await self._update_user_progress(
+                        user, current_progress, current_week
+                    )
+
+                except Exception as iteration_error:
+                    # Log iteration failure but continue if we have at least one success
+                    await sync_to_async(
+                        self.audit_service.log_daily_content_generation
+                    )(
+                        user=user,
+                        action="iteration_failed",
+                        details={
+                            "error": str(iteration_error),
+                            "iteration": iteration + 1,
+                        },
+                    )
+                    if iteration == 0:
+                        # If first iteration fails, raise the error
+                        raise iteration_error
+                    # If second iteration fails, we still have one success
+                    break
 
             await self._clear_user_error(user)
 
-            return {'status': 'success', 'user_id': user_id, 'created_posts': user_posts}
+            # Determine final status
+            final_status = "success" if current_progress >= 7 else "partial"
+
+            return {
+                "status": final_status,
+                "user_id": user_id,
+                "created_posts": user_posts,
+                "progress": f"{current_progress}/7",
+            }
         except Exception as e:
             await self._store_user_error(user, str(e))
             await sync_to_async(self.audit_service.log_daily_content_generation)(
                 user=user,
-                action='daily_content_generation_failed',
-                details={'error': str(e)}
+                action="daily_content_generation_failed",
+                details={"error": str(e)},
             )
-            return {
-                'status': 'failed',
-                'error': str(e),
-                'user_id': user_id
-            }
+            return {"status": "failed", "error": str(e), "user_id": user_id}
 
-    async def _save_text_to_db(self, user: User, post_data: dict, post_content: str, user_posts: list, post_type: str) -> PostIdea:
-        image_url = ''
-        sugestao_visual = post_data.get('sugestao_visual', '')
-        if post_type == 'feed':
+    async def _save_text_to_db(
+        self,
+        user: User,
+        post_data: dict,
+        post_content: str,
+        user_posts: list,
+        post_type: str,
+    ) -> None:
+        image_url = ""
+        sugestao_visual = post_data.get("sugestao_visual", "")
+        if post_type == "feed":
             image_url = await sync_to_async(self._generate_image_for_feed_post)(
-                user, post_content)
+                user, post_content
+            )
 
         post = await sync_to_async(Post.objects.create)(
             user=user,
-            name=post_data.get('titulo', 'Conteúdo Diário'),
+            name=post_data.get("titulo", "Conteúdo Diário"),
             type=post_type,
-            further_details='',
-            include_image=True if post_type == 'feed' else False,
+            further_details="",
+            include_image=True if post_type == "feed" else False,
             is_automatically_generated=True,
-            is_active=False
+            is_active=False,
         )
 
         post_idea = await sync_to_async(PostIdea.objects.create)(
             post=post,
             content=post_content,
             image_url=image_url,
-            image_description=sugestao_visual
+            image_description=sugestao_visual,
         )
 
-        user_posts.append({
-            'post_id': post_idea.id,
-            'post_idea_id': post_idea.id,
-            'type': post.type,
-            'title': post.name
-        })
+        user_posts.append(
+            {
+                "post_id": post_idea.id,
+                "post_idea_id": post_idea.id,
+                "type": post.type,
+                "title": post.name,
+            }
+        )
 
     def _generate_image_for_feed_post(self, user: User, post_content: str) -> str:
         """AI service call to generate image for feed post."""
@@ -226,60 +345,63 @@ class DailyIdeasService:
             if user_logo and "data:image/" in user_logo and ";base64," in user_logo:
                 user_logo = user_logo.split(",")[1]
 
-            image_url = ''
+            image_url = ""
             self.prompt_service.set_user(user)
 
-            semantic_prompt = self.prompt_service.semantic_analysis_prompt(
-                post_content)
-            semantic_result = self.ai_service.generate_text(
-                semantic_prompt, user)
-            semantic_json = semantic_result.replace(
-                'json', '', 1).strip('`').strip()
+            semantic_prompt = self.prompt_service.semantic_analysis_prompt(post_content)
+            semantic_result = self.ai_service.generate_text(semantic_prompt, user)
+            semantic_json = semantic_result.replace("json", "", 1).strip("`").strip()
             semantic_loaded = json.loads(semantic_json)
 
-            adapted_semantic_analysis_prompt = self.prompt_service.adapted_semantic_analysis_prompt(
-                semantic_loaded)
+            adapted_semantic_analysis_prompt = (
+                self.prompt_service.adapted_semantic_analysis_prompt(semantic_loaded)
+            )
 
             adapted_semantic_json = self.ai_service.generate_text(
-                adapted_semantic_analysis_prompt, user)
-            adapted_semantic_str = adapted_semantic_json.replace(
-                'json', '', 1).strip('`').strip()
+                adapted_semantic_analysis_prompt, user
+            )
+            adapted_semantic_str = (
+                adapted_semantic_json.replace("json", "", 1).strip("`").strip()
+            )
             adapted_semantic_loaded = json.loads(adapted_semantic_str)
 
-            semantic_analysis = adapted_semantic_loaded.get(
-                'analise_semantica', {})
+            semantic_analysis = adapted_semantic_loaded.get("analise_semantica", {})
 
             image_prompt = self.prompt_service.image_generation_prompt(
-                semantic_analysis)
+                semantic_analysis
+            )
 
             # image_generated_prompt = self.ai_service.generate_text(
             #     image_prompt, user)
 
             # print(image_generated_prompt)
 
-            image_result = self.ai_service.generate_image(image_prompt, user_logo, user, types.GenerateContentConfig(
-                temperature=0.7,
-                top_p=0.9,
-                response_modalities=[
-                    "IMAGE",
-                ],
-                image_config=types.ImageConfig(
-                    aspect_ratio="4:5",
+            image_result = self.ai_service.generate_image(
+                image_prompt,
+                user_logo,
+                user,
+                types.GenerateContentConfig(
+                    temperature=0.7,
+                    top_p=0.9,
+                    response_modalities=[
+                        "IMAGE",
+                    ],
+                    image_config=types.ImageConfig(
+                        aspect_ratio="4:5",
+                    ),
                 ),
-            ))
+            )
 
             if not image_result:
-                image_url = ''
+                image_url = ""
             else:
-                image_url = self.s3_service.upload_image(
-                    user, image_result)
+                image_url = self.s3_service.upload_image(user, image_result)
 
             return image_url
         except Exception as e:
-            raise Exception(
-                f"Failed to generate image for user {user.id}: {str(e)}")
+            raise Exception(f"Failed to generate image for user {user.id}: {str(e)}")
 
-    def _generate_content_for_user(self, user: User) -> None:
+    def _generate_content_for_user(self, user: User) -> str:
         """AI service call to generate daily ideas for a user."""
         try:
             self.prompt_service.set_user(user)
@@ -288,32 +410,50 @@ class DailyIdeasService:
 
             context_data = serializer.data if serializer else {}
 
-            prompt = self.prompt_service.build_campaign_prompts(
-                context_data)
+            prompt = self.prompt_service.build_campaign_prompts(context_data)
 
-            content_result = self.ai_service.generate_text(prompt, user, types.GenerateContentConfig(
-                temperature=0.7,
-                top_p=0.9,
-                response_modalities=[
-                    "TEXT",
-                ],
-            ))
+            content_result = self.ai_service.generate_text(
+                prompt,
+                user,
+                types.GenerateContentConfig(
+                    temperature=0.7,
+                    top_p=0.9,
+                    response_modalities=[
+                        "TEXT",
+                    ],
+                ),
+            )
 
             return content_result
         except Exception as e:
-            raise Exception(
-                f"Failed to generate context for user {user.id}: {str(e)}")
+            raise Exception(f"Failed to generate context for user {user.id}: {str(e)}")
 
-    async def _store_user_error(self, user, error_message: str):
+    @staticmethod
+    async def _store_user_error(user, error_message: str):
         """Store error message in user model for retry processing."""
-        await sync_to_async(lambda: connection.cursor().execute(
-            "UPDATE auth_user SET daily_generation_error = %s, daily_generation_error_date = %s WHERE id = %s",
-            [error_message, timezone.now(), user.id]
-        ))()
+        await sync_to_async(
+            lambda: connection.cursor().execute(
+                "UPDATE auth_user SET daily_generation_error = %s, daily_generation_error_date = %s WHERE id = %s",
+                [error_message, timezone.now(), user.id],
+            )
+        )()
 
-    async def _clear_user_error(self, user):
+    @staticmethod
+    async def _clear_user_error(user):
         """Clear error message from user model after successful generation."""
-        await sync_to_async(lambda: connection.cursor().execute(
-            "UPDATE auth_user SET daily_generation_error = NULL, daily_generation_error_date = NULL WHERE id = %s",
-            [user.id]
-        ))()
+        await sync_to_async(
+            lambda: connection.cursor().execute(
+                "UPDATE auth_user SET daily_generation_error = NULL, daily_generation_error_date = NULL WHERE id = %s",
+                [user.id],
+            )
+        )()
+
+    @staticmethod
+    async def _update_user_progress(user, progress: int, week: str):
+        """Update user's weekly generation progress."""
+        await sync_to_async(
+            lambda: connection.cursor().execute(
+                "UPDATE auth_user SET weekly_generation_progress = %s, weekly_generation_week = %s WHERE id = %s",
+                [progress, week, user.id],
+            )
+        )()
