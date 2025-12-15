@@ -14,7 +14,7 @@ class AIPromptService:
         """Set the user for whom the prompts will be generated."""
         self.user = user
 
-    def build_context_prompts(self) -> dict:
+    def build_context_prompts(self) -> list[str]:
         """Build context prompts based on the user's creator profile."""
         profile_data = get_creator_profile_data(self.user)
 
@@ -101,9 +101,10 @@ class AIPromptService:
             Geração deve ser 100% factual, objetiva e baseada em fontes.
             ============================================================
 
-            """]
+            """,
+        ]
 
-    def build_content_prompts(self, context: dict, posts_quantity: str) -> dict:
+    def build_content_prompts(self, context: dict, posts_quantity: str) -> list[str]:
         """Build content generation prompts based on the user's creator profile."""
         profile_data = get_creator_profile_data(self.user)
 
@@ -111,7 +112,7 @@ class AIPromptService:
             """
             Você é um estrategista de conteúdo e redator de marketing digital especializado em redes sociais. Sua função é criar posts para o Instagram totalmente personalizados, usando dados reais e verificados sobre a empresa, seu público e o mercado. Se alguma informação estiver ausente ou marcada como 'sem dados disponíveis', você deve ignorar essa parte sem criar suposições. Não invente dados, tendências, números ou nomes de concorrentes. Baseie todas as decisões de conteúdo nas informações recebidas do onboarding e no contexto pesquisado, sempre respeitando o tom e propósito da marca.
             """,
-            f'''
+            f"""
             Abaixo estão as informações disponíveis:
             ---### 📊 CONTEXTO PESQUISADO (dados externos e verificados)
             {context}
@@ -172,10 +173,10 @@ class AIPromptService:
             - **frequency_penalty:** 0.1
 
             Essas configurações permitem gerar conteúdo criativo, porém sempre dentro dos limites de dados reais e verificados.
-            '''
+            """,
         ]
 
-    def build_campaign_prompts(self, context: dict) -> dict:
+    def build_campaign_prompts(self, context: dict) -> list[str]:
         """Build campaign generation prompts based on the user's creator profile."""
         profile_data = get_creator_profile_data(self.user)
 
@@ -287,10 +288,10 @@ class AIPromptService:
               }}
             }}
 
-          """
+          """,
         ]
 
-    def semantic_analysis_prompt(self, post_text: str) -> str:
+    def semantic_analysis_prompt(self, post_text: str) -> list[str]:
         """Prompt for semantic analysis of user input."""
         return [
             """
@@ -321,10 +322,10 @@ class AIPromptService:
                   "palavras_chave": []
                 }}
               }}
-            """
+            """,
         ]
 
-    def adapted_semantic_analysis_prompt(self, semantic_analysis: dict) -> str:
+    def adapted_semantic_analysis_prompt(self, semantic_analysis: dict) -> list[str]:
         """Prompt for semantic analysis adapted to creator profile."""
         profile_data = get_creator_profile_data(self.user)
 
@@ -388,30 +389,30 @@ class AIPromptService:
                     "palavras_chave": ["[Keywords que fundem tema e estilo (ex: Café 3D, Editorial Roxo)]"]
                 }}
               }}
-            """
+            """,
         ]
 
-    def image_generation_prompt(self, semantic_analysis: dict) -> str:
+    def image_generation_prompt(self, semantic_analysis: dict) -> list[str]:
         """Prompt for AI image generation based on semantic analysis."""
         profile_data = get_creator_profile_data(self.user)
 
         def get_visual_style_info():
-            visual_style = profile_data.get('visual_style', '')
-            if isinstance(visual_style, str) and ' - ' in visual_style:
-                parts = visual_style.split(' - ', 1)
+            visual_style = profile_data.get("visual_style", "")
+            if isinstance(visual_style, str) and " - " in visual_style:
+                parts = visual_style.split(" - ", 1)
                 return {
-                    'tipo_estilo': parts[0],
-                    'descricao_completa': parts[1] if len(parts) > 1 else ''
+                    "tipo_estilo": parts[0],
+                    "descricao_completa": parts[1] if len(parts) > 1 else "",
                 }
             elif isinstance(visual_style, dict):
                 return {
-                    'tipo_estilo': visual_style.get('tipo_estilo', ''),
-                    'descricao_completa': visual_style.get('descricao_completa', '')
+                    "tipo_estilo": visual_style.get("tipo_estilo", ""),
+                    "descricao_completa": visual_style.get("descricao_completa", ""),
                 }
             else:
                 return {
-                    'tipo_estilo': str(visual_style) if visual_style else '',
-                    'descricao_completa': ''
+                    "tipo_estilo": str(visual_style) if visual_style else "",
+                    "descricao_completa": "",
                 }
 
         visual_style_info = get_visual_style_info()
