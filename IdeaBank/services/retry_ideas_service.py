@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
-from django.contrib.auth.models import User
+from django.db import connection
 from django.utils import timezone
 
 from services.semaphore_service import SemaphoreService
@@ -21,46 +21,35 @@ class RetryIdeasService:
         self, offset: int, limit: int, target_week: str
     ) -> list[dict[str, Any]]:
         """Get users who have errors AND haven't completed all 7 iterations this week."""
-        if limit is None:
-            return list(
-                User.objects.extra(
-                    where=[
-                        "daily_generation_error IS NOT NULL",
-                        "(weekly_generation_week != %s OR weekly_generation_week IS NULL OR weekly_generation_progress < 7)",
-                    ],
-                    params=[target_week],
-                )
-                .filter(usersubscription__status="active", is_active=True)
-                .distinct()
-                .values(
-                    "id",
-                    "email",
-                    "username",
-                    "first_name",
-                    "weekly_generation_progress",
-                    "weekly_generation_week",
-                )[offset:]
-            )
 
-        return list(
-            User.objects.extra(
-                where=[
-                    "daily_generation_error IS NOT NULL",
-                    "(weekly_generation_week != %s OR weekly_generation_week IS NULL OR weekly_generation_progress < 7)",
-                ],
-                params=[target_week],
-            )
-            .filter(usersubscription__status="active", is_active=True)
-            .distinct()
-            .values(
-                "id",
-                "email",
-                "username",
-                "first_name",
-                "weekly_generation_progress",
-                "weekly_generation_week",
-            )[offset : offset + limit]
-        )
+        cursor = connection.cursor()
+
+        # Build SQL query with subquery for active subscriptions
+        base_query = """
+            SELECT DISTINCT u.id, u.email, u.username, u.first_name,
+                   u.weekly_generation_progress, u.weekly_generation_week
+            FROM auth_user u
+            INNER JOIN CreditSystem_usersubscription us ON us.user_id = u.id
+            WHERE u.daily_generation_error IS NOT NULL
+              AND u.is_active = 1
+              AND us.status = 'active'
+              AND (u.weekly_generation_week != %s 
+                   OR u.weekly_generation_week IS NULL 
+                   OR u.weekly_generation_progress < 7)
+        """
+
+        if limit is None:
+            # MySQL requires LIMIT when using OFFSET, use very large number for "all"
+            query = base_query + " LIMIT 999999 OFFSET %s"
+            cursor.execute(query, [target_week, offset])
+        else:
+            query = base_query + " LIMIT %s OFFSET %s"
+            cursor.execute(query, [target_week, limit, offset])
+
+        columns = [col[0] for col in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        return results
 
     async def process_daily_ideas_for_failed_users(
         self, batch_number: int, batch_size: int
@@ -89,7 +78,7 @@ class RetryIdeasService:
         try:
             results = await self.semaphore_service.process_concurrently(
                 users=eligible_users,
-                function=self.daily_ideas_service._process_single_user,
+                function=self.daily_ideas_service.process_single_user,
             )
 
             processed_count = sum(1 for r in results if r.get("status") == "success")

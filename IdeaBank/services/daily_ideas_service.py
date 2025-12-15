@@ -37,44 +37,34 @@ class DailyIdeasService:
     ) -> list[dict[str, Any]]:
         """Get a batch of users eligible for weekly context generation"""
 
-        if limit is None:
-            return list(
-                User.objects.extra(
-                    where=[
-                        "daily_generation_error IS NULL",
-                        "(weekly_generation_week != %s OR weekly_generation_week IS NULL OR weekly_generation_progress < 7)",
-                    ],
-                    params=[target_week],
-                )
-                .filter(usersubscription__status="active", is_active=True)
-                .distinct()
-                .values(
-                    "id",
-                    "email",
-                    "username",
-                    "weekly_generation_progress",
-                    "weekly_generation_week",
-                )[offset:]
-            )
+        cursor = connection.cursor()
 
-        return list(
-            User.objects.extra(
-                where=[
-                    "daily_generation_error IS NULL",
-                    "(weekly_generation_week != %s OR weekly_generation_week IS NULL OR weekly_generation_progress < 7)",
-                ],
-                params=[target_week],
-            )
-            .filter(usersubscription__status="active", is_active=True)
-            .distinct()
-            .values(
-                "id",
-                "email",
-                "username",
-                "weekly_generation_progress",
-                "weekly_generation_week",
-            )[offset : offset + limit]
-        )
+        # Build SQL query with subquery for active subscriptions
+        base_query = """
+            SELECT DISTINCT u.id, u.email, u.username, 
+                   u.weekly_generation_progress, u.weekly_generation_week
+            FROM auth_user u
+            INNER JOIN CreditSystem_usersubscription us ON us.user_id = u.id
+            WHERE u.daily_generation_error IS NULL
+              AND u.is_active = 1
+              AND us.status = 'active'
+              AND (u.weekly_generation_week != %s 
+                   OR u.weekly_generation_week IS NULL 
+                   OR u.weekly_generation_progress < 7)
+        """
+
+        if limit is None:
+            # MySQL requires LIMIT when using OFFSET, use very large number for "all"
+            query = base_query + " LIMIT 999999 OFFSET %s"
+            cursor.execute(query, [target_week, offset])
+        else:
+            query = base_query + " LIMIT %s OFFSET %s"
+            cursor.execute(query, [target_week, limit, offset])
+
+        columns = [col[0] for col in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+        return results
 
     async def process_daily_ideas_for_users(
         self, batch_number: int, batch_size: int
@@ -168,12 +158,22 @@ class DailyIdeasService:
                     "user_id": user_id,
                 }
 
-            # Get current progress
-            progress = await sync_to_async(
-                lambda: User.objects.filter(id=user_id)
-                .values("weekly_generation_progress", "weekly_generation_week")
-                .first()
-            )()
+            # Get current progress using raw SQL
+            def get_progress():
+                cursor = connection.cursor()
+                cursor.execute(
+                    "SELECT weekly_generation_progress, weekly_generation_week FROM auth_user WHERE id = %s",
+                    [user_id],
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "weekly_generation_progress": row[0],
+                        "weekly_generation_week": row[1],
+                    }
+                return {"weekly_generation_progress": 0, "weekly_generation_week": None}
+
+            progress = await sync_to_async(get_progress)()
 
             current_progress = progress.get("weekly_generation_progress") or 0
             stored_week = progress.get("weekly_generation_week")
