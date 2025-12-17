@@ -43,6 +43,7 @@ flowchart TD
   - `CreatorProfile.weekly_context_policy_override`
 - **Template do e-mail**: `ClientContext/utils/weekly_context.py`
 - **Script E2E**: `scripts/trigger_team_validation.py`
+- **Propósito + UX (visão produto)**: `docs/WEEKLY_CONTEXT_PRODUCT.md`
 
 ---
 

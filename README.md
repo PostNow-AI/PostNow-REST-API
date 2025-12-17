@@ -2,7 +2,15 @@
 
 Este repositório/branch contém a implementação e documentação do **Weekly Context**: um pipeline que pesquisa fontes recentes, gera oportunidades rankeadas com IA e envia um e-mail semanal com links válidos e sem repetição.
 
+## Propósito (por que usamos isso)
+- **Reduzir tempo de pesquisa** do usuário (pauta semanal pronta)
+- **Aumentar qualidade e confiabilidade** (guardrails de fonte + links válidos)
+- **Acelerar criação** (CTA para “Criar Post” direto no app)
+
 ## Onde está a documentação “atual” (o que usamos hoje)
+
+- **Propósito + UX + critérios de qualidade (visão produto)**  
+  `PostNow-REST-API/docs/WEEKLY_CONTEXT_PRODUCT.md`
 
 - **Políticas + Override por cliente (Admin + logs + como operar)**  
   `PostNow-REST-API/docs/WEEKLY_CONTEXT_POLICIES.md`
@@ -28,21 +36,3 @@ Este repositório/branch contém a implementação e documentação do **Weekly 
 ## Observações importantes
 
 - A documentação antiga não reflete o sistema atual do Weekly Context e foi substituída por este guia.
-
----
-
-**🚀 STATUS: REPOSITÓRIO DE DOCUMENTAÇÃO - PRONTO PARA USO**
-
-_Esta estrutura organiza toda a documentação e metodologias do projeto Sonora UI de forma clara e acessível._
-
-**📋 CHECKLIST FINAL:**
-
-- [ ] Configurar GitHub token
-- [ ] Executar script de configuração ZenHub
-- [ ] Verificar relatórios gerados
-- [ ] Configurar pipelines no ZenHub
-- [ ] Organizar issues nos sprints
-- [ ] Iniciar desenvolvimento V9.0
-- [ ] Monitorar métricas e ajustar conforme necessário
-
-**🎉 DOCUMENTAÇÃO COMPLETA - PRONTA PARA USO!**
