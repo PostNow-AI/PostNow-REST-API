@@ -1,0 +1,44 @@
+name: Retry Daily Content Generation - Failed Users
+
+on:
+  schedule:
+    - cron: "0 12 * * *" # Run once at 12:00 PM UTC (noon) - after main generation has run
+  workflow_dispatch:
+
+jobs:
+  retry-failed-users:
+    runs-on: ubuntu-latest
+    environment: Production
+    strategy:
+      matrix:
+        batch:
+          [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+          ]
+      max-parallel: 3 # Limit concurrent batches to avoid overwhelming your API
+
+    steps:
+      - name: Debug URL
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/retry-failed-users/?batch=${{ matrix.batch }}"
+      - name: Wait for staggered execution
+        run: |
+          # Stagger the batches by 5 minutes each
+          DELAY=$(( (${{ matrix.batch }} - 1) * 300 ))
+          echo "Waiting $DELAY seconds before executing batch ${{ matrix.batch }}"
+          sleep $DELAY
+      - name: Call Vercel API to retry failed users
+        run: |
+          echo "Retrying failed users from yesterday's generation, batch ${{matrix.batch}}"
+          curl -X GET \
+            "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/retry-failed-users/?batch=${{ matrix.batch }}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -w "HTTP Status: %{http_code}\n" \
+            -s
