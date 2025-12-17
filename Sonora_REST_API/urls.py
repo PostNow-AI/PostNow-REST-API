@@ -71,4 +71,7 @@ urlpatterns = [
 
     # Client Context endpoints
     path('api/v1/client-context/', include('ClientContext.urls')),
+
+    # Analytics endpoints
+    path('api/v1/analytics/', include('Analytics.urls')),
 ]

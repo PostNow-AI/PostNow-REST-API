@@ -6,6 +6,11 @@ import asyncio
 import logging
 
 from AuditSystem.services import AuditService
+from Analytics.services.image_pregen_policy import (
+    ACTION_PRE_GENERATE,
+    make_image_pregen_decision,
+)
+from Analytics.services.text_variant_policy import make_text_variant_decision
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -204,7 +209,8 @@ def generate_post_idea(request):
     try:
         # Create the post first
         post_data = serializer.validated_data
-        include_image = post_data.get('include_image', False)
+        include_image_requested = post_data.get('include_image', False)
+        include_image_generate_now = include_image_requested
 
         # Create the post
         post = Post.objects.create(user=request.user, **post_data)
@@ -222,8 +228,40 @@ def generate_post_idea(request):
             content=result['content']
         )
 
+        # Telemetria de variante de texto (base p/ bandit futuro, sem alterar comportamento)
+        try:
+            make_text_variant_decision(
+                request.user,
+                'PostIdea',
+                str(post_idea.id),
+                {
+                    'post_type': post_data.get('type'),
+                    'objective': post_data.get('objective'),
+                    'source': 'manual_generation',
+                },
+            )
+        except Exception:
+            pass
+
+        if include_image_requested:
+            try:
+                decision = make_image_pregen_decision(
+                    request.user,
+                    'PostIdea',
+                    str(post_idea.id),
+                    {
+                        'post_type': post_data.get('type'),
+                        'objective': post_data.get('objective'),
+                        'source': 'manual_generation',
+                    },
+                )
+                include_image_generate_now = decision.action == ACTION_PRE_GENERATE
+            except Exception:
+                # fallback: mantém comportamento anterior
+                include_image_generate_now = include_image_requested
+
         # Generate image if requested
-        if include_image:
+        if include_image_generate_now:
             try:
                 # Add the created post ID and post_idea ID to post_data for image generation
                 post_data_with_ids = {
@@ -273,7 +311,7 @@ def generate_post_idea(request):
                 'post_name': post.name,
                 'content_type': 'text',
                 'ai_provider': 'gemini',
-                'include_image': include_image
+                'include_image': include_image_requested
             }
         )
 
@@ -292,7 +330,7 @@ def generate_post_idea(request):
             error_message=str(e),
             details={
                 'post_data': post_data,
-                'include_image': include_image
+                'include_image': include_image_requested
             }
         )
 

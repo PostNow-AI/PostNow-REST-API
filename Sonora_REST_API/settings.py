@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'CreditSystem',
     'AuditSystem',
     'ClientContext',
+    'Analytics',
 ]
 
 SITE_ID = 3
