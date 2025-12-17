@@ -13,27 +13,30 @@ class AiService:
     def __init__(self):
         # Prioridade padrão (como antes): Gemini 3 preview primeiro.
         # Flash/lite ficam como fallback.
-        self.models = [
-            'gemini-3-pro-preview',
-            'gemini-3-pro-preview',
-            'gemini-2.5-flash',
-            'gemini-2.5-flash',
-            'gemini-2.5-flash-lite',
-            'gemini-2.5-flash-lite'
-        ]
         self.flash_models = [
             'gemini-2.0-flash', # Atualizado para 2.0 Flash que é o mais recente/rápido
             'gemini-2.0-flash-lite',
             'gemini-1.5-flash',
             'gemini-1.5-flash-8b'
         ]
+        self.models = [
+            'gemini-3-pro-preview',
+            'gemini-3-pro-preview',
+            'gemini-3-pro-preview',
+            'gemini-3-pro-preview',
+            'gemini-3-pro-preview',
+            'gemini-3-pro-preview',
+            'gemini-3-pro-preview',
+            'gemini-3-pro-preview',]
         self.image_models = [
             'gemini-3-pro-image-preview',
             'gemini-3-pro-image-preview',
-            'gemini-2.5-flash-image',
-            'gemini-2.5-flash-image',
-            'gemini-2.5-flash-image-preview',
-            'gemini-2.5-flash-image-preview',]
+            'gemini-3-pro-image-preview',
+            'gemini-3-pro-image-preview',
+            'gemini-3-pro-image-preview',
+            'gemini-3-pro-image-preview',
+            'gemini-3-pro-image-preview',
+            'gemini-3-pro-image-preview',]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
         self.client = genai.Client(api_key=self.api_key)
         self.generate_text_config = types.GenerateContentConfig(

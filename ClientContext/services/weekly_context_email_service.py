@@ -3,10 +3,11 @@ from collections import defaultdict
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
+from django.contrib.auth.models import User
+
 from ClientContext.models import ClientContext
 from ClientContext.utils.weekly_context import generate_weekly_context_email_template
-from CreatorProfile.models import CreatorProfile
-from django.contrib.auth.models import User
+from services.get_creator_profile_data import get_creator_profile_data
 from services.mailjet_service import MailjetService
 
 logger = logging.getLogger(__name__)
@@ -22,13 +23,13 @@ class WeeklyContextEmailService:
             ClientContext.objects.filter(
                 weekly_context_error=None,
             ).select_related('user').values(
-                'id', 'user__id', 'user__email', 'user__first_name', 
-                'market_panorama', 'market_tendencies', 'market_challenges', 'market_opportunities', 'market_sources', 
-                'competition_main', 'competition_strategies', 'competition_benchmark', 'competition_opportunities', 'competition_sources', 
-                'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources', 
-                'tendencies_popular_themes', 'tendencies_data', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources', 
-                'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources', 
-                'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_mentions', 'brand_sources', 
+                'id', 'user__id', 'user__email', 'user__first_name',
+                'market_panorama', 'market_tendencies', 'market_challenges', 'market_opportunities', 'market_sources',
+                'competition_main', 'competition_strategies', 'competition_benchmark', 'competition_opportunities', 'competition_sources',
+                'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources',
+                'tendencies_popular_themes', 'tendencies_data', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources',
+                'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources',
+                'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_mentions', 'brand_sources',
                 'created_at', 'updated_at', 'user_id', 'weekly_context_error', 'weekly_context_error_date'
             )
         )
@@ -79,7 +80,7 @@ class WeeklyContextEmailService:
         """Send weekly context email to a single user."""
         try:
             # Get user profile data
-            user_data = await self._get_user_profile_data(user)
+            user_data = await sync_to_async(get_creator_profile_data)(user)
 
             # Generate email content
             subject = f"📈 Seu Contexto Semanal de Mercado - {user_data['business_name']}"
@@ -121,41 +122,4 @@ class WeeklyContextEmailService:
                 'user_id': user.id,
                 'email': user.email,
                 'error': str(e)
-            }
-
-    @sync_to_async
-    def _get_user_profile_data(self, user: User) -> Dict[str, str]:
-        """Get user profile data for email personalization."""
-        try:
-            profile = CreatorProfile.objects.filter(user=user).first()
-            
-            # Helper to safely get professional_name if it exists in model (it might not)
-            prof_name = getattr(profile, 'professional_name', None) if profile else None
-
-            if profile:
-                return {
-                    'user_name': user.first_name or user.username,
-                    'business_name': profile.business_name or 'Sua Empresa',
-                    'professional_name': prof_name or user.first_name or user.username,
-                    'profession': getattr(profile, 'profession', 'Profissional'),
-                    'specialization': profile.specialization or 'Mercado'
-                }
-            else:
-                return {
-                    'user_name': user.first_name or user.username,
-                    'business_name': 'Sua Empresa',
-                    'professional_name': user.first_name or user.username,
-                    'profession': 'Profissional',
-                    'specialization': 'Mercado'
-                }
-
-        except Exception as e:
-            logger.error(
-                f"Error getting user profile data for user {user.id}: {str(e)}")
-            return {
-                'user_name': user.first_name or user.username or 'Usuário',
-                'business_name': 'Sua Empresa',
-                'professional_name': user.first_name or user.username or 'Usuário',
-                'profession': 'Profissional',
-                'specialization': 'Mercado'
             }

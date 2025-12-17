@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Count
 from django.db.models.functions import TruncDate
@@ -13,7 +14,6 @@ from rest_framework.views import APIView
 from AuditSystem.models import AuditLog
 from AuditSystem.services import AuditService
 from CreditSystem.models import UserSubscription
-from django.contrib.auth import get_user_model
 
 from .models import (
     CustomFont,
@@ -56,9 +56,11 @@ class DashboardStatsView(APIView):
             'user_id', flat=True
         ).distinct()
 
-        active_clients = non_admin_users.filter(id__in=active_subscriber_user_ids).count()
+        active_clients = non_admin_users.filter(
+            id__in=active_subscriber_user_ids).count()
 
-        never_subscribed = non_admin_users.exclude(id__in=ever_subscriber_user_ids).count()
+        never_subscribed = non_admin_users.exclude(
+            id__in=ever_subscriber_user_ids).count()
 
         cancelled_or_expired = non_admin_users.filter(id__in=ever_subscriber_user_ids).exclude(
             id__in=active_subscriber_user_ids
@@ -68,17 +70,22 @@ class DashboardStatsView(APIView):
         total_clients = active_clients + inactive_total
 
         # ===== E-mails (com recorte por período) =====
-        sent_qs = AuditLog.objects.filter(action='email_sent', status='success')
-        opened_qs = AuditLog.objects.filter(action='email_opened', status='success')
+        sent_qs = AuditLog.objects.filter(
+            action='email_sent', status='success')
+        opened_qs = AuditLog.objects.filter(
+            action='email_opened', status='success')
 
         if period:
             start_dt, end_dt = period
-            sent_qs = sent_qs.filter(timestamp__gte=start_dt, timestamp__lte=end_dt)
-            opened_qs = opened_qs.filter(timestamp__gte=start_dt, timestamp__lte=end_dt)
+            sent_qs = sent_qs.filter(
+                timestamp__gte=start_dt, timestamp__lte=end_dt)
+            opened_qs = opened_qs.filter(
+                timestamp__gte=start_dt, timestamp__lte=end_dt)
 
         emails_sent = sent_qs.count()
         emails_opened = opened_qs.count()
-        open_rate = round((emails_opened / emails_sent * 100), 1) if emails_sent > 0 else 0
+        open_rate = round((emails_opened / emails_sent * 100),
+                          1) if emails_sent > 0 else 0
 
         series_daily = self._build_daily_series(sent_qs, opened_qs, period)
 
@@ -144,7 +151,8 @@ class DashboardStatsView(APIView):
         return None
 
     def _to_day_range(self, start_date: date, end_date: date, tz):
-        start_dt = timezone.make_aware(datetime.combine(start_date, time.min), tz)
+        start_dt = timezone.make_aware(
+            datetime.combine(start_date, time.min), tz)
         end_dt = timezone.make_aware(datetime.combine(end_date, time.max), tz)
         return start_dt, end_dt
 
@@ -174,7 +182,8 @@ class DashboardStatsView(APIView):
             end_date = timezone.localtime(end_dt).date()
         else:
             # Sem período: retornar somente dias existentes (ordenados)
-            all_days = sorted(set(sent_by_day.keys()) | set(opened_by_day.keys()))
+            all_days = sorted(set(sent_by_day.keys()) |
+                              set(opened_by_day.keys()))
             return [
                 {
                     'date': d,
