@@ -16,7 +16,8 @@ Este repositório/branch contém a implementação e documentação do **Weekly 
   `PostNow-REST-API/docs/WEEKLY_CONTEXT_POLICIES.md`
 
 - **Arquitetura do Weekly Context (pipeline end-to-end)**  
-  `PostNow-REST-API/docs/WEEKLY_CONTEXT_ARCHITECTURE.md`
+  `PostNow-REST-API/docs/WEEKLY_CONTEXT_ARCHITECTURE.md`  
+  _Inclui também: pré‑requisitos de execução (env vars) e como lidar com quota 429 do Google CSE._
 
 ## Como validar rapidamente (CTO)
 
