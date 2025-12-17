@@ -2,22 +2,21 @@ import json
 import logging
 from typing import Any, Dict
 
-from asgiref.sync import sync_to_async
-from django.contrib.auth.models import User
-from django.db import connection
-from django.utils import timezone
-from google.genai import types
-
-from AuditSystem.services import AuditService
-from ClientContext.models import ClientContext
-from ClientContext.serializers import ClientContextSerializer
-from CreatorProfile.models import CreatorProfile
-from IdeaBank.models import Post, PostIdea
 from Analytics.services.image_pregen_policy import (
     ACTION_PRE_GENERATE,
     make_image_pregen_decision,
 )
 from Analytics.services.text_variant_policy import make_text_variant_decision
+from asgiref.sync import sync_to_async
+from AuditSystem.services import AuditService
+from ClientContext.models import ClientContext
+from ClientContext.serializers import ClientContextSerializer
+from CreatorProfile.models import CreatorProfile
+from django.contrib.auth.models import User
+from django.db import connection
+from django.utils import timezone
+from google.genai import types
+from IdeaBank.models import Post, PostIdea
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.s3_sevice import S3Service
@@ -103,7 +102,8 @@ class DailyIdeasService:
                     user=None,
                     resource_type="Batch",
                     resource_id=f"daily:{target_week}:{batch_number}",
-                    context={"batch_number": batch_number, "batch_size": batch_size, "users": total},
+                    context={"batch_number": batch_number,
+                             "batch_size": batch_size, "users": total},
                     properties={},
                 )
             except Exception:
@@ -122,10 +122,14 @@ class DailyIdeasService:
                 users=eligible_users, function=self.process_single_user
             )
 
-            processed_count = sum(1 for r in results if r.get("status") == "success")
-            partial_count = sum(1 for r in results if r.get("status") == "partial")
-            failed_count = sum(1 for r in results if r.get("status") == "failed")
-            skipped_count = sum(1 for r in results if r.get("status") == "skipped")
+            processed_count = sum(
+                1 for r in results if r.get("status") == "success")
+            partial_count = sum(
+                1 for r in results if r.get("status") == "partial")
+            failed_count = sum(
+                1 for r in results if r.get("status") == "failed")
+            skipped_count = sum(
+                1 for r in results if r.get("status") == "skipped")
             created_posts_count = sum(
                 len(r.get("created_posts", []))
                 for r in results
@@ -243,7 +247,8 @@ class DailyIdeasService:
                     )(user)
 
                     content_json = (
-                        content_result.replace("json", "", 1).strip("`").strip()
+                        content_result.replace(
+                            "json", "", 1).strip("`").strip()
                     )
                     content_loaded = json.loads(content_json)
 
@@ -400,13 +405,17 @@ class DailyIdeasService:
             image_url = ""
             self.prompt_service.set_user(user)
 
-            semantic_prompt = self.prompt_service.semantic_analysis_prompt(post_content)
-            semantic_result = self.ai_service.generate_text(semantic_prompt, user)
-            semantic_json = semantic_result.replace("json", "", 1).strip("`").strip()
+            semantic_prompt = self.prompt_service.semantic_analysis_prompt(
+                post_content)
+            semantic_result = self.ai_service.generate_text(
+                semantic_prompt, user)
+            semantic_json = semantic_result.replace(
+                "json", "", 1).strip("`").strip()
             semantic_loaded = json.loads(semantic_json)
 
             adapted_semantic_analysis_prompt = (
-                self.prompt_service.adapted_semantic_analysis_prompt(semantic_loaded)
+                self.prompt_service.adapted_semantic_analysis_prompt(
+                    semantic_loaded)
             )
 
             adapted_semantic_json = self.ai_service.generate_text(
@@ -417,7 +426,8 @@ class DailyIdeasService:
             )
             adapted_semantic_loaded = json.loads(adapted_semantic_str)
 
-            semantic_analysis = adapted_semantic_loaded.get("analise_semantica", {})
+            semantic_analysis = adapted_semantic_loaded.get(
+                "analise_semantica", {})
 
             image_prompt = self.prompt_service.image_generation_prompt(
                 semantic_analysis
@@ -451,7 +461,8 @@ class DailyIdeasService:
 
             return image_url
         except Exception as e:
-            raise Exception(f"Failed to generate image for user {user.id}: {str(e)}")
+            raise Exception(
+                f"Failed to generate image for user {user.id}: {str(e)}")
 
     def _generate_content_for_user(self, user: User) -> str:
         """AI service call to generate daily ideas for a user."""
@@ -478,7 +489,8 @@ class DailyIdeasService:
 
             return content_result
         except Exception as e:
-            raise Exception(f"Failed to generate context for user {user.id}: {str(e)}")
+            raise Exception(
+                f"Failed to generate context for user {user.id}: {str(e)}")
 
     @staticmethod
     async def _store_user_error(user, error_message: str):
