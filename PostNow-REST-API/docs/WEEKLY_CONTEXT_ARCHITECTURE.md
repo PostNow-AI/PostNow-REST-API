@@ -94,3 +94,45 @@ cd PostNow-REST-API
 venv/bin/python scripts/trigger_team_validation.py
 ```
 
+---
+
+## 6) Pré-requisitos de execução (E2E)
+
+### 6.1 Variáveis de ambiente mínimas
+
+#### Google Custom Search (busca)
+O serviço suporta múltiplos nomes de env var (legado/novo):
+- `GOOGLE_SEARCH_API_KEY` **ou** `GOOGLE_CUSTOM_SEARCH_API_KEY`
+- `GOOGLE_CSE_ID` **ou** `GOOGLE_CUSTOM_SEARCH_ENGINE_ID`
+
+Parâmetros de qualidade (opcionais, mas recomendados):
+- `GOOGLE_CSE_DATE_RESTRICT` (default: `w2`)
+- `GOOGLE_CSE_GL` (default: `br`)
+- `GOOGLE_CSE_LR` (default: vazio; o serviço também recebe `lr` via código, ex.: `lang_pt`/`lang_en`)
+
+#### Gemini (síntese)
+- `GEMINI_API_KEY`
+
+#### Mailjet (envio de e-mail)
+- `MJ_APIKEY_PUBLIC`
+- `MJ_APIKEY_PRIVATE`
+- `SENDER_EMAIL`
+- `SENDER_NAME`
+- (opcional) `ADMIN_EMAILS`
+
+#### Dedup/lookback (opcional)
+- `WEEKLY_CONTEXT_DEDUPE_WEEKS` (default: `4`)
+
+### 6.2 Quando acontecer 429 no Google CSE (quota)
+Às vezes a API retorna `429 Too Many Requests`. Isso significa **limite de quota/requests** do Google Custom Search.
+
+Comportamento esperado:
+- o pipeline pode reduzir cobertura de fontes em algumas seções
+- mas **não deve quebrar** a execução inteira (o e-mail ainda deve ser enviado quando possível)
+
+Mitigações recomendadas:
+- **reduzir paginação**/volume de busca (menos páginas/starts)
+- **rodar em horários de menor uso** (operação)
+- **usar uma chave/CSE com quota maior** (operação)
+- manter logs `[SOURCE_METRICS]` e `[LOW_SOURCE_COVERAGE]` para diagnosticar impacto
+
