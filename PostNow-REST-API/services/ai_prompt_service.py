@@ -40,7 +40,6 @@ class AIPromptService:
             # "benchmark_brands": profile.benchmark_brands,
             "reference_profiles": profile.reference_profiles,
             "voice_tone": profile.voice_tone,
-            "weekly_context_policy_override": getattr(profile, "weekly_context_policy_override", None),
             "visual_style": self._get_random_visual_style(profile),
             'color_palette': [] if not any([
                 profile.color_1, profile.color_2,
