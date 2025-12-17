@@ -1,42 +1,33 @@
-# 📚 Sonora UI - Documentação
+# Weekly Context (E-mail semanal de oportunidades)
 
-**REPOSITÓRIO DE DOCUMENTAÇÃO E METODOLOGIAS**
+Este repositório/branch contém a implementação e documentação do **Weekly Context**: um pipeline que pesquisa fontes recentes, gera oportunidades rankeadas com IA e envia um e-mail semanal com links válidos e sem repetição.
 
-> **📅 Criado:** 15/07/2025  
-> **🎯 Objetivo:** Documentação completa do projeto Sonora UI  
-> **🔧 Status:** Repositório de documentação
+## Onde está a documentação “atual” (o que usamos hoje)
 
----
+- **Políticas + Override por cliente (Admin + logs + como operar)**  
+  `PostNow-REST-API/docs/WEEKLY_CONTEXT_POLICIES.md`
 
-## 📁 **ESTRUTURA DO REPOSITÓRIO**
+- **Arquitetura do Weekly Context (pipeline end-to-end)**  
+  `PostNow-REST-API/docs/WEEKLY_CONTEXT_ARCHITECTURE.md`
 
-```
-Sonora-UI/
-├── 📚 docs/
-│   ├── 📋 methodologies/     # Metodologias de desenvolvimento
-│   │   ├── V8.md           # Metodologia V8.0 (Unified Development)
-│   │   └── V9.md           # Metodologia V9.0 (ZenHub Integration)
-│   ├── 🚀 zenhub/          # Configuração e documentação ZenHub
-│   │   ├── config/         # Configurações detalhadas
-│   │   ├── templates/      # Templates e configurações
-│   │   └── reports/        # Relatórios de setup
-│   ├── 🔧 scripts/         # Scripts de automação
-│   │   ├── zenhub-setup.mjs
-│   │   ├── zenhub-auto-setup.mjs
-│   │   └── zenhub-github-api.mjs
-│   └── 📖 guides/          # Guias e tutoriais
-├── 📄 LICENSE              # Licença do projeto
-└── 📋 README.md            # Este arquivo
-```
+## Como validar rapidamente (CTO)
 
----
+### Backend
 
-## 🎯 **CONTEÚDO PRINCIPAL**
+- Rodar testes do módulo:
+  - `venv/bin/python manage.py test ClientContext.tests -v 2`
+- Rodar processo completo (gera e envia e-mail):
+  - `venv/bin/python scripts/trigger_team_validation.py`
 
-### **📋 METODOLOGIAS**
+## Principais mudanças desta entrega
 
-- **V8.md** - Metodologia Unified Development (V8.0)
-- **V9.md** - Metodologia ZenHub Integration (V9.0)
+- Policy automática por cliente (resolver) e **override manual por cliente** via `CreatorProfile.weekly_context_policy_override`
+- Telemetria e alertas em logs: `[POLICY]`, `[SOURCE_METRICS]`, `[LOW_SOURCE_COVERAGE]`, `[LOW_ALLOWLIST_RATIO]`
+- Migração: `CreatorProfile/migrations/0010_creatorprofile_weekly_context_policy_override.py`
+
+## Observações importantes
+
+- A documentação antiga não reflete o sistema atual do Weekly Context e foi substituída por este guia.
 
 ### **🚀 ZENHUB**
 
