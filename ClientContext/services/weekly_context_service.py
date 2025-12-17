@@ -27,6 +27,8 @@ from ClientContext.utils.weekly_context import generate_weekly_context_email_tem
 
 logger = logging.getLogger(__name__)
 
+<< << << < HEAD
+
 
 def _is_blocked_filetype(url: str) -> bool:
     u = (url or "").lower()
@@ -52,11 +54,11 @@ def extract_json_block(text: str) -> str:
     Suporta objetos {} e listas [].
     """
     text = text.strip()
-    
+
     # Encontrar o primeiro caractere de início
     start_idx = -1
     stack = []
-    
+
     for i, char in enumerate(text):
         if char == '{':
             if start_idx == -1:
@@ -76,26 +78,110 @@ def extract_json_block(text: str) -> str:
                 stack.pop()
                 if not stack and start_idx != -1:
                     return text[start_idx:i+1]
-                    
+
     # Fallback: Tentar regex simples se a lógica de pilha falhar (ex: json malformado)
     match = re.search(r'\{.*\}|\[.*\]', text, re.DOTALL)
     if match:
         return match.group(0)
-        
+
     return "{}"
+
 
 class WeeklyContextService:
     def __init__(self):
+        self.user_validation_service = UserValidationService()
+        self.semaphore_service = SemaphoreService()
         self.ai_service = AiService()
         self.prompt_service = AIPromptService()
-        self.google_search_service = GoogleSearchService()
-        self.mailjet_service = MailjetService()
-        self.user_validation_service = UserValidationService()
         self.audit_service = AuditService()
-        # Quantas semanas olhar para trás para evitar repetição de links (domínio+path)
-        self.dedupe_lookback_weeks = int(os.getenv("WEEKLY_CONTEXT_DEDUPE_WEEKS", "4"))
+        self.mailjet_service = MailjetService()
 
-    async def _process_user_context(self, user_id: int, bcc: list[str] = None) -> Dict[str, Any]:
+    @sync_to_async
+    def _get_eligible_users(self, offset: int, limit: int) -> list[User]:
+        """Get a batch of users eligible for weekly context generation"""
+        if limit is None:
+            return list(
+                User.objects.filter(
+                    usersubscription__status='active',
+                    is_active=True
+                ).distinct().values('id', 'email', 'username')[offset:]
+            )
+
+        return list(
+            User.objects.filter(
+                usersubscription__status='active',
+                is_active=True
+            ).distinct().values('id', 'email', 'username')[offset:offset + limit]
+        )
+
+    async def process_single_user(self, user_data: dict) -> Dict[str, Any]:
+        """Wrapper method to process a single user from the user data."""
+        user_id = user_data.get('id') or user_data.get('user_id')
+        if not user_data:
+            return {'status': 'failed', 'reason': 'no_user_data'}
+        if not user_id:
+            return {'status': 'failed', 'reason': 'no_user_id', 'user_data': user_data}
+
+        return await self._process_user_context(user_id)
+
+    async def process_all_users_context(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
+        """Process weekly context gen for all eligible users."""
+        start_time = timezone.now()
+        offset = (batch_number - 1) * batch_size
+        limit = batch_size
+
+        if batch_size == 0:
+            offset = 0
+            limit = None  # Process all users
+
+        eligible_users = await self._get_eligible_users(offset=offset, limit=limit)
+        total = len(eligible_users)
+
+        if total == 0:
+            return {
+                'status': 'completed',
+                'processed': 0,
+                'total_users': 0,
+                'message': 'No eligible users found',
+            }
+
+        try:
+            results = await self.semaphore_service.process_concurrently(
+                users=eligible_users,
+                function=self.process_single_user
+            )
+
+            processed_count = sum(
+                1 for r in results if r.get('status') == 'success')
+            failed_count = sum(
+                1 for r in results if r.get('status') == 'failed')
+            skipped_count = sum(
+                1 for r in results if r.get('status') == 'skipped')
+
+            end_time = timezone.now()
+            duration = (end_time - start_time).total_seconds()
+
+            result = {
+                'status': 'completed',
+                'processed': processed_count,
+                'failed': failed_count,
+                'skipped': skipped_count,
+                'total_users': total,
+                'duration_seconds': duration,
+                'details': results,
+            }
+
+            return result
+
+        except Exception as e:
+            return {
+                'status': 'error',
+                'processed': 0,
+                'total_users': total,
+                'message': f'Error processing users: {str(e)}',
+            }
+
+    async def _process_user_context(self, user_id: int) -> Dict[str, Any]:
         """Process weekly context generation for a single user."""
         # Placeholder for actual context generation logic
         user = await sync_to_async(User.objects.get)(id=user_id)
@@ -121,16 +207,17 @@ class WeeklyContextService:
             # _generate_context_for_user is async now, so we await it directly
             # RETORNA UMA TUPLA: (json_str, search_results_dict)
             context_result = await self._generate_context_for_user(user)
-            logger.info(f"Context Result Type: {type(context_result)}") # DEBUG
-            
+            logger.info(
+                f"Context Result Type: {type(context_result)}")  # DEBUG
+
             search_results_map = {}
             json_str = ""
-            
+
             if isinstance(context_result, tuple):
-                 json_str = context_result[0]
-                 search_results_map = context_result[1]
+                json_str = context_result[0]
+                search_results_map = context_result[1]
             else:
-                 json_str = context_result
+                json_str = context_result
 
             # Robust JSON parsing from the full string
             try:
@@ -144,7 +231,7 @@ class WeeklyContextService:
                 except json.JSONDecodeError as e2:
                     logger.error(f"Failed to parse extracted JSON Main: {e2}")
                     raise ValueError("Invalid JSON format from AI synthesis")
-            
+
             # --- CORREÇÃO DE ESTRUTURA ---
             # Garantir que todas as seções críticas sejam dicionários
             for section in ['mercado', 'concorrencia', 'publico', 'tendencias', 'sazonalidade', 'marca']:
@@ -152,10 +239,10 @@ class WeeklyContextService:
                     if isinstance(context_data[section], list):
                         # Se for lista, tenta pegar o primeiro item se for dict
                         if context_data[section] and isinstance(context_data[section][0], dict):
-                             context_data[section] = context_data[section][0]
+                            context_data[section] = context_data[section][0]
                         else:
-                             # Se for lista de strings ou vazia, transforma em dict vazio ou adapta
-                             context_data[section] = {} 
+                            # Se for lista de strings ou vazia, transforma em dict vazio ou adapta
+                            context_data[section] = {}
                     elif not isinstance(context_data[section], dict):
                         context_data[section] = {}
 
@@ -177,33 +264,56 @@ class WeeklyContextService:
             # num campo JSONField genérico ou adaptado. Como não temos um campo 'ranked_opportunities' no model,
             # vamos salvar em 'market_opportunities' que é JSON, mas estruturado diferente.
             # Ideal seria criar campo novo, mas por agora vamos usar 'market_opportunities' para armazenar TUDO.
-            
+
             # Salvar TODAS as oportunidades (raw) em market_opportunities para persistência total
-            client_context.market_opportunities = context_data.get('mercado', {}).get('fontes_analisadas', [])
-            
+            client_context.market_opportunities = context_data.get(
+                'mercado', {}).get('fontes_analisadas', [])
+
             # Salvar as Rankeadas (Top Picks) em 'market_tendencies' (campo JSON pouco usado) ou 'tendencies_data'
             # Vamos usar 'tendencies_data' para armazenar o JSON final rankeado que o email vai usar.
             client_context.tendencies_data = ranked_opportunities
 
             client_context.market_panorama = context_data.get(
-                'mercado', {}).get('panorama', '') # Este campo pode vir vazio no novo schema, atenção
-            
+                # Este campo pode vir vazio no novo schema, atenção
+                'mercado', {}).get('panorama', '')
+
             # ... resto dos campos ...
             # Adaptar leitura dos campos antigos para não quebrar se vier vazio do novo schema
-            
+
+            context_result = await sync_to_async(self._generate_context_for_user)(user)
+            context_json = context_result.replace(
+                'json', '', 1).strip('`').strip()
+
+            context_data = json.loads(context_json).get(
+                'contexto_pesquisado', {})
+
+            client_context, created = await sync_to_async(ClientContext.objects.get_or_create)(user=user)
+
+            # Update the context fields
+            client_context.market_panorama = context_data.get(
+                'mercado', {}).get('panorama', '')
+            client_context.market_tendencies = context_data.get(
+                'mercado', {}).get('tendencias', [])
+            client_context.market_challenges = context_data.get(
+                'mercado', {}).get('desafios', [])
             client_context.market_sources = context_data.get(
                 'mercado', {}).get('fontes', [])
 
             client_context.competition_main = context_data.get(
                 'concorrencia', {}).get('principais', [])
-            
+
             # Concorrência agora também usa schema de oportunidades, então 'acoes_taticas' pode não existir
             # Vamos tentar extrair algo genérico ou deixar vazio
             client_context.competition_strategies = "Ver oportunidades rankeadas."
-                
+
             client_context.competition_benchmark = context_data.get(
-                'concorrencia', {}).get('fontes_analisadas', []) # Salvar raw também
-            
+                # Salvar raw também
+                'concorrencia', {}).get('fontes_analisadas', [])
+
+            client_context.competition_strategies = context_data.get(
+                'concorrencia', {}).get('estrategias', '')
+            client_context.competition_opportunities = context_data.get(
+                'concorrencia', {}).get('oportunidades', '')
             client_context.competition_sources = context_data.get(
                 'concorrencia', {}).get('fontes', [])
 
@@ -218,6 +328,12 @@ class WeeklyContextService:
 
             client_context.tendencies_hashtags = context_data.get(
                 'tendencias', {}).get('hashtags', [])
+            client_context.tendencies_popular_themes = context_data.get(
+                'tendencias', {}).get('temas_populares', [])
+            client_context.tendencies_hashtags = context_data.get(
+                'tendencias', {}).get('hashtags', [])
+            client_context.tendencies_keywords = context_data.get(
+                'tendencias', {}).get('keywords', [])
             client_context.tendencies_sources = context_data.get(
                 'tendencias', {}).get('fontes', [])
 
@@ -244,7 +360,7 @@ class WeeklyContextService:
 
             # --- HISTÓRICO: Salvar cópia no histórico ---
             from ClientContext.models import ClientContextHistory
-            
+
             await sync_to_async(ClientContextHistory.objects.create)(
                 user=user,
                 original_context=client_context,
@@ -311,28 +427,28 @@ class WeeklyContextService:
         """Send email asynchronously."""
         # user_data from validation service returns (User, CreatorProfile) tuple
         user_tuple = await self.user_validation_service.get_user_data(user.id)
-        
+
         if not user_tuple:
             logger.error(f"User data not found for email sending: {user.id}")
             return
 
         user_obj, profile_obj = user_tuple
-        
+
         # Construct user_data dict expected by template
         user_data = {
             'business_name': profile_obj.business_name,
             'user_name': user_obj.first_name,
             'user__first_name': user_obj.first_name
         }
-        
+
         # FIX: Remover to_email da lista de BCC se presente para evitar envio duplicado
         if bcc and user.email in bcc:
             bcc = [email for email in bcc if email != user.email]
-        
+
         # Gerar HTML usando o novo template que suporta 'ranked_opportunities'
         html_content = generate_weekly_context_email_template(
             context_data, user_data)
-            
+
         await self.mailjet_service.send_email(
             to_email=user.email,
             subject="Seu Contexto Semanal de Mercado",
@@ -346,10 +462,11 @@ class WeeklyContextService:
         Retorna: (json_string_completo, dict_urls_reais_por_secao)
         """
         self.prompt_service.set_user(user)
-        
+
         # 1. Preparar Prompts e Queries
         profile_data = await sync_to_async(self.prompt_service._get_creator_profile_data)()
-        queries = self.prompt_service._build_optimized_search_queries(profile_data)
+        queries = self.prompt_service._build_optimized_search_queries(
+            profile_data)
 
         # Policy (auto/override) para controlar thresholds/idiomas e auditar comportamento
         decision = resolve_policy(profile_data)
@@ -364,17 +481,18 @@ class WeeklyContextService:
             policy.min_selected_by_section,
             policy.allowlist_ratio_threshold,
         )
-        
+
         # 2. Histórico Anti-Repetição
         excluded_topics = await self._get_recent_topics(user)
         used_url_keys_recent = await self._get_recent_url_keys(user)
         # Também evita duplicar links dentro do mesmo e-mail (entre seções)
         used_url_keys_this_run: set[str] = set()
-        
+
         # 3. Executar Buscas (Paralelas ou Sequenciais)
         search_tasks = []
-        sections = ['mercado', 'concorrencia', 'publico', 'tendencias', 'sazonalidade', 'marca']
-        
+        sections = ['mercado', 'concorrencia', 'publico',
+                    'tendencias', 'sazonalidade', 'marca']
+
         # Executar buscas
         search_results = {}
         for section in sections:
@@ -402,22 +520,27 @@ class WeeklyContextService:
                 # 1) Buscar pt-BR primeiro (preferência). Tentar primeiro com restrição de allowlist (se existir).
                 doms = allowed_domains(section)
                 sanitized = _sanitize_query_for_allowlist(query)
-                allow_q = build_allowlist_query(sanitized or query, doms, max_domains=8) if doms else query
+                allow_q = build_allowlist_query(
+                    sanitized or query, doms, max_domains=8) if doms else query
                 pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", allow_q)
                 if doms and len(pt_pool) < 5:
                     # fallback 1: query genérica (menos restritiva) ainda dentro da allowlist
-                    fallback_base = f"{profile_data.get('specialization','')} cultura organizacional gestão de processos {datetime.now().year}"
-                    fb_q = build_allowlist_query(_sanitize_query_for_allowlist(fallback_base), doms, max_domains=8)
+                    fallback_base = f"{profile_data.get('specialization', '')} cultura organizacional gestão de processos {datetime.now().year}"
+                    fb_q = build_allowlist_query(_sanitize_query_for_allowlist(
+                        fallback_base), doms, max_domains=8)
                     pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", fb_q)
                 if doms and len(pt_pool) < 5:
                     # fallback 2: busca geral
                     pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", query)
-                logger.info("[SOURCE_AUDIT] seção=%s stage=raw_pt count=%s", section, len(pt_pool))
-                pt_urls = [i.get("url") for i in pt_pool if isinstance(i, dict) and isinstance(i.get("url"), str)]
+                logger.info(
+                    "[SOURCE_AUDIT] seção=%s stage=raw_pt count=%s", section, len(pt_pool))
+                pt_urls = [i.get("url") for i in pt_pool if isinstance(
+                    i, dict) and isinstance(i.get("url"), str)]
                 picked_urls = pick_candidates(
                     section,
                     pt_urls,
-                    min_allowlist=policy.allowlist_min_coverage.get(section, 3),
+                    min_allowlist=policy.allowlist_min_coverage.get(
+                        section, 3),
                     max_keep=12,
                 )
                 picked_items: list[dict] = []
@@ -447,7 +570,8 @@ class WeeklyContextService:
                         per_domain[d] -= 1
                         continue
                     # recuperar item original
-                    item = next((x for x in pt_pool if isinstance(x, dict) and x.get("url") == u), None)
+                    item = next((x for x in pt_pool if isinstance(
+                        x, dict) and x.get("url") == u), None)
                     if item:
                         picked_items.append(item)
                         used_url_keys_this_run.add(k)
@@ -459,11 +583,14 @@ class WeeklyContextService:
                     en_pool = await sync_to_async(_fetch_pool)(policy.languages[1], allow_q)
                     if doms and len(en_pool) < 5:
                         en_pool = await sync_to_async(_fetch_pool)(policy.languages[1], query)
-                    logger.info("[SOURCE_AUDIT] seção=%s stage=raw_en count=%s", section, len(en_pool))
+                    logger.info(
+                        "[SOURCE_AUDIT] seção=%s stage=raw_en count=%s", section, len(en_pool))
                     raw_en_count = len(en_pool)
                     fallback_used.append("en")
-                    en_urls = [i.get("url") for i in en_pool if isinstance(i, dict) and isinstance(i.get("url"), str)]
-                    en_picked = pick_candidates(section, en_urls, min_allowlist=2, max_keep=12)
+                    en_urls = [i.get("url") for i in en_pool if isinstance(
+                        i, dict) and isinstance(i.get("url"), str)]
+                    en_picked = pick_candidates(
+                        section, en_urls, min_allowlist=2, max_keep=12)
                     for u in en_picked:
                         if not u or not u.startswith("http"):
                             continue
@@ -480,7 +607,8 @@ class WeeklyContextService:
                         if per_domain[d] > 2:
                             per_domain[d] -= 1
                             continue
-                        item = next((x for x in en_pool if isinstance(x, dict) and x.get("url") == u), None)
+                        item = next((x for x in en_pool if isinstance(
+                            x, dict) and x.get("url") == u), None)
                         if item:
                             picked_items.append(item)
                             used_url_keys_this_run.add(k)
@@ -548,18 +676,19 @@ class WeeklyContextService:
 
                 urls = picked_items
             search_results[section] = urls
-            
+
         # 4. Contexto Cruzado (Cross-Context Synthesis)
         # O Público precisa saber o que está rolando no Mercado e Tendências
-        context_borrowed_for_audience = search_results.get('mercado', []) + search_results.get('tendencias', [])
+        context_borrowed_for_audience = search_results.get(
+            'mercado', []) + search_results.get('tendencias', [])
 
         # 5. Gerar Síntese com IA (Sequencial para garantir coerência ou paralelo?)
         # Vamos fazer sequencial para simplicidade e controle de erro, mas construindo um JSON unificado
         final_json_parts = []
-        
+
         for section in sections:
             borrowed = context_borrowed_for_audience if section == 'publico' else None
-            
+
             prompt_list = self.prompt_service._build_synthesis_prompt(
                 section_name=section,
                 query=queries.get(section, ''),
@@ -568,24 +697,24 @@ class WeeklyContextService:
                 excluded_topics=excluded_topics,
                 context_borrowed=borrowed
             )
-            
+
             # Chamar Gemini
-            
+
             # Configuração "limpa" para síntese (sem Google Search Tools)
             # para evitar conflito com o texto já fornecido e prevenir erros de Grounding
             synthesis_config = types.GenerateContentConfig(
                 response_modalities=["TEXT"],
-                temperature=0.7, # Criatividade balanceada
+                temperature=0.7,  # Criatividade balanceada
                 top_p=0.9,
                 max_output_tokens=2000,
-                response_mime_type="application/json" # Forçar JSON
+                response_mime_type="application/json"  # Forçar JSON
             )
-            
+
             try:
                 # O método generate_text espera uma lista de prompts, não string única
                 ai_response = await sync_to_async(self.ai_service.generate_text)(
-                    prompt_list, 
-                    user, 
+                    prompt_list,
+                    user,
                     config=synthesis_config,
                     response_mime_type="application/json"
                 )
@@ -594,44 +723,57 @@ class WeeklyContextService:
                     ai_text = ai_response.get('text', '')
                 else:
                     ai_text = str(ai_response)
-                
+
                 # Usar a nova função robusta para extrair o JSON
                 clean_json = extract_json_block(ai_text)
                 final_json_parts.append(f'"{section}": {clean_json}')
-                
+
             except Exception as e:
                 logger.error(f"Error generating section {section}: {e}")
-                final_json_parts.append(f'"{section}": {{}}') # Fallback vazio
-        
+                final_json_parts.append(f'"{section}": {{}}')  # Fallback vazio
+
         # Montar JSON Final
         full_json_str = "{" + ", ".join(final_json_parts) + "}"
         return full_json_str, search_results
 
-    async def _store_user_error(self, user: User, error_msg: str):
-        """Store error message in ClientContext."""
-        from django.utils import timezone
-        client_context, _ = await sync_to_async(ClientContext.objects.get_or_create)(user=user)
-        client_context.weekly_context_error = error_msg
+    async def _store_user_error(self, user, error_message: str):
+        """Store error message in user model for retry processing."""
+        client_context, created = await sync_to_async(ClientContext.objects.get_or_create)(user=user)
+
+        # Update the error fields
+        client_context.weekly_context_error = error_message
         client_context.weekly_context_error_date = timezone.now()
         await sync_to_async(client_context.save)()
-        
+
+        logger.error(
+            f"Updated existing ClientContext for user {user.id} with error: {error_message}")
+
+        subject = "Falha na Geração de Contexto Semanal"
+        html_content = f"""
+        <h1>Falha na Geração de Contexto Semanal</h1>
+        <p>Ocorreu um erro durante o processo de geração de contexto semanal para o usuário {user.email}.</p>
+        <pre>{error_message or 'Erro interno de servidor'}</pre>
+        """
+        await self.mailjet_service.send_fallback_email_to_admins(
+            subject, html_content)
+
     async def _get_recent_topics(self, user: User) -> list:
         """Recupera tópicos abordados nas últimas 4 semanas para evitar repetição."""
         from ClientContext.models import ClientContextHistory
         from datetime import timedelta
         from django.utils import timezone
-        
+
         one_month_ago = timezone.now() - timedelta(weeks=4)
-        
+
         history = await sync_to_async(lambda: list(ClientContextHistory.objects.filter(
-            user=user, 
+            user=user,
             created_at__gte=one_month_ago
         ).values_list('tendencies_popular_themes', flat=True)))()
-        
+
         # Flatten list
         topics = []
         for item in history:
-            if item: # item pode ser lista ou string JSON
+            if item:  # item pode ser lista ou string JSON
                 if isinstance(item, list):
                     topics.extend(item)
                 elif isinstance(item, str):
@@ -639,7 +781,7 @@ class WeeklyContextService:
                         topics.extend(json.loads(item))
                     except:
                         pass
-        return list(set(topics)) # Únicos
+        return list(set(topics))  # Únicos
 
     async def _get_recent_url_keys(self, user: User) -> set[str]:
         """
@@ -654,7 +796,8 @@ class WeeklyContextService:
         since = now - timedelta(days=max(self.dedupe_lookback_weeks, 1) * 7)
 
         histories = await sync_to_async(lambda: list(
-            ClientContextHistory.objects.filter(user=user, created_at__gte=since)
+            ClientContextHistory.objects.filter(
+                user=user, created_at__gte=since)
             .order_by("-created_at")
             .values("tendencies_data")
         ))()
@@ -715,7 +858,7 @@ class WeeklyContextService:
         generated_url = self._coerce_url_to_str(generated_url)
         if not generated_url:
             return ""
-            
+
         generated_url = generated_url.strip().lower()
         # Normalizar a lista de URLs reais (GoogleSearchService retorna lista de dicts)
         real_urls_norm = []
@@ -723,12 +866,12 @@ class WeeklyContextService:
             real_s = self._coerce_url_to_str(real)
             if real_s:
                 real_urls_norm.append(real_s)
-        
+
         # 1. Correspondência Exata (case insensitive)
         for real in real_urls_norm:
             if real.strip().lower() == generated_url:
                 return real
-                
+
         # 2. Correspondência Parcial (Domínio e Path)
         # Se a IA inventou parâmetros mas acertou o path principal
         # Ex: real: forbes.com/artigo | generated: forbes.com/artigo?utm=...
@@ -737,14 +880,14 @@ class WeeklyContextService:
             gen_clean = generated_url.split('?')[0]
             if real_clean in gen_clean or gen_clean in real_clean:
                 return real
-                
+
         # 3. Fallback Seguro: Se a IA inventou uma URL de um domínio que temos
         # Ex: IA inventou forbes.com/fake-news, mas temos forbes.com/real-news na lista
         # Nesses casos, melhor retornar a URL real do mesmo domínio (se houver apenas uma)
         # ou retornar vazio para não mandar 404.
         # Vamos ser conservadores: se não deu match acima, retorna a URL original da IA
         # e deixa a validação HTTP decidir (se for 404, cai fora).
-        
+
         return generated_url
 
     async def _aggregate_and_rank_opportunities(
@@ -759,7 +902,7 @@ class WeeklyContextService:
         Valida URLs usando requests HEAD/GET e tenta recuperação com URLs reais.
         """
         all_opportunities = []
-        
+
         # 1. Coletar oportunidades de todas as seções que usam o novo schema
         # Dedupe por URL ao longo do e-mail inteiro (domain+path)
         used_url_keys_email: set[str] = set()
@@ -782,26 +925,31 @@ class WeeklyContextService:
                         continue
                     candidate_urls.append(u)
             # Priorizar candidate_urls por allowlist/score (quando houver)
-            candidate_urls = pick_candidates(section, candidate_urls, min_allowlist=1, max_keep=10)
-            
+            candidate_urls = pick_candidates(
+                section, candidate_urls, min_allowlist=1, max_keep=10)
+
             # Verificar se segue o novo schema com 'fontes_analisadas'
             if isinstance(section_data, dict) and 'fontes_analisadas' in section_data:
                 for fonte in section_data['fontes_analisadas']:
                     # A IA pode retornar url_original como string OU como objeto.
                     url_original_ai = fonte.get('url_original', '')
-                    url_original_ai_str = self._coerce_url_to_str(url_original_ai)
+                    url_original_ai_str = self._coerce_url_to_str(
+                        url_original_ai)
                     ai_domain = ""
                     try:
-                        ai_domain = urlparse(url_original_ai_str).netloc if url_original_ai_str else ""
+                        ai_domain = urlparse(
+                            url_original_ai_str).netloc if url_original_ai_str else ""
                     except Exception:
                         ai_domain = ""
-                    
+
                     # Tentar RECUPERAR a URL se a IA alucinou
-                    url_fonte = self._recover_url(url_original_ai, real_urls_for_section)
+                    url_fonte = self._recover_url(
+                        url_original_ai, real_urls_for_section)
                     # Regra de qualidade: quando temos resultados do Google, preferir SEMPRE uma URL do Google,
                     # tentando primeiro manter o mesmo domínio sugerido pela IA (ex.: McKinsey).
                     if candidate_urls:
-                        domain_candidates = [u for u in candidate_urls if ai_domain and urlparse(u).netloc == ai_domain]
+                        domain_candidates = [
+                            u for u in candidate_urls if ai_domain and urlparse(u).netloc == ai_domain]
                         preferred_pool = domain_candidates or candidate_urls
                         # Se a URL recuperada não estiver no pool do Google, escolhe a melhor candidata.
                         if url_fonte not in preferred_pool:
@@ -835,11 +983,11 @@ class WeeklyContextService:
                             url_original_ai_str,
                             url_fonte
                         )
-                    
+
                     # FIX: Validação básica de URL string
                     if not url_fonte or not url_fonte.startswith('http'):
-                        continue 
-                    
+                        continue
+
                     # FIX: Validação HTTP Permissiva
                     # Respeitar dedupe no e-mail: evita repetir domain+path
                     url_key = normalize_url_key(url_fonte)
@@ -859,8 +1007,10 @@ class WeeklyContextService:
                         alt_pool = []
                         if candidate_urls:
                             if ai_domain:
-                                alt_pool.extend([u for u in candidate_urls if urlparse(u).netloc == ai_domain])
-                            alt_pool.extend([u for u in candidate_urls if u not in alt_pool])
+                                alt_pool.extend(
+                                    [u for u in candidate_urls if urlparse(u).netloc == ai_domain])
+                            alt_pool.extend(
+                                [u for u in candidate_urls if u not in alt_pool])
 
                         for alt in (alt_pool or candidate_urls):
                             if alt == url_fonte:
@@ -899,7 +1049,7 @@ class WeeklyContextService:
                         op['url_fonte'] = url_fonte
                         op['origem_secao'] = section
                         all_opportunities.append(op)
-        
+
         # 2. Agrupar por Tipo
         grouped_ops = {}
         for op in all_opportunities:
@@ -909,7 +1059,7 @@ class WeeklyContextService:
             clean_type = raw_type
             for emoji in ['🔥', '🧠', '📰', '😂', '💼', '🔮']:
                 clean_type = clean_type.replace(emoji, '').strip()
-            
+
             # Padronizar chaves para o template
             if 'Polêmica' in clean_type or 'Debate' in clean_type:
                 key = 'polemica'
@@ -932,30 +1082,31 @@ class WeeklyContextService:
             else:
                 key = 'outros'
                 display_title = '⚡ Outras Oportunidades'
-            
+
             if key not in grouped_ops:
                 grouped_ops[key] = {
                     'titulo': display_title,
                     'items': []
                 }
-            
+
             # Tratamento de Score (garantir int)
             try:
                 op['score'] = int(op.get('score', 0))
             except:
                 op['score'] = 0
-                
+
             grouped_ops[key]['items'].append(op)
-            
+
         # 3. Ordenar e Filtrar (Top 3 por Tipo)
         final_structure = {}
         for key, group in grouped_ops.items():
             # Ordenar por Score Decrescente
-            sorted_items = sorted(group['items'], key=lambda x: x['score'], reverse=True)
+            sorted_items = sorted(
+                group['items'], key=lambda x: x['score'], reverse=True)
             # Pegar Top 3
             group['items'] = sorted_items[:3]
             final_structure[key] = group
-            
+
         return final_structure
 
     async def _validate_url_permissive_async(self, url: str) -> bool:
@@ -990,13 +1141,15 @@ class WeeklyContextService:
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
                 }
                 # Timeout curto de 3s
-                response = requests.head(url, headers=headers, timeout=3, allow_redirects=True)
+                response = requests.head(
+                    url, headers=headers, timeout=3, allow_redirects=True)
                 if response.status_code == 404:
                     return False
 
                 # Alguns sites retornam 200/302 no HEAD mas são soft-404 no GET (ex: LinkedIn)
                 try:
-                    get_resp = requests.get(url, headers=headers, timeout=6, allow_redirects=True)
+                    get_resp = requests.get(
+                        url, headers=headers, timeout=6, allow_redirects=True)
                     if get_resp.status_code == 404:
                         return False
                     if _is_soft_404(get_resp.url, get_resp.text or ""):
@@ -1015,5 +1168,5 @@ class WeeklyContextService:
             except Exception:
                 # Qualquer outro erro, assume válido
                 return True
-        
+
         return await sync_to_async(_check)()

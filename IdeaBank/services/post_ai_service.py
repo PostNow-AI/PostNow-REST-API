@@ -127,15 +127,7 @@ class PostAIService(BaseAIService):
 
             # Special handling for feed posts - generate image if description is found
             image_url = None
-            enable_internal_image = (
-                os.getenv("ENABLE_INTERNAL_FEED_IMAGE_GENERATION", "false").lower()
-                in ("true", "1", "yes")
-            )
-            if (
-                enable_internal_image
-                and post_data.get("include_image", False)
-                and post_data.get('type', '').lower() == 'feed'
-            ):
+            if post_data.get('type', '').lower() == 'feed':
                 image_description = self._extract_image_description_from_content(
                     content)
                 if image_description:

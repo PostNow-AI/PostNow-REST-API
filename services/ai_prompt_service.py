@@ -3,6 +3,7 @@ import random
 from datetime import datetime, timedelta
 
 from CreatorProfile.models import CreatorProfile, VisualStylePreference
+from services.get_creator_profile_data import get_creator_profile_data
 
 logger = logging.getLogger(__name__)
 
@@ -696,8 +697,8 @@ class AIPromptService:
               - Você pode citar fontes ou dados do contexto apenas se forem relevantes e confiáveis.
             3. **Sugestão visual** (descrição de imagem, layout e estilo visual, coerente com a identidade da marca)
             4. **Hashtags recomendadas**, combinando:
-              - As de {context.get('tendencies_hashtags', [])}
-              - As tendências verificadas em {context.get('tendencies_popular_themes', [])}
+              - As de {context['tendencies_hashtags']}
+              - As tendências verificadas em {context['tendencies_popular_themes']}
               - Evite criar hashtags inexistentes.
             5. **CTA (chamada para ação)**, relevante e consistente com o objetivo {profile_data['business_purpose']}.
 
@@ -729,10 +730,125 @@ class AIPromptService:
             - **frequency_penalty:** 0.1
 
             Essas configurações permitem gerar conteúdo criativo, porém sempre dentro dos limites de dados reais e verificados.
-            """,
+            """
         ]
 
-    def semantic_analysis_prompt(self, post_text: str) -> list[str]:
+    def build_campaign_prompts(self, context: dict) -> dict:
+        """Build campaign generation prompts based on the user's creator profile."""
+        profile_data = get_creator_profile_data(self.user)
+
+        formatted_context = format_weekly_context_output(context)
+        return [
+            """
+            Você é um estrategista de conteúdo e redator de marketing digital especializado em redes sociais. Sua função é criar posts para o Instagram totalmente personalizados, usando dados reais e verificados sobre a empresa, seu público e o mercado. Se alguma informação estiver ausente ou marcada como 'sem dados disponíveis', você deve ignorar essa parte sem criar suposições. Não invente dados, tendências, números ou nomes de concorrentes. Baseie todas as decisões de conteúdo nas informações recebidas do onboarding e no contexto pesquisado, sempre respeitando o tom e propósito da marca.
+            """,
+            f"""
+            ============================================================
+            📊 CONTEXTO PESQUISADO (dados externos e verificados)
+
+            → INPUT: 
+            {formatted_context}
+            
+            ============================================================
+
+            🏢 INFORMAÇÕES DA EMPRESA (dados internos do onboarding)
+
+            - Nome: {profile_data['business_name']}
+            - Descrição: {profile_data['business_description']}
+            - Site da empresa: {profile_data['business_website']}
+            - Setor / nicho de mercado: {profile_data['specialization']}
+            - Propósito da empresa: {profile_data['business_purpose']}
+            - Valores e personalidade: {profile_data['brand_personality']}
+            - Tom de voz: {profile_data['voice_tone']}
+            - Público-alvo: {profile_data['target_audience']}
+            - Interesses do Público: {profile_data['target_interests']}
+            - Produtos ou serviços prioritários: {profile_data['products_services']}
+            
+            ============================================================
+            📌 TAREFA PRINCIPAL
+
+            Criar **3 posts para o Instagram**, combinando:
+              ✔ dados da empresa  
+              ✔ contexto pesquisado  
+              ✔ tom de voz e objetivosOs 3 posts devem ser:
+              - 1 Post para Feed (post_text_feed)- 1 Post para Stories (post_text_stories)- 1 Post para Reels (post_text_reels)
+              - 1 Post para Stories (post_text_stories)
+              - 1 Post para Reels (post_text_reels)
+
+            O “post_text_feed” deve incluir:
+
+            1. **Título curto e atrativo**
+              - Entre 2 e 5 palavras  
+              - Alinhado ao tom da marca
+              - Deve aparecer escrito na imagem
+
+            2. **Legenda completa**
+              - Baseada nos dados de contexto pesquisado, crie uma legenda criativa para o post
+              - Ignorar itens sem dados disponíveis
+              - Limite máximo de 600 caracteres
+              - Pode citar fontes reais quando relevante 
+
+            3. **Sugestão visual**
+              - Descrição da imagem, layout, estilo  
+              - Coerente com o propósito e valores da empresa.
+              - Adicionar “Título do post” à “sugestão visual” é obrigatório       
+              - Adicionar “Sub Título do post” à sugestão visual é facultativo. Você pode escolher de acordo com o conceito e estética desejados
+              - Adicionar “Chamada para ação” à sugestão visual é facultativo. Você pode escolher de acordo com o conceito e estética desejados.
+              - Nunca adicione o texto de “legenda completa” à sugestão visual.
+              - Nunca adicione o texto de “Hashtags” à sugestão visual.
+
+            4. **Hashtags recomendadas**:
+              - Adicione as hashtags de tendências verificadas: {', '.join(context['tendencies_hashtags'])}
+              - Não criar hashtags inventadas
+
+            5. **CTA (chamada para ação)**
+              - coerente com o conteúdo do post
+
+            O “post_text_stories” deve incluir:
+            - Roteiro diário para geração de stories baseados no contexto pesquisado.
+
+            O “post_text_reels” deve incluir:
+            - Roteiro diário para geração de um video de reels baseados no contexto pesquisado.
+            - Roteiro deve ser escrito baseado no método de criação de conteúdo AIDA.
+
+            ============================================================
+            🧭 DIRETRIZES DE QUALIDADE E CONFIABILIDADE
+
+            - Não inventar estatísticas, datas ou referências.  
+            - Linguagem natural, persuasiva e compatível com {profile_data['voice_tone']}.  
+            - Se faltar dados → focar na proposta de valor.  
+            - Storytelling só quando houver base real.  
+            - Nunca mencionar “sem dados disponíveis” no texto final.  
+            - Conteúdo deve soar autêntico e profissional.  
+
+
+            ============================================================
+
+            💬 FORMATO DE SAÍDA (JSON)
+
+            {{
+              "post_text_feed": {{
+                "titulo": "Título do post",        
+                "sub_titulo": "Sub Título do post",
+                "legenda": "Texto completo da legenda",
+                "sugestao_visual": "Descrição da imagem ou layout",
+                "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
+                "cta": "Chamada para ação"
+              }},      
+              "post_text_stories": {{
+                "titulo": "Igual ao título do feed",        
+                "roteiro": "Roteiro do Stories”
+              }},
+              "post_text_reels": {{
+                "titulo": "Igual ao título do feed",
+                "roteiro": "Roteiro do Reels”
+              }}
+            }}
+
+          """
+        ]
+
+    def semantic_analysis_prompt(self, post_text: str) -> str:
         """Prompt for semantic analysis of user input."""
         return [
             """
@@ -766,33 +882,56 @@ class AIPromptService:
             """
         ]
 
-    def adapted_semantic_analysis_prompt(self, semantic_analysis: dict) -> list[str]:
+    def adapted_semantic_analysis_prompt(self, semantic_analysis: dict) -> str:
         """Prompt for semantic analysis adapted to creator profile."""
-        profile_data = self._get_creator_profile_data()
+        profile_data = get_creator_profile_data(self.user)
 
         return [
             """
               Você é um Diretor de Arte Sênior de Inteligência Artificial. Sua tarefa é fundir uma análise semântica de conteúdo com um perfil de marca específico, garantindo que o resultado seja uma diretriz visual coesa, priorizando **integralmente** o estilo e a paleta de cores da marca, mesmo que os temas originais sejam de naturezas diferentes (ex: Café com estilo Futurista).
             """,
             f"""
-            ### DADOS DE ENTRADA ####
-              1. ANÁLISE SEMÂNTICA (Conteúdo e Mensagem)
+              ### DADOS DE ENTRADA ####
+
+              1. PERSONALIDADE DA MARCA (Emoções)
+              {profile_data['brand_personality']}
+
+              2. ANÁLISE SEMÂNTICA (Conteúdo e Mensagem
               {semantic_analysis}
 
-              #### 2. PERFIL DA MARCA (Estilo e Identidade)
-              // Cole o conteúdo do seu JSON "brand_profile" aqui.
-              // Esta seção define COMO DEVE SER MOSTRADO (Estilo prioritário).
+              3. PERFIL DA MARCA (Estilo e Identidade)
 
-              {profile_data}
+              - Cores da Marca:
+                {profile_data['color_palette']} - podem ser usadas variações mais escuras, mais claras e gradientes baseadas nas cores da marca.
+              - Estilo visual: 
+                {str(profile_data['visual_style']) if profile_data.get('visual_style') else 'Não definido'}
+
 
               ### INSTRUÇÕES PARA ADAPTAÇÃO
-              1.  **Prioridade Absoluta:** O resultado final deve priorizar o **"Estilo Visual"** e as **"Cores da Marca"** definidos no `brand_profile`.
-              2.  **Mapeamento Visual:** Adapte os `objetos_relevantes` e o `contexto_visual_sugerido` da análise semântica para o `Estilo Visual` da marca. Por exemplo, se o tema é 'natureza' e o estilo é '3D Futurista', a natureza deve ser renderizada em 3D, com brilhos e linhas geométricas.
-              3.  **Mapeamento de Emoções:** Use a `Personalidade da Marca` para refinar a `ação_sugerida` e as `emoções_associadas`. (Ex: Uma marca 'educadora' deve ter personagens em postura de clareza e acolhimento).
-              4.  **Paleta de Cores:** Substitua os `tons_de_cor_sugeridos` originais pelas **Cores da Marca** fornecidas. Use as cores da marca para destaques, iluminação e elementos de fundo, mantendo a consistência.
-              5.  **Geração:** Gere o novo JSON final com a estrutura `analise_semantica` abaixo, refletindo as alterações e a priorização do `brand_profile`.
+              1. **Prioridade Absoluta:**  
+                O resultado final deve priorizar o **"Estilo Visual"** e as **"Cores da Marca"**.
 
-              ### SAÍDA REQUERIDA (NOVO JSON ADAPTADO)
+              2. **Mapeamento Visual:**  
+                Adapte os `objetos_relevantes` e o `contexto_visual_sugerido` da análise semântica 
+                para o `Estilo Visual` da marca.  
+                Exemplo: se o tema é *natureza* e o estilo é *3D Futurista*, 
+                a natureza deve ser renderizada em 3D, com brilhos e linhas geométricas.
+
+              3. **Mapeamento de Emoções:**  
+                Use a `Personalidade da Marca` para refinar a `ação_sugerida` e as `emoções_associadas`.  
+                Exemplo: uma marca *educadora* deve ter personagens em postura de clareza e acolhimento.
+
+              4. **Paleta de Cores:**  
+                Substitua os `tons_de_cor_sugeridos` originais pelas **Cores da Marca**.  
+                Utilize as cores da marca para destaques, iluminação e elementos de fundo.
+
+              5. **Geração:**  
+                Gere o novo JSON final com a estrutura `analise_semantica_adaptada` abaixo, 
+                refletindo as adaptações e a priorização do `Perfil da Marca`.
+
+
+
+              ### SAÍDA REQUERIDA (APENAS RETORNE O NOVO JSON ADAPTADO, NADA MAIS)
               {{
                 "analise_semantica": {{
                     "tema_principal": "[Tema principal adaptado ao contexto da marca]",
@@ -812,23 +951,48 @@ class AIPromptService:
 
     def image_generation_prompt(self, semantic_analysis: dict) -> str:
         """Prompt for AI image generation based on semantic analysis."""
-        profile_data = self._get_creator_profile_data()
+        profile_data = get_creator_profile_data(self.user)
 
-        return f"""
-          Crie uma imagem em estilo {profile_data['visual_style']}.
+        def get_visual_style_info():
+            visual_style = profile_data.get('visual_style', '')
+            if isinstance(visual_style, str) and ' - ' in visual_style:
+                parts = visual_style.split(' - ', 1)
+                return {
+                    'tipo_estilo': parts[0],
+                    'descricao_completa': parts[1] if len(parts) > 1 else ''
+                }
+            elif isinstance(visual_style, dict):
+                return {
+                    'tipo_estilo': visual_style.get('tipo_estilo', ''),
+                    'descricao_completa': visual_style.get('descricao_completa', '')
+                }
+            else:
+                return {
+                    'tipo_estilo': str(visual_style) if visual_style else '',
+                    'descricao_completa': ''
+                }
 
-          {semantic_analysis['contexto_visual_sugerido']}.
+        visual_style_info = get_visual_style_info()
 
-          Inclua elementos como {semantic_analysis['objetos_relevantes']}.
+        return [
+            f"""
+          Crie uma imagem seguindo o estilo e contexto descritos abaixo.
 
-          Transmita as emoções de {semantic_analysis['emoções_associadas']} e a sensação geral de {semantic_analysis['sensação_geral']}.
+          - Estilo visual:
+            - Tipo estilo: {visual_style_info['tipo_estilo']},
+            - Descrição completa: {visual_style_info['descricao_completa']},
+          - Contexto e conteudo:
+            - Contexto visual sugerido: {semantic_analysis['contexto_visual_sugerido']},
+            - Elementos relevantes: {', '.join(semantic_analysis['objetos_relevantes'])},
+            - Tema principal do post: {semantic_analysis['tema_principal']},
+          - Emoção e estética:
+            - Emoções associadas: {', '.join(semantic_analysis['emoções_associadas'])},
+            - Sensação geral: {semantic_analysis['sensação_geral']},
+            - Tons de cor sugeridos: {', '.join(semantic_analysis['tons_de_cor_sugeridos'])}
 
-          Use tons de {semantic_analysis['tons_de_cor_sugeridos']}.
-
-          O post fala sobre: {semantic_analysis['tema_principal']}.
-
-          A marca é {profile_data['business_name']}, cujo estilo é {profile_data['visual_style']} e paleta é {profile_data['color_palette']}.
-
-          REGRAS/RESTRIÇÕES:
-          NÃO GERE OU ADICIONE LOGOMARCAS OU MARCAS D'ÁGUA
+          - Restricoes:
+            - Caso uma logomarca seja anexada, INCLUA a logomarca na imagem de forma harmoniosa e integrada ao design
+            - Caso uma logomarca não seja anexada, NÃO gerar ou adicionar logomarca
+            - Textos renderizados na imagem devem sempre ser escritos em português do Brasil (PT-BR)
         """
+        ]

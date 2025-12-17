@@ -66,12 +66,12 @@ jobs:
             --retry-delay 10 \
             -w "\nHTTP Status: %{http_code}" \
             -s -S)
-          
+
           echo "$RESPONSE"
-          
+
           # Extract HTTP status code
           HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP Status:" | awk '{print $3}')
-          
+
           # Check if successful (2xx status codes)
           if [[ "$HTTP_CODE" =~ ^2 ]]; then
             echo "Batch ${{ matrix.batch }} completed successfully"
