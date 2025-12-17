@@ -14,6 +14,7 @@ from asgiref.sync import sync_to_async
 
 from ClientContext.models import ClientContext
 from ClientContext.utils.url_dedupe import normalize_url_key
+from ClientContext.utils.policy_resolver import resolve_policy
 from ClientContext.utils.source_quality import pick_candidates, is_denied, is_allowed, allowed_domains, build_allowlist_query
 from services.user_validation_service import UserValidationService
 from services.ai_prompt_service import AIPromptService
@@ -349,6 +350,20 @@ class WeeklyContextService:
         # 1. Preparar Prompts e Queries
         profile_data = await sync_to_async(self.prompt_service._get_creator_profile_data)()
         queries = self.prompt_service._build_optimized_search_queries(profile_data)
+
+        # Policy (auto/override) para controlar thresholds/idiomas e auditar comportamento
+        decision = resolve_policy(profile_data)
+        policy = decision.policy
+        logger.info(
+            "[POLICY] key=%s source=%s override=%s reason=%s languages=%s min_selected=%s allow_ratio_threshold=%.2f",
+            policy.key,
+            decision.source,
+            decision.override_value or "",
+            decision.reason,
+            ",".join(policy.languages),
+            policy.min_selected_by_section,
+            policy.allowlist_ratio_threshold,
+        )
         
         # 2. Histórico Anti-Repetição
         excluded_topics = await self._get_recent_topics(user)
@@ -388,24 +403,30 @@ class WeeklyContextService:
                 doms = allowed_domains(section)
                 sanitized = _sanitize_query_for_allowlist(query)
                 allow_q = build_allowlist_query(sanitized or query, doms, max_domains=8) if doms else query
-                pt_pool = await sync_to_async(_fetch_pool)("lang_pt", allow_q)
+                pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", allow_q)
                 if doms and len(pt_pool) < 5:
                     # fallback 1: query genérica (menos restritiva) ainda dentro da allowlist
                     fallback_base = f"{profile_data.get('specialization','')} cultura organizacional gestão de processos {datetime.now().year}"
                     fb_q = build_allowlist_query(_sanitize_query_for_allowlist(fallback_base), doms, max_domains=8)
-                    pt_pool = await sync_to_async(_fetch_pool)("lang_pt", fb_q)
+                    pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", fb_q)
                 if doms and len(pt_pool) < 5:
                     # fallback 2: busca geral
-                    pt_pool = await sync_to_async(_fetch_pool)("lang_pt", query)
+                    pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", query)
                 logger.info("[SOURCE_AUDIT] seção=%s stage=raw_pt count=%s", section, len(pt_pool))
                 pt_urls = [i.get("url") for i in pt_pool if isinstance(i, dict) and isinstance(i.get("url"), str)]
-                picked_urls = pick_candidates(section, pt_urls, min_allowlist=3, max_keep=12)
+                picked_urls = pick_candidates(
+                    section,
+                    pt_urls,
+                    min_allowlist=policy.allowlist_min_coverage.get(section, 3),
+                    max_keep=12,
+                )
                 picked_items: list[dict] = []
                 raw_pt_count = len(pt_pool)
                 raw_en_count = 0
                 denied_count = 0
                 allowlist_count = 0
                 fallback_used = []
+                min_needed = policy.min_selected_by_section.get(section, 3)
 
                 # Aplicar dedupe (histórico + dentro do run) e limite por domínio
                 per_domain: dict[str, int] = {}
@@ -434,10 +455,10 @@ class WeeklyContextService:
                         break
 
                 # 2) Fallback en se cobertura baixa
-                if len(picked_items) < 3:
-                    en_pool = await sync_to_async(_fetch_pool)("lang_en", allow_q)
+                if len(picked_items) < min_needed and len(policy.languages) > 1:
+                    en_pool = await sync_to_async(_fetch_pool)(policy.languages[1], allow_q)
                     if doms and len(en_pool) < 5:
-                        en_pool = await sync_to_async(_fetch_pool)("lang_en", query)
+                        en_pool = await sync_to_async(_fetch_pool)(policy.languages[1], query)
                     logger.info("[SOURCE_AUDIT] seção=%s stage=raw_en count=%s", section, len(en_pool))
                     raw_en_count = len(en_pool)
                     fallback_used.append("en")
@@ -466,7 +487,7 @@ class WeeklyContextService:
                         if len(picked_items) >= 6:
                             break
 
-                if len(picked_items) < 3:
+                if len(picked_items) < min_needed:
                     logger.info(
                         "[LOW_SOURCE_COVERAGE] seção=%s picked=%s lookback_weeks=%s",
                         section,
@@ -488,20 +509,23 @@ class WeeklyContextService:
                     )
 
                 logger.info(
-                    "[SOURCE_METRICS] seção=%s raw_pt=%s raw_en=%s denied=%s allow=%s selected=%s fallback=%s",
+                    "[SOURCE_METRICS] policy=%s seção=%s raw_pt=%s raw_en=%s denied=%s allow=%s selected=%s min_needed=%s fallback=%s",
+                    policy.key,
                     section,
                     raw_pt_count,
                     raw_en_count,
                     denied_count,
                     allowlist_count,
                     len(picked_items),
+                    min_needed,
                     ",".join(fallback_used) if fallback_used else "",
                 )
 
                 # Alertas simples de qualidade
-                if section in ("mercado", "tendencias", "concorrencia") and len(picked_items) < 3:
+                if section in ("mercado", "tendencias", "concorrencia") and len(picked_items) < min_needed:
                     logger.warning(
-                        "[LOW_SOURCE_COVERAGE] seção=%s selected=%s raw_pt=%s raw_en=%s",
+                        "[LOW_SOURCE_COVERAGE] policy=%s seção=%s selected=%s raw_pt=%s raw_en=%s",
+                        policy.key,
                         section,
                         len(picked_items),
                         raw_pt_count,
@@ -511,9 +535,10 @@ class WeeklyContextService:
                 # Ratio de allowlist (quando há allowlist definida para a seção)
                 if doms and len(picked_items) > 0:
                     allow_ratio = allowlist_count / max(len(picked_items), 1)
-                    if allow_ratio < 0.60:
+                    if allow_ratio < policy.allowlist_ratio_threshold:
                         logger.warning(
-                            "[LOW_ALLOWLIST_RATIO] seção=%s ratio=%.2f allow=%s selected=%s domains_allowlist=%s",
+                            "[LOW_ALLOWLIST_RATIO] policy=%s seção=%s ratio=%.2f allow=%s selected=%s domains_allowlist=%s",
+                            policy.key,
                             section,
                             allow_ratio,
                             allowlist_count,
