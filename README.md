@@ -134,6 +134,10 @@ FIXED_PRICES = {
 
 ---
 
+## 📊 Analytics + Bandits
+
+- Documentação do loop (Decisão → Eventos → Recompensa → Política): `docs/ANALYTICS_BANDITS.md`
+
 ## 🚀 **Início Rápido**
 
 ### **1. Instalação**

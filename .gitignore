@@ -53,6 +53,7 @@ Thumbs.db
 # Documentation
 *.md
 README*
+!docs/ANALYTICS_BANDITS.md
 
 # Scripts
 scripts/
