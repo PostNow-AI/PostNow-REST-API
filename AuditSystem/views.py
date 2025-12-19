@@ -3,7 +3,6 @@ from datetime import date, timedelta
 
 from django.db.models import Count, Q
 from django.views.decorators.csrf import csrf_exempt
-from IdeaBank.services.mail_service import MailService
 from rest_framework import status
 from rest_framework.decorators import (
     api_view,
@@ -12,8 +11,9 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from services.daily_post_amount_service import DailyPostAmountService
 
+from IdeaBank.services.mail_service import MailService
+from services.daily_post_amount_service import DailyPostAmountService
 from .models import AuditLog, DailyReport
 from .services import AuditService
 
@@ -580,3 +580,123 @@ Taxa de Sucesso: {data['content_generation']['success_rate']:.1f}%
             text += f"{error['error_message'][:80]}: {error['count']}\n"
 
     return text
+
+
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])  # No authentication required for webhooks
+@permission_classes([AllowAny])  # Allow Mailjet to access
+def mailjet_webhook(request):
+    """
+    Handle Mailjet webhook events.
+
+    Mailjet sends events like 'open', 'click', 'bounce', 'spam', etc.
+    This endpoint logs these events in the AuditLog.
+
+    Expected payload from Mailjet:
+    [
+        {
+            "event": "open",
+            "time": 1433333949,
+            "MessageID": 19421777835146490,
+            "email": "api@mailjet.com",
+            "mj_campaign_id": 7257,
+            "mj_contact_id": 4,
+            "customcampaign": "",
+            "CustomID": "helloworld",
+            "Payload": "",
+            "ip": "127.0.0.1",
+            "geo": "US",
+            "agent": "Mozilla/5.0"
+        }
+    ]
+    """
+    try:
+        # Mailjet sends an array of events
+        events = request.data
+
+        if not isinstance(events, list):
+            events = [events]
+
+        processed_events = []
+
+        for event in events:
+            event_type = event.get('event', '').lower()
+            email = event.get('email', '')
+            message_id = event.get('MessageID', '')
+            custom_id = event.get('CustomID', '')
+            ip_address = event.get('ip', '')
+            user_agent = event.get('agent', '')
+            timestamp = event.get('time')
+
+            # Map Mailjet event types to our action types
+            action_mapping = {
+                'open': 'email_opened',
+                'click': 'email_clicked',
+                'bounce': 'email_bounced',
+                'spam': 'email_failed',
+                'blocked': 'email_failed',
+                'unsub': 'email_failed',
+            }
+
+            action = action_mapping.get(event_type, 'email_failed')
+
+            # Try to find the user by email
+            user = None
+            try:
+                from django.contrib.auth.models import User
+                user = User.objects.filter(email=email).first()
+            except Exception:
+                pass
+
+            # Log the event
+            details = {
+                'event_type': event_type,
+                'email': email,
+                'message_id': str(message_id),
+                'custom_id': custom_id,
+                'ip': ip_address,
+                'user_agent': user_agent,
+                'timestamp': timestamp,
+                'geo': event.get('geo', ''),
+                'payload': event.get('Payload', ''),
+            }
+
+            # Remove empty values
+            details = {k: v for k, v in details.items() if v}
+
+            audit_log = AuditService.log_email_operation(
+                user=user,
+                action=action,
+                status='success',
+                details=details,
+                resource_id=str(message_id),
+            )
+
+            processed_events.append({
+                'event_type': event_type,
+                'action': action,
+                'email': email,
+                'audit_log_id': audit_log.id
+            })
+
+        return Response({
+            'success': True,
+            'message': f'Processados {len(processed_events)} eventos com sucesso',
+            'events': processed_events
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        # Log the error
+        AuditService.log_system_operation(
+            user=None,
+            action='system_error',
+            status='error',
+            error_message=f'Erro ao processar webhook do Mailjet: {str(e)}',
+            details={'request_data': request.data if hasattr(request, 'data') else {}}
+        )
+
+        return Response({
+            'success': False,
+            'error': f'Erro ao processar eventos: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
