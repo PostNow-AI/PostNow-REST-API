@@ -78,6 +78,7 @@ class AuditLog(models.Model):
         ('email_failed', 'Email Falhou'),
         ('email_bounced', 'Email Rejeitado'),
         ('email_opened', 'Email Aberto'),
+        ('email_clicked', 'Email Clicado'),
 
         # System Operations
         ('system_error', 'Erro do Sistema'),
