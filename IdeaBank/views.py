@@ -17,8 +17,14 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from services.daily_post_amount_service import DailyPostAmountService
 
+from AuditSystem.services import AuditService
+from Analytics.services.image_pregen_policy import (
+    ACTION_PRE_GENERATE,
+    make_image_pregen_decision,
+)
+from Analytics.services.text_variant_policy import make_text_variant_decision
+from services.daily_post_amount_service import DailyPostAmountService
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
     ImageGenerationRequestSerializer,
@@ -50,7 +56,7 @@ class PostListView(generics.ListCreateAPIView):
         return Post.objects.filter(user=self.request.user)
 
     def get_serializer_class(self):
-        if self.request.method == 'POST':
+        if self.request.method == "POST":
             return PostCreateSerializer
         return PostSerializer
 
@@ -60,10 +66,10 @@ class PostListView(generics.ListCreateAPIView):
         # Log post creation
         AuditService.log_post_operation(
             user=self.request.user,
-            action='post_created',
+            action="post_created",
             post_id=str(serializer.instance.id),
-            status='success',
-            details={'post_name': serializer.instance.name}
+            status="success",
+            details={"post_name": serializer.instance.name},
         )
 
 
@@ -204,7 +210,8 @@ def generate_post_idea(request):
     try:
         # Create the post first
         post_data = serializer.validated_data
-        include_image = post_data.get('include_image', False)
+        include_image_requested = post_data.get("include_image", False)
+        include_image_generate_now = include_image_requested
 
         # Create the post
         post = Post.objects.create(user=request.user, **post_data)
@@ -217,13 +224,40 @@ def generate_post_idea(request):
         )
 
         # Create the post idea with generated content
-        post_idea = PostIdea.objects.create(
-            post=post,
-            content=result['content']
-        )
+        post_idea = PostIdea.objects.create(post=post, content=result["content"])
 
-        # Generate image if requested
-        if include_image:
+        # Telemetria de variante de texto (base p/ bandit futuro, sem alterar comportamento)
+        try:
+            make_text_variant_decision(
+                request.user,
+                "PostIdea",
+                str(post_idea.id),
+                {
+                    "post_type": post_data.get("type"),
+                    "objective": post_data.get("objective"),
+                    "source": "manual_generation",
+                },
+            )
+        except Exception:
+            pass
+
+        # Generate image if requested (mas respeitando política de pregen vs on-demand)
+        if include_image_requested:
+            decision = make_image_pregen_decision(
+                request.user,
+                "PostIdea",
+                str(post_idea.id),
+                {
+                    "post_type": post_data.get("type"),
+                    "objective": post_data.get("objective"),
+                    "source": "manual_generation",
+                },
+            )
+
+            if decision.action != ACTION_PRE_GENERATE:
+                include_image_generate_now = False
+
+        if include_image_generate_now:
             try:
                 # Add the created post ID and post_idea ID to post_data for image generation
                 post_data_with_ids = {

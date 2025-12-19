@@ -123,6 +123,19 @@ class CreatorProfile(models.Model):
         help_text="Perfis que você admira ou se inspira"
     )
 
+    # === WEEKLY CONTEXT (CONFIGURAÇÃO) ===
+    weekly_context_policy_override = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name="Override de Policy (Weekly Context)",
+        help_text=(
+            "Opcional. Força uma policy predefinida do Weekly Context para este perfil. "
+            "Ex.: default, business_strict, broad_discovery. "
+            "Deixe vazio para decisão automática."
+        ),
+    )
+
     # === STEP 2: BRANDING ===
     logo = models.TextField(
         blank=True,

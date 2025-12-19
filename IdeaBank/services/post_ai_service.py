@@ -2,6 +2,7 @@
 Post AI Service for generating post ideas using AI models.
 """
 
+import os
 from typing import Dict
 
 from django.contrib.auth.models import User

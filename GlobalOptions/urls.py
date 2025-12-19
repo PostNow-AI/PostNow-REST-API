@@ -19,4 +19,10 @@ urlpatterns = [
     path('specializations/create-for-profession/', views.create_custom_specialization_for_profession,
          name='create_custom_specialization_for_profession'),
     path('fonts/create/', views.create_custom_font, name='create_custom_font'),
+
+    # Admin dashboard stats + Mailjet webhook
+    path('dashboard-stats/', views.DashboardStatsView.as_view(),
+         name='dashboard_stats'),
+    path('webhooks/mailjet/', views.MailjetWebhookView.as_view(),
+         name='mailjet_webhook'),
 ]

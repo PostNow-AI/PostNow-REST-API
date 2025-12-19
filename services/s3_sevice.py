@@ -19,7 +19,7 @@ class S3Service:
         )
         self.image_bucket = os.getenv('AWS_S3_IMAGE_BUCKET')
 
-    def upload_image(self, user: User, image_bytes: bytes) -> str:
+    def upload_image(self, user: User, image_bytes: bytes | str) -> str:
         """Upload a file to an S3 bucket"""
         try:
             unique_id = str(uuid.uuid4())

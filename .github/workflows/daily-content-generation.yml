@@ -34,6 +34,13 @@ jobs:
             19,
             20,
             21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
           ]
       max-parallel: 3 # Limit concurrent batches to avoid overwhelming your API
 
@@ -50,9 +57,26 @@ jobs:
       - name: Call Vercel API for batch ${{ matrix.batch }}
         run: |
           echo "Processing batch ${{ matrix.batch }}"
-          curl -X GET \
+          RESPONSE=$(curl -X GET \
             "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/daily-content-generation/?batch=${{ matrix.batch }}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            -w "HTTP Status: %{http_code}\n" \
-            -s
+            --max-time 800 \
+            --retry 3 \
+            --retry-delay 10 \
+            -w "\nHTTP Status: %{http_code}" \
+            -s -S)
+
+          echo "$RESPONSE"
+
+          # Extract HTTP status code
+          HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP Status:" | awk '{print $3}')
+
+          # Check if successful (2xx status codes)
+          if [[ "$HTTP_CODE" =~ ^2 ]]; then
+            echo "Batch ${{ matrix.batch }} completed successfully"
+            exit 0
+          else
+            echo "Batch ${{ matrix.batch }} failed with status $HTTP_CODE"
+            exit 1
+          fi

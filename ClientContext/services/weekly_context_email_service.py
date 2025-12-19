@@ -3,9 +3,10 @@ from collections import defaultdict
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
+from django.contrib.auth.models import User
+
 from ClientContext.models import ClientContext
 from ClientContext.utils.weekly_context import generate_weekly_context_email_template
-from django.contrib.auth.models import User
 from services.get_creator_profile_data import get_creator_profile_data
 from services.mailjet_service import MailjetService
 
@@ -22,7 +23,14 @@ class WeeklyContextEmailService:
             ClientContext.objects.filter(
                 weekly_context_error=None,
             ).select_related('user').values(
-                'id', 'user__id', 'user__email', 'user__first_name', 'market_panorama', 'market_tendencies', 'market_challenges', 'market_sources', 'competition_main', 'competition_strategies', 'competition_opportunities', 'competition_sources', 'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources', 'tendencies_popular_themes', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources', 'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources', 'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources', 'created_at', 'updated_at', 'user_id', 'weekly_context_error', 'weekly_context_error_date'
+                'id', 'user__id', 'user__email', 'user__first_name',
+                'market_panorama', 'market_tendencies', 'market_challenges', 'market_opportunities', 'market_sources',
+                'competition_main', 'competition_strategies', 'competition_benchmark', 'competition_opportunities', 'competition_sources',
+                'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources',
+                'tendencies_popular_themes', 'tendencies_data', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources',
+                'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources',
+                'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_mentions', 'brand_sources',
+                'created_at', 'updated_at', 'user_id', 'weekly_context_error', 'weekly_context_error_date'
             )
         )
 
