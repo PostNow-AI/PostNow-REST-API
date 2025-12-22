@@ -269,7 +269,7 @@ class DailyIdeasService:
                 image_url = self.s3_service.upload_image(
                     user, image_result)
 
-            post_idea.image_description = semantic_analysis
+            post_idea.image_description = json.dumps(semantic_analysis)
             post_idea.image_url = image_url
             post_idea.save()
 
