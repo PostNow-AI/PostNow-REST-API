@@ -6,43 +6,45 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from services.semaphore_service import SemaphoreService
-from .weekly_context_service import WeeklyContextService
+from .weekly_feed_creation import WeeklyFeedCreationService
 
 logger = logging.getLogger(__name__)
 
 
-class RetryClientContext:
+class RetryWeeklyFeedService:
     def __init__(self):
         self.semaphore_service = SemaphoreService()
-        self.weekly_context_service = WeeklyContextService()
+        self.weekly_feed_creation = WeeklyFeedCreationService()
 
     @sync_to_async
-    def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
-        """Get a batch of users with weekly context errors"""
+    def _get_users_with_errors(self, offset: int, limit: int) -> list[dict[str, Any]]:
+        """Get all users who have daily generation errors."""
         if limit is None:
             return list(
-                User.objects.filter(
+                User.objects.extra(
+                    where=["weekly_feed_generation_error IS NOT NULL"]
+                ).filter(
                     usersubscription__status='active',
-                    is_active=True,
-                    client_context__weekly_context_error__isnull=False
-                ).distinct().values('id', 'email', 'username')[offset:]
+                    is_active=True
+                ).distinct().values('id', 'email', 'username', 'first_name')[offset:]
             )
 
         return list(
-            User.objects.filter(
+            User.objects.extra(
+                where=["weekly_feed_generation_error IS NOT NULL"]
+            ).filter(
                 usersubscription__status='active',
-                is_active=True,
-                client_context__weekly_context_error__isnull=False
-            ).distinct().values('id', 'email', 'username')[offset:offset + limit]
+                is_active=True
+            ).distinct().values('id', 'email', 'username', 'first_name')[offset:offset + limit]
         )
 
-    async def process_all_users_context(self, batch_number: int = 1, batch_size: int = 0) -> Dict[str, Any]:
-        """Process weekly context gen for all eligible users."""
+    async def process_weekly_feed_for_failed_users(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
+        """Process daily ideas generation for a batch of users"""
         start_time = timezone.now()
         offset = (batch_number - 1) * batch_size
         limit = batch_size
 
-        eligible_users = await self._get_eligible_users(offset, limit)
+        eligible_users = await self._get_users_with_errors(offset=offset, limit=limit)
         total = len(eligible_users)
 
         if total == 0:
@@ -50,13 +52,13 @@ class RetryClientContext:
                 'status': 'completed',
                 'processed': 0,
                 'total_users': 0,
-                'message': 'No users with error found',
+                'message': 'No eligible users found',
             }
 
         try:
             results = await self.semaphore_service.process_concurrently(
                 users=eligible_users,
-                function=self.weekly_context_service.process_single_user
+                function=self.weekly_feed_creation.process_single_user
             )
 
             processed_count = sum(
@@ -65,6 +67,9 @@ class RetryClientContext:
                 1 for r in results if r.get('status') == 'failed')
             skipped_count = sum(
                 1 for r in results if r.get('status') == 'skipped')
+            created_posts_count = sum(
+                len(r.get('created_posts', [])) for r in results if r.get('status') == 'success'
+            )
 
             end_time = timezone.now()
             duration = (end_time - start_time).total_seconds()
@@ -72,6 +77,7 @@ class RetryClientContext:
             result = {
                 'status': 'completed',
                 'processed': processed_count,
+                'created_posts': created_posts_count,
                 'failed': failed_count,
                 'skipped': skipped_count,
                 'total_users': total,
@@ -80,7 +86,6 @@ class RetryClientContext:
             }
 
             return result
-
         except Exception as e:
             return {
                 'status': 'error',

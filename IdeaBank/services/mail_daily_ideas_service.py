@@ -3,7 +3,9 @@ from collections import defaultdict
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth import get_user_model
+
 from IdeaBank.models import Post
+from IdeaBank.utils.current_week import get_current_week
 from IdeaBank.utils.mail_templates.daily_content import daily_content_template
 from services.mailjet_service import MailjetService
 
@@ -15,13 +17,18 @@ class MailDailyIdeasService:
     def __init__(self):
         self.mailjet_service = MailjetService()
 
-    async def fetch_users_daily_ideas(self) -> list:
+    @staticmethod
+    async def fetch_users_daily_ideas() -> list:
         """Fetch users with daily ideas to be mailed."""
+        week_id = get_current_week()
+
         return await sync_to_async(list)(
             Post.objects.filter(
-                is_active=False
+                is_active=False,
+                further_details=week_id
             ).select_related('user').values(
-                'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content', 'ideas__image_url'
+                'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content',
+                'ideas__image_url'
             )
         )
 

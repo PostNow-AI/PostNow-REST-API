@@ -3,10 +3,11 @@ import logging
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
-from AuditSystem.services import AuditService
-from ClientContext.models import ClientContext
 from django.contrib.auth.models import User
 from django.utils import timezone
+
+from AuditSystem.services import AuditService
+from ClientContext.models import ClientContext
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.mailjet_service import MailjetService
@@ -26,7 +27,7 @@ class WeeklyContextService:
         self.mailjet_service = MailjetService()
 
     @sync_to_async
-    def _get_eligible_users(self, offset: int, limit: int) -> list[User]:
+    def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
         """Get a batch of users eligible for weekly context generation"""
         if limit is None:
             return list(
@@ -226,7 +227,7 @@ class WeeklyContextService:
                 'error': str(e),
             }
 
-    def _generate_context_for_user(self, user: User) -> None:
+    def _generate_context_for_user(self, user: User) -> str:
         """AI service call to generate weekly context for a user."""
         try:
             self.prompt_service.set_user(user)

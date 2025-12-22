@@ -3,15 +3,15 @@ import logging
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
-from AuditSystem.services import AuditService
-from ClientContext.models import ClientContext
-from ClientContext.serializers import ClientContextSerializer
-from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
 from django.db import connection
 from django.utils import timezone
 from google.genai import types
+
+from AuditSystem.services import AuditService
+from CreatorProfile.models import CreatorProfile
 from IdeaBank.models import Post, PostIdea
+from IdeaBank.utils.current_week import get_current_week
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.s3_sevice import S3Service
@@ -31,7 +31,7 @@ class DailyIdeasService:
         self.s3_service = S3Service()
 
     @sync_to_async
-    def _get_eligible_users(self, offset: int, limit: int) -> list[User]:
+    def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
         """Get a batch of users eligible for weekly context generation"""
 
         if limit is None:
@@ -77,7 +77,7 @@ class DailyIdeasService:
         try:
             results = await self.semaphore_service.process_concurrently(
                 users=eligible_users,
-                function=self._process_single_user
+                function=self.process_single_user
             )
 
             processed_count = sum(
@@ -113,7 +113,7 @@ class DailyIdeasService:
                 'message': f'Error processing users: {str(e)}',
             }
 
-    async def _process_single_user(self, user_data: dict) -> Dict[str, Any]:
+    async def process_single_user(self, user_data: dict) -> Dict[str, Any]:
         """Process daily ideas generation for a single user"""
         user_id = user_data.get('id') or user_data.get('user_id')
         if not user_data:
@@ -127,19 +127,11 @@ class DailyIdeasService:
         """Generate daily ideas to the user"""
         user = await sync_to_async(User.objects.get)(id=user_id)
         try:
-            user_posts = []
             user_data = await self.user_validation_service.get_user_data(user_id)
             if not user_data:
                 return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
 
-            await sync_to_async(self.audit_service.log_daily_content_generation)(
-                user=user,
-                action='daily_content_generation_started',
-                status='info',
-            )
-
             validation_result = await self.user_validation_service.validate_user_eligibility(user_data)
-
             if validation_result['status'] != 'eligible':
                 return {
                     'status': 'skipped',
@@ -147,32 +139,49 @@ class DailyIdeasService:
                     'user_id': user_id
                 }
 
-            content_result = await sync_to_async(self._generate_content_for_user)(user)
+            user_posts = []
+
+            week_id = get_current_week()
+
+            feed_base_post = await sync_to_async(Post.objects.get)(
+                user=user,
+                is_active=False,
+                further_details=week_id)
+            post_idea = await sync_to_async(lambda: feed_base_post.ideas.first())()
+
+            post_text_feed = {
+                'titulo': feed_base_post.name,
+                'type': 'feed',
+                'content': post_idea.content,
+            }
+
+            await sync_to_async(self.audit_service.log_daily_content_generation)(
+                user=user,
+                action='daily_content_generation_started',
+                status='info',
+            )
+
+            content_result = await sync_to_async(self._generate_content_for_user)(user, post_text_feed)
 
             content_json = content_result.replace(
                 'json', '', 1).strip('`').strip()
             content_loaded = json.loads(content_json)
 
-            post_text_feed = content_loaded.get('post_text_feed')
             post_text_stories = content_loaded.get('post_text_stories')
             post_text_reels = content_loaded.get('post_text_reels')
 
-            post_content_feed = f"""{post_text_feed.get('legenda', '').strip()}\n\n\n{' '.join(post_text_feed.get('hashtags', []))}\n\n\n{post_text_feed.get('cta', '').strip()}
-            """
+            post_content_stories = f"""{post_text_stories.get('roteiro', '').strip()}"""
+            post_content_reels = f"""{post_text_reels.get('roteiro', '').strip()}\n\n\n"""
 
-            post_content_stories = f"""{post_text_stories.get('roteiro', '').strip()}\n\n\n{' '.join(post_text_stories.get('hashtags', []))}\n\n\n{post_text_stories.get('cta', '').strip()}
-            """
+            await sync_to_async(self._generate_image_for_feed_post)(
+                user, post_idea, post_text_feed['content'])
 
-            post_content_reels = f"""{post_text_reels.get('roteiro', '').strip()}\n\n\n{post_text_reels.get('legenda', '').strip()}\n\n\n{' '.join(post_text_reels.get('hashtags', []))}\n\n\n{post_text_reels.get('cta', '').strip()}
-            """
-
-            await self._save_text_to_db(user, post_text_feed, post_content_feed, user_posts, 'feed')
-            await self._save_text_to_db(user, post_text_stories, post_content_stories, user_posts, 'story')
-            await self._save_text_to_db(user, post_text_reels, post_content_reels, user_posts, 'reels')
+            await self._save_text_to_db(user, post_text_stories, post_content_stories, user_posts, week_id, 'story')
+            await self._save_text_to_db(user, post_text_reels, post_content_reels, user_posts, week_id, 'reels')
 
             await self._clear_user_error(user)
 
-            return {'status': 'success', 'user_id': user_id, 'created_posts': user_posts}
+            return {'status': 'success', 'user_id': user_id, 'created_posts': []}
         except Exception as e:
             await self._store_user_error(user, str(e))
             await sync_to_async(self.audit_service.log_daily_content_generation)(
@@ -186,18 +195,19 @@ class DailyIdeasService:
                 'user_id': user_id
             }
 
-    async def _save_text_to_db(self, user: User, post_data: dict, post_content: str, user_posts: list, post_type: str) -> PostIdea:
-        image_url = ''
-        sugestao_visual = post_data.get('sugestao_visual', '')
-        if post_type == 'feed':
-            image_url = await sync_to_async(self._generate_image_for_feed_post)(
-                user, post_content)
-
+    @staticmethod
+    async def _save_text_to_db(
+            user: User,
+            post_data: dict,
+            post_content: str,
+            user_posts: list,
+            week_id: str,
+            post_type: str) -> None:
         post = await sync_to_async(Post.objects.create)(
             user=user,
             name=post_data.get('titulo', 'Conteúdo Diário'),
             type=post_type,
-            further_details='',
+            further_details=week_id,
             include_image=True if post_type == 'feed' else False,
             is_automatically_generated=True,
             is_active=False
@@ -206,8 +216,8 @@ class DailyIdeasService:
         post_idea = await sync_to_async(PostIdea.objects.create)(
             post=post,
             content=post_content,
-            image_url=image_url,
-            image_description=sugestao_visual
+            image_url='',
+            image_description=''
         )
 
         user_posts.append({
@@ -217,9 +227,8 @@ class DailyIdeasService:
             'title': post.name
         })
 
-    def _generate_image_for_feed_post(self, user: User, post_content: str) -> str:
+    def _generate_image_for_feed_post(self, user: User, post_idea: PostIdea, post_content: str) -> str:
         """AI service call to generate image for feed post."""
-        # TODO: Fix image gen config to better one
         try:
             user_logo = CreatorProfile.objects.filter(user=user).first().logo
 
@@ -237,25 +246,11 @@ class DailyIdeasService:
                 'json', '', 1).strip('`').strip()
             semantic_loaded = json.loads(semantic_json)
 
-            adapted_semantic_analysis_prompt = self.prompt_service.adapted_semantic_analysis_prompt(
-                semantic_loaded)
-
-            adapted_semantic_json = self.ai_service.generate_text(
-                adapted_semantic_analysis_prompt, user)
-            adapted_semantic_str = adapted_semantic_json.replace(
-                'json', '', 1).strip('`').strip()
-            adapted_semantic_loaded = json.loads(adapted_semantic_str)
-
-            semantic_analysis = adapted_semantic_loaded.get(
+            semantic_analysis = semantic_loaded.get(
                 'analise_semantica', {})
 
             image_prompt = self.prompt_service.image_generation_prompt(
                 semantic_analysis)
-
-            # image_generated_prompt = self.ai_service.generate_text(
-            #     image_prompt, user)
-
-            # print(image_generated_prompt)
 
             image_result = self.ai_service.generate_image(image_prompt, user_logo, user, types.GenerateContentConfig(
                 temperature=0.7,
@@ -274,22 +269,22 @@ class DailyIdeasService:
                 image_url = self.s3_service.upload_image(
                     user, image_result)
 
+            post_idea.image_description = semantic_analysis
+            post_idea.image_url = image_url
+            post_idea.save()
+
             return image_url
         except Exception as e:
             raise Exception(
                 f"Failed to generate image for user {user.id}: {str(e)}")
 
-    def _generate_content_for_user(self, user: User) -> None:
+    def _generate_content_for_user(self, user: User, post_text_feed: dict) -> str:
         """AI service call to generate daily ideas for a user."""
         try:
             self.prompt_service.set_user(user)
-            context = ClientContext.objects.filter(user=user).first()
-            serializer = ClientContextSerializer(context)
-
-            context_data = serializer.data if serializer else {}
 
             prompt = self.prompt_service.build_campaign_prompts(
-                context_data)
+                post_text_feed)
 
             content_result = self.ai_service.generate_text(prompt, user, types.GenerateContentConfig(
                 temperature=0.7,
@@ -304,14 +299,16 @@ class DailyIdeasService:
             raise Exception(
                 f"Failed to generate context for user {user.id}: {str(e)}")
 
-    async def _store_user_error(self, user, error_message: str):
+    @staticmethod
+    async def _store_user_error(user, error_message: str):
         """Store error message in user model for retry processing."""
         await sync_to_async(lambda: connection.cursor().execute(
             "UPDATE auth_user SET daily_generation_error = %s, daily_generation_error_date = %s WHERE id = %s",
             [error_message, timezone.now(), user.id]
         ))()
 
-    async def _clear_user_error(self, user):
+    @staticmethod
+    async def _clear_user_error(user):
         """Clear error message from user model after successful generation."""
         await sync_to_async(lambda: connection.cursor().execute(
             "UPDATE auth_user SET daily_generation_error = NULL, daily_generation_error_date = NULL WHERE id = %s",

@@ -4,8 +4,8 @@ from typing import Any, Dict
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.utils import timezone
-from services.semaphore_service import SemaphoreService
 
+from services.semaphore_service import SemaphoreService
 from .daily_ideas_service import DailyIdeasService
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ class RetryIdeasService:
         self.daily_ideas_service = DailyIdeasService()
 
     @sync_to_async
-    def _get_users_with_errors(self, offset: int, limit: int) -> list[User]:
+    def _get_users_with_errors(self, offset: int, limit: int) -> list[dict[str, Any]]:
         """Get all users who have daily generation errors."""
         if limit is None:
             return list(
@@ -58,7 +58,7 @@ class RetryIdeasService:
         try:
             results = await self.semaphore_service.process_concurrently(
                 users=eligible_users,
-                function=self.daily_ideas_service._process_single_user
+                function=self.daily_ideas_service.process_single_user
             )
 
             processed_count = sum(

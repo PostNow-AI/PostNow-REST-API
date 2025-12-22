@@ -5,7 +5,6 @@ New Post-based views for IdeaBank app.
 import asyncio
 import logging
 
-from AuditSystem.services import AuditService
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -17,8 +16,9 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from services.daily_post_amount_service import DailyPostAmountService
 
+from AuditSystem.services import AuditService
+from services.daily_post_amount_service import DailyPostAmountService
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
     ImageGenerationRequestSerializer,
@@ -35,8 +35,11 @@ from .services.mail_daily_error import MailDailyErrorService
 from .services.mail_daily_ideas_service import MailDailyIdeasService
 from .services.post_ai_service import PostAIService
 from .services.retry_ideas_service import RetryIdeasService
+from .services.retry_weekly_feed import RetryWeeklyFeedService
+from .services.weekly_feed_creation import WeeklyFeedCreationService
 
 logger = logging.getLogger(__name__)
+
 
 # Post management views
 
@@ -774,6 +777,121 @@ def manual_trigger_daily_generation(request):
 @require_http_methods(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([])
+def vercel_cron_weekly_feed_generation(request):
+    """
+    Vercel Cron endpoint for weekly feed generation
+    Called automatically by Vercel at scheduled time
+    """
+
+    try:
+        # Get batch number from query params (default to 1)
+        batch_number = int(request.GET.get('batch', 1))
+        batch_size = 6  # Process 6 users per batch, to avoid vercel timeouts
+
+        # Run async processing
+        service = WeeklyFeedCreationService()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_started',
+            status='info',
+            resource_type='DailyContentGeneration',
+        )
+
+        try:
+            result = loop.run_until_complete(
+                service.process_weekly_ideas_for_users(
+                    batch_number=batch_number, batch_size=batch_size)
+            )
+            AuditService.log_system_operation(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success',
+                resource_type='DailyContentGeneration',
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse({
+            'message': 'Daily content generation completed',
+            'result': result
+        }, status=200)
+
+    except Exception as e:
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_failed',
+            status='error',
+            resource_type='DailyContentGeneration',
+            details=str(e)
+        )
+        return JsonResponse({
+            'error': 'Failed to generate daily content',
+            'details': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def manual_trigger_weekly_feed_generation(request):
+    """
+    Manual trigger for weekly feed generation (for testing)
+    """
+    try:
+        service = WeeklyFeedCreationService()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_started',
+            status='info',
+            resource_type='DailyContentGeneration',
+        )
+
+        try:
+            result = loop.run_until_complete(
+                service.process_weekly_ideas_for_users(
+                    batch_number=1, batch_size=0)
+            )
+            AuditService.log_system_operation(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success',
+                resource_type='DailyContentGeneration',
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse({
+            'message': 'Daily content generation completed',
+            'result': result
+        }, status=200)
+
+    except Exception as e:
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_failed',
+            status='error',
+            resource_type='DailyContentGeneration',
+            details=str(e)
+        )
+        return JsonResponse({
+            'error': 'Failed to generate daily content',
+            'details': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
 def mail_all_generated_content(request):
     """Fetch all user automatically generated content and email it to them."""
     try:
@@ -958,5 +1076,119 @@ def admin_fetch_all_daily_posts(request):
     except Exception as e:
         return JsonResponse({
             'error': 'Failed to fetch daily posts',
+            'details': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def vercel_cron_retry_weekly_feed_failed_users(request):
+    """
+    Vercel Cron endpoint for retrying failed daily content generation
+    Called automatically by Vercel at 8:00 AM UTC
+    """
+
+    try:
+        # Get batch number from query params (default to 1)
+        batch_number = int(request.GET.get('batch', 1))
+        batch_size = 6  # Process 6 users per batch, to avoid vercel timeouts
+        service = RetryWeeklyFeedService()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_started',
+            status='info',
+            resource_type='DailyContentGeneration',
+        )
+
+        try:
+            result = loop.run_until_complete(
+                service.process_weekly_feed_for_failed_users(
+                    batch_number=batch_number, batch_size=batch_size)
+            )
+            AuditService.log_system_operation(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success',
+                resource_type='DailyContentGeneration',
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse({
+            'message': 'Daily content generation completed',
+            'result': result
+        }, status=200)
+
+    except Exception as e:
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_failed',
+            status='error',
+            resource_type='DailyContentGeneration',
+            details=str(e)
+        )
+        return JsonResponse({
+            'error': 'Failed to generate daily content',
+            'details': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([])
+def manual_retry_weekly_feed_failed_users(request):
+    """
+    Manual trigger for retrying failed users (for testing)
+    """
+    try:
+        # Run async processing
+        service = RetryWeeklyFeedService()
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_started',
+            status='info',
+            resource_type='DailyContentGeneration',
+        )
+
+        try:
+            result = loop.run_until_complete(
+                service.process_weekly_feed_for_failed_users(
+                    batch_number=1, batch_size=10000)
+            )
+            AuditService.log_system_operation(
+                user=None,
+                action='daily_content_generation_completed',
+                status='success',
+                resource_type='DailyContentGeneration',
+            )
+        finally:
+            loop.close()
+
+        return JsonResponse({
+            'message': 'Daily content generation completed',
+            'result': result
+        }, status=200)
+
+    except Exception as e:
+        AuditService.log_system_operation(
+            user=None,
+            action='daily_content_generation_failed',
+            status='error',
+            resource_type='DailyContentGeneration',
+            details=str(e)
+        )
+        return JsonResponse({
+            'error': 'Failed to generate daily content',
             'details': str(e)
         }, status=500)
