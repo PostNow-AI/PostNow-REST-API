@@ -16,6 +16,14 @@ from ClientContext.models import ClientContext
 from ClientContext.utils.url_dedupe import normalize_url_key
 from ClientContext.utils.policy_resolver import resolve_policy
 from ClientContext.utils.source_quality import pick_candidates, is_denied, is_allowed, allowed_domains, build_allowlist_query
+from ClientContext.utils.json_helpers import extract_json_block, safe_json_loads
+from ClientContext.utils.url_validators import (
+    is_blocked_filetype,
+    sanitize_query_for_allowlist,
+    coerce_url_to_str,
+    recover_url,
+    validate_url_permissive_async
+)
 from services.user_validation_service import UserValidationService
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
@@ -26,63 +34,6 @@ from ClientContext.utils.weekly_context import generate_weekly_context_email_tem
 # from utils.static_events import get_niche_events
 
 logger = logging.getLogger(__name__)
-
-
-def _is_blocked_filetype(url: str) -> bool:
-    u = (url or "").lower()
-    return u.endswith((".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"))
-
-
-def _sanitize_query_for_allowlist(query: str) -> str:
-    """
-    Remove operadores de site do query original (que pode conter site:-site:),
-    para não conflitar com a injeção de allowlist.
-    """
-    if not query:
-        return ""
-    q = re.sub(r"(?i)(-?site:[^\\s]+)", " ", query)
-    q = re.sub(r"\\s+", " ", q).strip()
-    # Evitar queries muito longas (CSE é sensível a tamanho)
-    return q[:220]
-
-
-def extract_json_block(text: str) -> str:
-    """
-    Extrai o primeiro bloco JSON válido de uma string usando contagem de chaves.
-    Suporta objetos {} e listas [].
-    """
-    text = text.strip()
-    
-    # Encontrar o primeiro caractere de início
-    start_idx = -1
-    stack = []
-    
-    for i, char in enumerate(text):
-        if char == '{':
-            if start_idx == -1:
-                start_idx = i
-            stack.append('{')
-        elif char == '}':
-            if stack and stack[-1] == '{':
-                stack.pop()
-                if not stack and start_idx != -1:
-                    return text[start_idx:i+1]
-        elif char == '[':
-            if start_idx == -1:
-                start_idx = i
-            stack.append('[')
-        elif char == ']':
-            if stack and stack[-1] == '[':
-                stack.pop()
-                if not stack and start_idx != -1:
-                    return text[start_idx:i+1]
-                    
-    # Fallback: Tentar regex simples se a lógica de pilha falhar (ex: json malformado)
-    match = re.search(r'\{.*\}|\[.*\]', text, re.DOTALL)
-    if match:
-        return match.group(0)
-        
-    return "{}"
 
 class WeeklyContextService:
     def __init__(self):
@@ -401,13 +352,13 @@ class WeeklyContextService:
 
                 # 1) Buscar pt-BR primeiro (preferência). Tentar primeiro com restrição de allowlist (se existir).
                 doms = allowed_domains(section)
-                sanitized = _sanitize_query_for_allowlist(query)
+                sanitized = sanitize_query_for_allowlist(query)
                 allow_q = build_allowlist_query(sanitized or query, doms, max_domains=8) if doms else query
                 pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", allow_q)
                 if doms and len(pt_pool) < 5:
                     # fallback 1: query genérica (menos restritiva) ainda dentro da allowlist
                     fallback_base = f"{profile_data.get('specialization','')} cultura organizacional gestão de processos {datetime.now().year}"
-                    fb_q = build_allowlist_query(_sanitize_query_for_allowlist(fallback_base), doms, max_domains=8)
+                    fb_q = build_allowlist_query(sanitize_query_for_allowlist(fallback_base), doms, max_domains=8)
                     pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", fb_q)
                 if doms and len(pt_pool) < 5:
                     # fallback 2: busca geral
@@ -433,7 +384,7 @@ class WeeklyContextService:
                 for u in picked_urls:
                     if not u or not u.startswith("http"):
                         continue
-                    if _is_blocked_filetype(u) or is_denied(u):
+                    if is_blocked_filetype(u) or is_denied(u):
                         denied_count += 1
                         continue
                     if is_allowed(section, u):
@@ -467,7 +418,7 @@ class WeeklyContextService:
                     for u in en_picked:
                         if not u or not u.startswith("http"):
                             continue
-                        if _is_blocked_filetype(u) or is_denied(u):
+                        if is_blocked_filetype(u) or is_denied(u):
                             denied_count += 1
                             continue
                         if is_allowed(section, u):
@@ -678,74 +629,6 @@ class WeeklyContextService:
 
         return used
 
-    def _coerce_url_to_str(self, value: Any) -> str:
-        """
-        Normaliza valores vindos da IA para uma URL em string.
-        A IA ocasionalmente retorna objetos/estruturas (dict/list) em vez de string.
-        """
-        if value is None:
-            return ""
-        if isinstance(value, str):
-            return value
-        # Casos comuns de alucinação: {"url": "..."} / {"uri": "..."} / {"link": "..."}
-        if isinstance(value, dict):
-            for key in ("url", "uri", "link", "href", "original", "value"):
-                v = value.get(key)
-                if isinstance(v, str) and v.strip():
-                    return v
-            return ""
-        if isinstance(value, list):
-            # Pega o primeiro item útil
-            for item in value:
-                s = self._coerce_url_to_str(item)
-                if s:
-                    return s
-            return ""
-        # Fallback: representação em string (evitar crash)
-        try:
-            return str(value)
-        except Exception:
-            return ""
-
-    def _recover_url(self, generated_url: Any, real_urls: List[str]) -> str:
-        """
-        Tenta recuperar uma URL alucinada encontrando a melhor correspondência
-        entre as URLs reais fornecidas pelo Google Search.
-        """
-        generated_url = self._coerce_url_to_str(generated_url)
-        if not generated_url:
-            return ""
-            
-        generated_url = generated_url.strip().lower()
-        # Normalizar a lista de URLs reais (GoogleSearchService retorna lista de dicts)
-        real_urls_norm = []
-        for real in (real_urls or []):
-            real_s = self._coerce_url_to_str(real)
-            if real_s:
-                real_urls_norm.append(real_s)
-        
-        # 1. Correspondência Exata (case insensitive)
-        for real in real_urls_norm:
-            if real.strip().lower() == generated_url:
-                return real
-                
-        # 2. Correspondência Parcial (Domínio e Path)
-        # Se a IA inventou parâmetros mas acertou o path principal
-        # Ex: real: forbes.com/artigo | generated: forbes.com/artigo?utm=...
-        for real in real_urls_norm:
-            real_clean = real.split('?')[0].lower()
-            gen_clean = generated_url.split('?')[0]
-            if real_clean in gen_clean or gen_clean in real_clean:
-                return real
-                
-        # 3. Fallback Seguro: Se a IA inventou uma URL de um domínio que temos
-        # Ex: IA inventou forbes.com/fake-news, mas temos forbes.com/real-news na lista
-        # Nesses casos, melhor retornar a URL real do mesmo domínio (se houver apenas uma)
-        # ou retornar vazio para não mandar 404.
-        # Vamos ser conservadores: se não deu match acima, retorna a URL original da IA
-        # e deixa a validação HTTP decidir (se for 404, cai fora).
-        
-        return generated_url
 
     async def _aggregate_and_rank_opportunities(
         self,
@@ -771,12 +654,12 @@ class WeeklyContextService:
             real_urls_for_section = search_results_map.get(section, [])
             candidate_urls = []
             for item in (real_urls_for_section or []):
-                u = self._coerce_url_to_str(item)
+                u = coerce_url_to_str(item)
                 # GoogleSearchService retorna dict com chave 'url'
                 if isinstance(item, dict) and not u:
-                    u = self._coerce_url_to_str(item.get('url'))
+                    u = coerce_url_to_str(item.get('url'))
                 if u and u.startswith('http'):
-                    if _is_blocked_filetype(u):
+                    if is_blocked_filetype(u):
                         continue
                     if is_denied(u):
                         continue
@@ -789,7 +672,7 @@ class WeeklyContextService:
                 for fonte in section_data['fontes_analisadas']:
                     # A IA pode retornar url_original como string OU como objeto.
                     url_original_ai = fonte.get('url_original', '')
-                    url_original_ai_str = self._coerce_url_to_str(url_original_ai)
+                    url_original_ai_str = coerce_url_to_str(url_original_ai)
                     ai_domain = ""
                     try:
                         ai_domain = urlparse(url_original_ai_str).netloc if url_original_ai_str else ""
@@ -797,7 +680,7 @@ class WeeklyContextService:
                         ai_domain = ""
                     
                     # Tentar RECUPERAR a URL se a IA alucinou
-                    url_fonte = self._recover_url(url_original_ai, real_urls_for_section)
+                    url_fonte = recover_url(url_original_ai, real_urls_for_section)
                     # Regra de qualidade: quando temos resultados do Google, preferir SEMPRE uma URL do Google,
                     # tentando primeiro manter o mesmo domínio sugerido pela IA (ex.: McKinsey).
                     if candidate_urls:
@@ -852,7 +735,7 @@ class WeeklyContextService:
                             url_fonte = alt
                             break
 
-                    if not await self._validate_url_permissive_async(url_fonte):
+                    if not await validate_url_permissive_async(url_fonte):
                         # Tentar substituir por uma URL real alternativa da busca (evita enviar 404/soft-404)
                         replaced = False
                         # Tenta primeiro candidatas do mesmo domínio
@@ -868,7 +751,7 @@ class WeeklyContextService:
                             ak = normalize_url_key(alt)
                             if ak and (ak in used_url_keys_email or ak in recent_used_url_keys):
                                 continue
-                            if await self._validate_url_permissive_async(alt):
+                            if await validate_url_permissive_async(alt):
                                 logger.info(
                                     "[URL_FALLBACK_PICKED] seção=%s ai_url=%s bad_url=%s alt_url=%s",
                                     section,
@@ -958,62 +841,3 @@ class WeeklyContextService:
             
         return final_structure
 
-    async def _validate_url_permissive_async(self, url: str) -> bool:
-        """
-        Valida URL de forma permissiva. 
-        Retorna True para qualquer coisa que NÃO seja um 404 confirmado.
-        Timeouts e Erros de Conexão são considerados URLs Válidas (presunção de inocência).
-        """
-        def _is_soft_404(url_final: str, body_text: str) -> bool:
-            if not body_text:
-                return False
-            low = body_text.lower()
-
-            # LinkedIn Pulse: frequentemente redireciona para um "article_not_found" com status 200
-            if "linkedin.com" in (url_final or ""):
-                if "trk=article_not_found" in (url_final or ""):
-                    return True
-                if ("we can\u2019t find the page you\u2019re looking for" in low) or ("we can't find the page you're looking for" in low):
-                    return True
-
-            # Soft-404 genérico (tenta evitar falsos positivos)
-            if "página não encontrada" in low or "pagina nao encontrada" in low:
-                return True
-            if "page not found" in low:
-                return True
-
-            return False
-
-        def _check():
-            try:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-                # Timeout curto de 3s
-                response = requests.head(url, headers=headers, timeout=3, allow_redirects=True)
-                if response.status_code == 404:
-                    return False
-
-                # Alguns sites retornam 200/302 no HEAD mas são soft-404 no GET (ex: LinkedIn)
-                try:
-                    get_resp = requests.get(url, headers=headers, timeout=6, allow_redirects=True)
-                    if get_resp.status_code == 404:
-                        return False
-                    if _is_soft_404(get_resp.url, get_resp.text or ""):
-                        return False
-                except requests.exceptions.RequestException:
-                    # Se GET falhar (timeout/bloqueio), mantém a presunção de inocência,
-                    # exceto quando o HEAD já indicou um erro forte (404 tratado acima).
-                    return True
-
-                return True
-            except requests.exceptions.RequestException:
-                # Se der timeout ou erro de conexão, assumimos que o link existe mas o site é chato
-                # Tentar GET rápido só para ter certeza se não é 404 disfarçado?
-                # Não, melhor ser rápido e permissivo.
-                return True
-            except Exception:
-                # Qualquer outro erro, assume válido
-                return True
-        
-        return await sync_to_async(_check)()

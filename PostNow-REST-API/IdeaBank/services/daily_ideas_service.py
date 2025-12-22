@@ -11,6 +11,7 @@ from google.genai import types
 from AuditSystem.services import AuditService
 from ClientContext.models import ClientContext
 from ClientContext.serializers import ClientContextSerializer
+from ClientContext.utils.json_helpers import clean_json_string, safe_json_loads
 from CreatorProfile.models import CreatorProfile
 from IdeaBank.models import Post, PostIdea
 from Analytics.services.image_pregen_policy import (
@@ -242,10 +243,8 @@ class DailyIdeasService:
                         self._generate_content_for_user
                     )(user)
 
-                    content_json = (
-                        content_result.replace("json", "", 1).strip("`").strip()
-                    )
-                    content_loaded = json.loads(content_json)
+                    content_json = clean_json_string(content_result)
+                    content_loaded = safe_json_loads(content_json)
 
                     post_text_feed = content_loaded.get("post_text_feed")
                     post_text_stories = content_loaded.get("post_text_stories")
@@ -402,8 +401,8 @@ class DailyIdeasService:
 
             semantic_prompt = self.prompt_service.semantic_analysis_prompt(post_content)
             semantic_result = self.ai_service.generate_text(semantic_prompt, user)
-            semantic_json = semantic_result.replace("json", "", 1).strip("`").strip()
-            semantic_loaded = json.loads(semantic_json)
+            semantic_json = clean_json_string(semantic_result)
+            semantic_loaded = safe_json_loads(semantic_json)
 
             adapted_semantic_analysis_prompt = (
                 self.prompt_service.adapted_semantic_analysis_prompt(semantic_loaded)
@@ -412,10 +411,8 @@ class DailyIdeasService:
             adapted_semantic_json = self.ai_service.generate_text(
                 adapted_semantic_analysis_prompt, user
             )
-            adapted_semantic_str = (
-                adapted_semantic_json.replace("json", "", 1).strip("`").strip()
-            )
-            adapted_semantic_loaded = json.loads(adapted_semantic_str)
+            adapted_semantic_str = clean_json_string(adapted_semantic_json)
+            adapted_semantic_loaded = safe_json_loads(adapted_semantic_str)
 
             semantic_analysis = adapted_semantic_loaded.get("analise_semantica", {})
 

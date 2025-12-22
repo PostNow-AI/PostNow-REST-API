@@ -8,6 +8,8 @@ from django.contrib.auth.models import User
 from google import genai
 from google.genai import types
 
+from services.ai_grounding_service import AiGroundingService
+
 
 class AiService:
     def __init__(self):
@@ -255,52 +257,8 @@ class AiService:
             if hasattr(chunk.candidates[0], 'grounding_metadata') and chunk.candidates[0].grounding_metadata:
                 grounding_metadata = chunk.candidates[0].grounding_metadata
         
-        # Extract structured metadata if available
-        metadata_dict = None
-        if grounding_metadata:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"[GROUNDING_DEBUG] Metadata object received: {type(grounding_metadata)}")
-            
-            metadata_dict = {
-                'web_search_queries': [],
-                'grounding_chunks': []
-            }
-            
-            # Extract web search queries
-            if hasattr(grounding_metadata, 'web_search_queries') and grounding_metadata.web_search_queries:
-                metadata_dict['web_search_queries'] = list(grounding_metadata.web_search_queries)
-                logger.info(f"[GROUNDING_DEBUG] Found {len(metadata_dict['web_search_queries'])} search queries")
-            
-            # Extract grounding chunks with URLs
-            if hasattr(grounding_metadata, 'grounding_chunks') and grounding_metadata.grounding_chunks:
-                logger.info(f"[GROUNDING_DEBUG] Found {len(grounding_metadata.grounding_chunks)} grounding chunks")
-                for chunk in grounding_metadata.grounding_chunks:
-                    chunk_data = {}
-                    if hasattr(chunk, 'web') and chunk.web:
-                        # Try to get direct URI first
-                        if hasattr(chunk.web, 'uri') and chunk.web.uri:
-                            chunk_data['uri'] = chunk.web.uri
-                        if hasattr(chunk.web, 'title') and chunk.web.title:
-                            chunk_data['title'] = chunk.web.title
-                    
-                    # Also check for retrieved_context which might have different URL format
-                    elif hasattr(chunk, 'retrieved_context') and chunk.retrieved_context:
-                        if hasattr(chunk.retrieved_context, 'uri') and chunk.retrieved_context.uri:
-                            chunk_data['uri'] = chunk.retrieved_context.uri
-                        if hasattr(chunk.retrieved_context, 'title') and chunk.retrieved_context.title:
-                            chunk_data['title'] = chunk.retrieved_context.title
-                    
-                    # Log chunk structure for debugging
-                    if not chunk_data and hasattr(chunk, '__dict__'):
-                        logger.debug(f"[GROUNDING_DEBUG] Chunk structure: {chunk.__dict__}")
-                    
-                    if chunk_data:  # Only add if we have data
-                        metadata_dict['grounding_chunks'].append(chunk_data)
-                
-                logger.info(f"[GROUNDING_DEBUG] Extracted {len(metadata_dict['grounding_chunks'])} URLs from chunks")
-            else:
-                logger.warning("[GROUNDING_DEBUG] NO grounding_chunks found in metadata!")
+        # Extract structured metadata using dedicated service
+        metadata_dict = AiGroundingService.extract_metadata(grounding_metadata)
         
         return {
             'text': response_text,

@@ -12,6 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class MailjetService:
+    """
+    Service for sending emails using Mailjet API.
+    
+    Supports HTML emails, inline attachments, and BCC recipients.
+    Automatically logs all email operations via AuditService.
+    """
+    
     def __init__(self):
         self.api_key = os.getenv("MJ_APIKEY_PUBLIC")
         self.secret_key = os.getenv("MJ_APIKEY_PRIVATE")
@@ -27,8 +34,33 @@ class MailjetService:
             }
         }
 
-    async def send_email(self, to_email: str, subject: str, body: str, attachments: list[str] = None, bcc: list[str] = None) -> tuple:
-        """ Send an email using Mailjet with optional attachments and BCC support """
+    async def send_email(
+        self, 
+        to_email: str, 
+        subject: str, 
+        body: str, 
+        attachments: list[str] = None, 
+        bcc: list[str] = None
+    ) -> tuple:
+        """
+        Send an email using Mailjet with optional attachments and BCC support.
+        
+        Args:
+            to_email: Primary recipient email address
+            subject: Email subject line
+            body: HTML email body
+            attachments: Optional list of attachment dicts with 'url', 'filename', 'content_type'
+            bcc: Optional list of BCC email addresses
+            
+        Returns:
+            Tuple of (success: bool, response: dict)
+            
+        Raises:
+            Exception: If email sending fails
+            
+        Note:
+            This method is backward compatible - old code calling without bcc will still work.
+        """
         audit_service = AuditService()
         try:
             message_data = self.message_data.copy()
@@ -72,7 +104,8 @@ class MailjetService:
                     status='failure',
                     details={'to_email': to_email, 'subject': subject, 'error': str(e)}
                 )
-            except:
+            except Exception:
+                # Silently fail audit logging to avoid masking the original email error
                 pass
             raise Exception(f"Failed to send email: {e}")
 
