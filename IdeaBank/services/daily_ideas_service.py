@@ -145,6 +145,7 @@ class DailyIdeasService:
 
             feed_base_post = await sync_to_async(Post.objects.get)(
                 user=user,
+                type='feed',
                 further_details=week_id)
 
             post_idea = await sync_to_async(lambda: feed_base_post.ideas.first())()
