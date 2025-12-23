@@ -2,7 +2,7 @@ name: Weekly Context Generation
 
 on:
   schedule:
-    - cron: "0 3 * * 6" # Run once a week on Saturdays at 3 AM UTC
+    - cron: "0 0 * * 6" # Run once a week on Saturdays at 0 AM UTC
   workflow_dispatch:
 
 jobs:
@@ -11,7 +11,7 @@ jobs:
     environment: Production # <-- Add this line
     strategy:
       matrix:
-        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        batch: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 ]
       max-parallel: 3 # Limit concurrent batches to avoid overwhelming your API
 
     steps:

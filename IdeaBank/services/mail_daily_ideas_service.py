@@ -24,7 +24,6 @@ class MailDailyIdeasService:
 
         return await sync_to_async(list)(
             Post.objects.filter(
-                is_active=False,
                 further_details=week_id
             ).select_related('user').values(
                 'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content',

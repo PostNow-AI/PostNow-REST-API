@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.utils import timezone
+
 from IdeaBank.models import Post
 from IdeaBank.serializers import CompletePostWithIdeasSerializer, UserSerializer
 
@@ -22,16 +23,25 @@ class DailyPostAmountService:
             users_with_posts = []
 
             for user_obj in total_users:
-                user_daily_posts = Post.objects.filter(
+                user_daily_story_reels_posts = Post.objects.filter(
                     user=user_obj,
                     created_at__date=today
                 ).prefetch_related('ideas')
-                user_obj.daily_posts_count = user_daily_posts.count()
+                user_daily_feed_post = Post.objects.filter(
+                    user=user_obj,
+                    type='feed',
+                    further_details=user_daily_story_reels_posts[0].further_details,
+                ).prefetch_related('ideas')
                 serialized_posts = CompletePostWithIdeasSerializer(
-                    user_daily_posts, many=True).data
+                    user_daily_story_reels_posts, many=True).data
+                serialized_feed_post = CompletePostWithIdeasSerializer(
+                    user_daily_feed_post, many=True).data
+
+                user_obj.daily_posts_count = user_daily_story_reels_posts.count() + user_daily_feed_post.count()
                 actual_automatic_posts_amount += user_obj.daily_posts_count
+
                 user = UserSerializer(user_obj).data
-                user['posts'] = serialized_posts
+                user['posts'] = serialized_posts + serialized_feed_post
                 users_with_posts.append(user)
 
             return {
