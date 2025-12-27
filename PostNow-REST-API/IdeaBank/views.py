@@ -239,21 +239,27 @@ def generate_post_idea(request):
         except Exception:
             pass
 
-        # Generate image if requested (mas respeitando política de pregen vs on-demand)
+        # Generate image if requested - SEMPRE respeita escolha do usuário
         if include_image_requested:
-            decision = make_image_pregen_decision(
-                request.user,
-                "PostIdea",
-                str(post_idea.id),
-                {
-                    "post_type": post_data.get("type"),
-                    "objective": post_data.get("objective"),
-                    "source": "manual_generation",
-                },
-            )
-
-            if decision.action != ACTION_PRE_GENERATE:
-                include_image_generate_now = False
+            # Sempre gera se usuário pediu explicitamente
+            include_image_generate_now = True
+            
+            # Registra decisão apenas para telemetria (não bloqueia geração)
+            try:
+                make_image_pregen_decision(
+                    request.user,
+                    "PostIdea",
+                    str(post_idea.id),
+                    {
+                        "post_type": post_data.get("type"),
+                        "objective": post_data.get("objective"),
+                        "source": "manual_generation",
+                        "user_requested": True,  # Flag indicando escolha explícita
+                    },
+                )
+            except Exception:
+                # Não deixa telemetria quebrar a geração
+                pass
 
         if include_image_generate_now:
             try:

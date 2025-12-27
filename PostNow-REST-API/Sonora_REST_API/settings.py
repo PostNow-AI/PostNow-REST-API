@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'Users',
     'CreatorProfile',
     'IdeaBank',
+    'Campaigns',
     'GlobalOptions',
     'CreditSystem',
     'AuditSystem',

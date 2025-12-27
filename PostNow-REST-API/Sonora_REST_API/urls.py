@@ -59,6 +59,7 @@ urlpatterns = [
     # Creator Profile endpoints
     path('api/v1/creator-profile/', include('CreatorProfile.urls')),
     path('api/v1/ideabank/', include('IdeaBank.urls')),
+    path('api/v1/campaigns/', include('Campaigns.urls')),
 
     # Global Options endpoints
     path('api/v1/global-options/', include('GlobalOptions.urls')),

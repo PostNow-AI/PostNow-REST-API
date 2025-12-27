@@ -15,4 +15,10 @@ urlpatterns = [
          name='send_weekly_context_email'),
     path('generate-single-client-context/', views.generate_single_client_context,
          name='generate_single_client_context'),
+    
+    # Weekly Context Web Page endpoints
+    path('weekly-context/', views.WeeklyContextCurrentView.as_view(),
+         name='weekly-context-current'),
+    path('weekly-context/history/', views.WeeklyContextHistoryView.as_view(),
+         name='weekly-context-history'),
 ]

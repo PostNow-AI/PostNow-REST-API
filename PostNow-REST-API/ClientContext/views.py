@@ -288,3 +288,137 @@ def send_weekly_context_email(request):
         return Response({
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Weekly Context Web Page Views
+from datetime import datetime, timedelta
+from rest_framework import generics
+from ClientContext.models import ClientContextHistory
+from ClientContext.serializers import WeeklyContextSerializer
+
+
+class WeeklyContextCurrentView(generics.GenericAPIView):
+    """
+    GET /api/v1/client-context/weekly-context/
+    Returns the most recent Weekly Context for the authenticated user.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = WeeklyContextSerializer
+
+    def get(self, request):
+        user = request.user
+        
+        try:
+            latest_context = ClientContextHistory.objects.filter(
+                user=user
+            ).order_by('-created_at').first()
+            
+            if not latest_context:
+                return Response({
+                    'success': False,
+                    'message': 'Nenhum contexto semanal encontrado'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            total_count = ClientContextHistory.objects.filter(user=user).count()
+            has_previous = total_count > 1
+            
+            try:
+                business_name = user.creator_profile.business_name or 'Sua Empresa'
+            except:
+                business_name = 'Sua Empresa'
+            
+            created_at = latest_context.created_at
+            next_week = created_at + timedelta(days=7)
+            week_range = f"{created_at.day}/{created_at.month} a {next_week.day}/{next_week.month}"
+            
+            ranked_opportunities = latest_context.tendencies_data or {}
+            
+            response_data = {
+                'week_number': 0,
+                'week_range': week_range,
+                'created_at': latest_context.created_at,
+                'business_name': business_name,
+                'has_previous': has_previous,
+                'has_next': False,
+                'ranked_opportunities': ranked_opportunities
+            }
+            
+            return Response({
+                'success': True,
+                'data': response_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Erro ao buscar contexto: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class WeeklyContextHistoryView(generics.GenericAPIView):
+    """
+    GET /api/v1/client-context/weekly-context/history/?offset=N
+    Returns a specific Weekly Context by offset (0 = current, 1 = last week, etc.)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = WeeklyContextSerializer
+
+    def get(self, request):
+        user = request.user
+        offset = int(request.query_params.get('offset', 0))
+        
+        try:
+            all_contexts = ClientContextHistory.objects.filter(
+                user=user
+            ).order_by('-created_at')
+            
+            total_count = all_contexts.count()
+            
+            if total_count == 0:
+                return Response({
+                    'success': False,
+                    'message': 'Nenhum contexto semanal encontrado'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if offset < 0 or offset >= total_count:
+                return Response({
+                    'success': False,
+                    'message': 'Offset inválido'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            context = all_contexts[offset]
+            
+            has_previous = offset < total_count - 1
+            has_next = offset > 0
+            
+            try:
+                business_name = user.creator_profile.business_name or 'Sua Empresa'
+            except:
+                business_name = 'Sua Empresa'
+            
+            created_at = context.created_at
+            next_week = created_at + timedelta(days=7)
+            week_range = f"{created_at.day}/{created_at.month} a {next_week.day}/{next_week.month}"
+            
+            ranked_opportunities = context.tendencies_data or {}
+            
+            response_data = {
+                'week_number': offset,
+                'week_range': week_range,
+                'created_at': context.created_at,
+                'business_name': business_name,
+                'has_previous': has_previous,
+                'has_next': has_next,
+                'ranked_opportunities': ranked_opportunities
+            }
+            
+            return Response({
+                'success': True,
+                'data': response_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Erro ao buscar histórico: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
