@@ -2,7 +2,7 @@ name: Feed Weekly Generation
 
 on:
   schedule:
-    - cron: "0 16 * * 6" # Run once a week on Saturdays at 16 PM UTC
+    - cron: "0 16 * * 1" # Run once a week on Monday at 16 PM UTC
   workflow_dispatch:
 
 jobs:

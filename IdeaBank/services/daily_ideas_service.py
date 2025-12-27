@@ -143,10 +143,14 @@ class DailyIdeasService:
 
             week_id = get_current_week()
 
-            feed_base_post = await sync_to_async(Post.objects.get)(
+            feed_base_post = await sync_to_async(Post.objects.filter(
                 user=user,
                 type='feed',
-                further_details=week_id)
+                further_details=week_id
+            ).first)()
+
+            if not feed_base_post:
+                raise Exception("Feed base post not found")
 
             post_idea = await sync_to_async(lambda: feed_base_post.ideas.first())()
 

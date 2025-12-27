@@ -27,7 +27,6 @@ pymysql.install_as_MySQLdb()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -37,12 +36,10 @@ SECRET_KEY = 'django-insecure-zh*enb0(sd*85_6guu-1$=#hf7no_no&81(6!m*050n7g_eedt
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles_build', 'static')
 MEDIA_URLS = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 ALLOWED_HOSTS = ['*']
-
 
 # Application definition
 
@@ -76,7 +73,7 @@ INSTALLED_APPS = [
     'ClientContext',
 ]
 
-SITE_ID = 3
+SITE_ID = 6
 
 # Authentication backends for django-allauth email authentication
 AUTHENTICATION_BACKENDS = [
@@ -85,7 +82,6 @@ AUTHENTICATION_BACKENDS = [
     # `allauth` specific authentication methods, such as login by e-mail
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
-
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -121,7 +117,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'Sonora_REST_API.wsgi.application'
-
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -162,7 +157,6 @@ DATABASES = {
     }
 }
 
-
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -181,7 +175,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -192,7 +185,6 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
@@ -227,7 +219,6 @@ REST_AUTH = {
     'REGISTER_SERIALIZER': 'Users.serializers.CustomRegisterSerializer',
     'USER_DETAILS_SERIALIZER': 'Users.serializers.CustomUserDetailsSerializer',
 }
-
 
 ACCOUNT_AUTHENTICATION_METHOD = "email"  # Use Email / Password authentication
 ACCOUNT_USERNAME_REQUIRED = False
