@@ -73,7 +73,7 @@ INSTALLED_APPS = [
     'ClientContext',
 ]
 
-SITE_ID = 6
+SITE_ID = 3
 
 # Authentication backends for django-allauth email authentication
 AUTHENTICATION_BACKENDS = [
