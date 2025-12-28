@@ -86,7 +86,10 @@ class CampaignDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CampaignWithPostsSerializer
     
     def get_queryset(self):
-        return Campaign.objects.filter(user=self.request.user).prefetch_related(
+        return Campaign.objects.filter(user=self.request.user).select_related(
+            'user',
+            'user__creator_profile'
+        ).prefetch_related(
             'campaign_posts',
             'campaign_posts__post',
             'campaign_posts__post__ideas'
@@ -439,6 +442,58 @@ def get_visual_styles(request):
         'success': True,
         'data': serializer.data
     })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def get_briefing_suggestion(request):
+    """
+    Gera sugestão de objetivo usando Contextual Bandits.
+    """
+    try:
+        from Analytics.services.contextual_briefing_service import make_briefing_suggestion_decision
+        from CreatorProfile.models import CreatorProfile
+        
+        # Buscar perfil do usuário
+        try:
+            profile = CreatorProfile.objects.get(user=request.user)
+            profile_data = {
+                'business_name': profile.business_name,
+                'specialization': profile.specialization,
+                'business_description': profile.business_description,
+                'target_audience': profile.target_audience,
+                'products_services': profile.products_services,
+            }
+        except CreatorProfile.DoesNotExist:
+            # Fallback genérico
+            return Response({
+                'success': True,
+                'data': {
+                    'suggestion': 'Criar campanha de marketing para seu negócio.',
+                    'decision_id': None
+                }
+            })
+        
+        # Gerar sugestão com Contextual Bandits
+        suggestion, decision_id = make_briefing_suggestion_decision(
+            user=request.user,
+            profile_data=profile_data
+        )
+        
+        return Response({
+            'success': True,
+            'data': {
+                'suggestion': suggestion,
+                'decision_id': decision_id
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating briefing suggestion: {str(e)}")
+        return Response(
+            {'success': False, 'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 # ============================================================================
