@@ -2,7 +2,7 @@ name: Weekly Context Mailing
 
 on:
   schedule:
-    - cron: "0 0 * * 2" # Run once at 0:00 AM UTC on sunday
+    - cron: "0 0 * * 1" # Run once at 0:00 AM UTC on mondays
 
   workflow_dispatch:
 
