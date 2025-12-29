@@ -444,6 +444,49 @@ def get_visual_styles(request):
     })
 
 
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_structure_suggestion(request):
+    """
+    Sugere estrutura narrativa usando Thompson Sampling.
+    """
+    try:
+        from Analytics.services.structure_suggestion_service import make_structure_suggestion
+        from CreatorProfile.models import CreatorProfile
+        
+        # Buscar perfil
+        try:
+            profile = CreatorProfile.objects.get(user=request.user)
+            niche = profile.specialization[:20] if profile.specialization else "general"
+        except CreatorProfile.DoesNotExist:
+            niche = "general"
+        
+        # Campaign type (pode vir do request ou inferir)
+        campaign_type = request.GET.get('campaign_type', 'branding')
+        
+        # Gerar sugestão com Thompson Sampling
+        suggested, decision_id = make_structure_suggestion(
+            user=request.user,
+            campaign_type=campaign_type,
+            niche=niche
+        )
+        
+        return Response({
+            'success': True,
+            'data': {
+                'suggested': suggested,
+                'decision_id': decision_id
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error suggesting structure: {str(e)}")
+        return Response(
+            {'success': False, 'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def get_briefing_suggestion(request):

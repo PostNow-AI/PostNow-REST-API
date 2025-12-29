@@ -43,5 +43,6 @@ urlpatterns = [
     path('structures/', views.get_available_structures, name='available-structures'),
     path('visual-styles/', views.get_visual_styles, name='visual-styles'),
     path('suggest-briefing/', views.get_briefing_suggestion, name='suggest-briefing'),
+    path('suggest-structure/', views.get_structure_suggestion, name='suggest-structure'),
 ]
 
