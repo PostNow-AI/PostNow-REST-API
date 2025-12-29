@@ -423,6 +423,41 @@ def get_available_structures(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+def get_style_suggestions(request):
+    """
+    Retorna estilos ranqueados por Thompson Sampling.
+    """
+    try:
+        from Analytics.services.style_suggestion_service import rank_visual_styles
+        from Campaigns.models import VisualStyle
+        
+        # Buscar todos estilos
+        all_styles = list(VisualStyle.objects.filter(is_active=True))
+        
+        # Ranquear com Thompson Sampling
+        ranked = rank_visual_styles(
+            user=request.user,
+            available_styles=all_styles,
+            top_n=18  # Todos, mas ranqueados
+        )
+        
+        # Serializar
+        from Campaigns.serializers import VisualStyleSerializer
+        serialized = VisualStyleSerializer(ranked, many=True).data
+        
+        return Response({
+            'success': True,
+            'data': serialized
+        })
+        
+    except Exception as e:
+        logger.error(f"Error ranking styles: {str(e)}")
+        # Fallback sem ranking
+        return get_visual_styles(request)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
 def get_visual_styles(request):
     """Retorna estilos visuais disponíveis."""
     
