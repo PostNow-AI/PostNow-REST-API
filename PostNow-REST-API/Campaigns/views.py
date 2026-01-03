@@ -426,6 +426,7 @@ def get_available_structures(request):
 def get_style_suggestions(request):
     """
     Retorna estilos ranqueados por Thompson Sampling.
+    FALLBACK: Se service não existir, retorna lista normal.
     """
     try:
         from Analytics.services.style_suggestion_service import rank_visual_styles
@@ -450,9 +451,9 @@ def get_style_suggestions(request):
             'data': serialized
         })
         
-    except Exception as e:
-        logger.error(f"Error ranking styles: {str(e)}")
-        # Fallback sem ranking
+    except (ImportError, Exception) as e:
+        logger.warning(f"Thompson Sampling não disponível, usando fallback: {str(e)}")
+        # Fallback: retornar lista normal (sem ranking)
         return get_visual_styles(request)
 
 
