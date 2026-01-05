@@ -346,7 +346,7 @@ class PostAIService(BaseAIService):
         Returns:
             URL or base64 data of the generated image
         """
-        model_name = 'gemini-2.5-flash'  # Only supported model
+        model_name = 'gemini-imagen'  # ✅ CORRIGIDO: Modelo correto para imagens
 
         current_image = None
         if user and user.is_authenticated:

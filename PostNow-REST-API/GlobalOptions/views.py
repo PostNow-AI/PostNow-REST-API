@@ -430,6 +430,32 @@ def get_all_fonts(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_all_visual_styles(request):
+    """Retorna todos os estilos visuais disponíveis."""
+    try:
+        from Campaigns.models import VisualStyle
+        from GlobalOptions.serializers import VisualStyleSerializer
+        
+        # Buscar estilos visuais ativos
+        visual_styles = VisualStyle.objects.filter(is_active=True).order_by('sort_order', 'name')
+        
+        # Serializar
+        serializer = VisualStyleSerializer(visual_styles, many=True)
+        
+        return Response({
+            'success': True,
+            'data': serializer.data
+        })
+    
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Erro ao buscar estilos visuais: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_custom_profession(request):

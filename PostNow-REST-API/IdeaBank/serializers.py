@@ -25,19 +25,25 @@ class PostSerializer(serializers.ModelSerializer):
         source='get_type_display', read_only=True)
 
     ideas_count = serializers.SerializerMethodField()
+    ideas = serializers.SerializerMethodField()  # ✅ Usar SerializerMethodField
 
     class Meta:
         model = Post
         fields = [
             'id', 'name', 'objective', 'objective_display', 'type', 'type_display',
-            'further_details', 'ideas_count', 'include_image',
-            'created_at', 'updated_at'
+            'further_details', 'ideas_count', 'ideas',  # ✅ Incluir ideas
+            'include_image', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_ideas_count(self, obj):
         """Return the number of ideas for this post."""
         return obj.ideas.count()
+    
+    def get_ideas(self, obj):
+        """Return the ideas for this post."""
+        from .serializers import PostIdeaSerializer  # Import local para evitar circular
+        return PostIdeaSerializer(obj.ideas.all(), many=True).data
 
 
 class PostCreateSerializer(serializers.ModelSerializer):

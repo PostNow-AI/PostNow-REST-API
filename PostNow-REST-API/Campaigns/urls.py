@@ -19,6 +19,7 @@ urlpatterns = [
     
     # Operações de Campanha
     path('<int:pk>/generate/', views.generate_campaign_content, name='generate-content'),
+    path('<int:pk>/progress/', views.get_generation_progress, name='campaign-progress'),
     path('<int:pk>/approve/', views.approve_campaign, name='approve-campaign'),
     path('<int:pk>/reorganize/', views.reorganize_campaign_posts, name='reorganize-posts'),
     
@@ -45,5 +46,9 @@ urlpatterns = [
     path('visual-styles/ranked/', views.get_style_suggestions, name='ranked-styles'),
     path('suggest-briefing/', views.get_briefing_suggestion, name='suggest-briefing'),
     path('suggest-structure/', views.get_structure_suggestion, name='suggest-structure'),
+    
+    # Jornadas Adaptativas
+    path('suggest-journey/', views.suggest_journey, name='suggest-journey'),
+    path('track-journey/', views.track_journey_event, name='track-journey'),
 ]
 

@@ -257,6 +257,10 @@ class GeminiService(BaseAIService):
                         prompt_service.set_user(user)
                     creator_profile_data = prompt_service.get_creator_profile_data()
                     logo = creator_profile_data.get('logo_image', None)
+                    
+                    # ✅ CORRIGIDO: Tratar string vazia como None
+                    if not logo or (isinstance(logo, str) and logo.strip() == ''):
+                        logo = None
 
                     aspect_ratio = "9:16" if post_data and post_data.get('type') in [
                         'story', 'reel'] else "4:5"

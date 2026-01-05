@@ -443,19 +443,117 @@ O resultado final deve parecer o planejamento de um estrategista de conteúdo pr
 
         # Route to specific image prompt based on post type
         if post_type == 'post':
-            return self._build_feed_image_prompt(post_data, content)
+            # Verificar se há contexto visual da campanha
+            visual_context = post_data.get('campaign_visual_context')
+            return self._build_feed_image_prompt(post_data, content, visual_context)
         elif post_type == 'reel':
             return self._build_reel_image_prompt(post_data, content)
         elif post_type == 'story':
             return self._build_story_image_prompt(post_data, content)
 
-    def _build_feed_image_prompt(self, post_data: Dict, content: str) -> str:
-        """Build prompt specifically for feed post images."""
+    def _build_feed_image_prompt(self, post_data: Dict, content: str, visual_context: Dict = None) -> str:
+        """
+        Build prompt specifically for feed post images.
+        
+        Args:
+            post_data: Dados do post
+            content: Conteúdo do post
+            visual_context: Contexto visual da campanha (opcional) para harmonia
+        """
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
         further_details = post_data.get('further_details', '')
+        visual_style = post_data.get('visual_style', '')
 
         creator_profile_data = self.get_creator_profile_data()
+        
+        # Style-specific visual modifiers
+        STYLE_MODIFIERS = {
+            'minimalista': {
+                'characteristics': ['high contrast', 'negative space', 'minimalist composition', 'clean lines', 'single focal point'],
+                'description': 'ultra-minimal and refined aesthetic with abundant white space and clear hierarchy'
+            },
+            'realista': {
+                'characteristics': ['photorealistic', 'natural lighting', 'authentic emotions', 'documentary style', 'high detail'],
+                'description': 'photorealistic quality with natural, authentic representation and editorial photography feel'
+            },
+            'abstrata': {
+                'characteristics': ['abstract shapes', 'geometric forms', 'vibrant colors', 'modern composition', 'artistic expression'],
+                'description': 'abstract and artistic approach with geometric forms and bold visual language'
+            },
+            'corporativa_profissional': {
+                'characteristics': ['professional', 'trustworthy', 'clean design', 'corporate aesthetic', 'balanced composition'],
+                'description': 'corporate and professional aesthetic with trust-inspiring visual language'
+            },
+            'bold_colorful': {
+                'characteristics': ['vibrant colors', 'dynamic layout', 'eye-catching', 'energetic composition', 'high saturation'],
+                'description': 'bold and vibrant aesthetic with dynamic colors and energetic composition'
+            },
+            'creative_artistic': {
+                'characteristics': ['unique perspective', 'artistic flair', 'expressive', 'unconventional angles', 'creative composition'],
+                'description': 'creative and artistic direction with unique perspective and expressive elements'
+            }
+        }
+        
+        # ✅ CORRIGIDO: Mapear visual_style (nome) para categoria
+        style_guide = ''
+        style_category = None
+        style_modifiers_list = []
+        
+        if visual_style:
+            try:
+                # Buscar estilo no banco para pegar categoria E modifiers
+                from Campaigns.models import VisualStyle
+                import json
+                
+                style_obj = VisualStyle.objects.filter(name=visual_style).first()
+                
+                if style_obj:
+                    style_category = style_obj.category
+                    
+                    # Pegar modifiers do banco (prioridade!)
+                    if style_obj.image_prompt_modifiers:
+                        try:
+                            if isinstance(style_obj.image_prompt_modifiers, str):
+                                style_modifiers_list = json.loads(style_obj.image_prompt_modifiers)
+                            else:
+                                style_modifiers_list = style_obj.image_prompt_modifiers
+                        except:
+                            pass
+            except Exception as e:
+                logger.warning(f"Erro ao buscar VisualStyle '{visual_style}': {str(e)}")
+        
+        # Aplicar modifiers (priorizar banco, fallback para dict)
+        if style_modifiers_list:
+            # Usar modifiers do banco (mais específicos!)
+            style_guide = f"""
+
+🎨 ESTILO VISUAL ESPECÍFICO: {visual_style.upper()}
+
+Características obrigatórias deste estilo:
+{chr(10).join(['- ' + mod for mod in style_modifiers_list])}
+
+Esta imagem DEVE seguir rigorosamente estas diretrizes de estilo para manter consistência visual com a campanha.
+"""
+        elif style_category and style_category in STYLE_MODIFIERS:
+            # Fallback: usar modifiers do dict local
+            modifiers = STYLE_MODIFIERS[style_category]
+            style_guide = f"""
+
+🎨 ESTILO VISUAL ESPECÍFICO: {visual_style.upper()} ({style_category})
+
+Aplicar direção criativa {modifiers['description']}.
+
+Características obrigatórias deste estilo:
+{chr(10).join(['- ' + char for char in modifiers['characteristics']])}
+
+Esta imagem DEVE seguir rigorosamente estas diretrizes de estilo para manter consistência visual com a campanha.
+"""
+        
+        # NOVO: Adicionar contexto de harmonia visual se for parte de uma campanha
+        harmony_guide = ''
+        if visual_context and visual_context.get('harmony_guidelines'):
+            harmony_guide = visual_context['harmony_guidelines']
 
         # TODO: Replace with your specific feed image prompt
         prompt = f"""
@@ -463,6 +561,8 @@ Você é um diretor de arte virtual e designer premiado, especializado em criar 
 Sua missão é gerar uma imagem de excelência visual que represente, de forma criativa e coerente, o conteúdo do post de Feed produzido a partir das informações abaixo.
 
 Essa imagem será usada como ilustração principal do post e deve parecer ter sido criada por um designer premiado e criativo, com qualidade digna de uma campanha profissional.
+{style_guide}
+{harmony_guide}
 
 🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
 

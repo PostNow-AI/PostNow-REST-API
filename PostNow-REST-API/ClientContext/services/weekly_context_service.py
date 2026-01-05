@@ -1,843 +1,308 @@
-import json
+"""
+Weekly Context Service - Análise de Mercado e Oportunidades de Conteúdo.
+
+Responsável por:
+- Identificar oportunidades do mercado (trends, datas comemorativas, eventos)
+- Calcular relevância para cada campanha/nicho
+- Sugerir posts baseados em oportunidades
+
+MVP: Calendário de datas + oportunidades curadas manualmente
+V2: Integração com Google Trends + NewsAPI
+V3: ML para detectar tendências automaticamente
+"""
+
 import logging
-import asyncio
-import re
-import requests
-import os
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-from urllib.parse import urlparse
-from google.genai import types
-
-from django.contrib.auth.models import User
-from asgiref.sync import sync_to_async
-
-from ClientContext.models import ClientContext
-from ClientContext.utils.url_dedupe import normalize_url_key
-from ClientContext.utils.policy_resolver import resolve_policy
-from ClientContext.utils.source_quality import pick_candidates, is_denied, is_allowed, allowed_domains, build_allowlist_query
-from ClientContext.utils.json_helpers import extract_json_block, safe_json_loads
-from ClientContext.utils.url_validators import (
-    is_blocked_filetype,
-    sanitize_query_for_allowlist,
-    coerce_url_to_str,
-    recover_url,
-    validate_url_permissive_async
-)
-from services.user_validation_service import UserValidationService
-from services.ai_prompt_service import AIPromptService
-from services.ai_service import AiService
-from AuditSystem.services import AuditService
-from services.google_search_service import GoogleSearchService
-from services.mailjet_service import MailjetService
-from ClientContext.utils.weekly_context import generate_weekly_context_email_template
-# from utils.static_events import get_niche_events
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
+
 class WeeklyContextService:
-    def __init__(self):
-        self.ai_service = AiService()
-        self.prompt_service = AIPromptService()
-        self.google_search_service = GoogleSearchService()
-        self.mailjet_service = MailjetService()
-        self.user_validation_service = UserValidationService()
-        self.audit_service = AuditService()
-        # Quantas semanas olhar para trás para evitar repetição de links (domínio+path)
-        self.dedupe_lookback_weeks = int(os.getenv("WEEKLY_CONTEXT_DEDUPE_WEEKS", "4"))
-
-    async def _process_user_context(self, user_id: int, bcc: list[str] = None) -> Dict[str, Any]:
-        """Process weekly context generation for a single user."""
-        # Placeholder for actual context generation logic
-        user = await sync_to_async(User.objects.get)(id=user_id)
-        try:
-
-            user_data = await self.user_validation_service.get_user_data(user_id)
-            if not user_data:
-                return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
-
-            await sync_to_async(self.audit_service.log_context_generation)(
-                user=user,
-                action='weekly_context_generation_started',
-                status='info',
-            )
-
-            validation_result = await self.user_validation_service.validate_user_eligibility(user_data)
-
-            if validation_result['status'] != 'eligible':
-                return {'user_id': user_id,
-                        'status': 'skipped',
-                        'reason': validation_result['reason']}
-
-            # _generate_context_for_user is async now, so we await it directly
-            # RETORNA UMA TUPLA: (json_str, search_results_dict)
-            context_result = await self._generate_context_for_user(user)
-            logger.info(f"Context Result Type: {type(context_result)}") # DEBUG
-            
-            search_results_map = {}
-            json_str = ""
-            
-            if isinstance(context_result, tuple):
-                 json_str = context_result[0]
-                 search_results_map = context_result[1]
-            else:
-                 json_str = context_result
-
-            # Robust JSON parsing from the full string
-            try:
-                context_data = json.loads(json_str)
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON Parse Error Main: {e}")
-                # Tentar extrair o bloco principal novamente com a função robusta
-                clean_context = extract_json_block(json_str)
-                try:
-                    context_data = json.loads(clean_context)
-                except json.JSONDecodeError as e2:
-                    logger.error(f"Failed to parse extracted JSON Main: {e2}")
-                    raise ValueError("Invalid JSON format from AI synthesis")
-            
-            # --- CORREÇÃO DE ESTRUTURA ---
-            # Garantir que todas as seções críticas sejam dicionários
-            for section in ['mercado', 'concorrencia', 'publico', 'tendencias', 'sazonalidade', 'marca']:
-                if section in context_data:
-                    if isinstance(context_data[section], list):
-                        # Se for lista, tenta pegar o primeiro item se for dict
-                        if context_data[section] and isinstance(context_data[section][0], dict):
-                             context_data[section] = context_data[section][0]
-                        else:
-                             # Se for lista de strings ou vazia, transforma em dict vazio ou adapta
-                             context_data[section] = {} 
-                    elif not isinstance(context_data[section], dict):
-                        context_data[section] = {}
-
-            # --- NOVO: Agregação e Ranking de Oportunidades ---
-            # Agora passando o mapa de URLs reais para recuperação
-            recent_used_url_keys = await self._get_recent_url_keys(user)
-            ranked_opportunities = await self._aggregate_and_rank_opportunities(
-                context_data,
-                search_results_map,
-                recent_used_url_keys=recent_used_url_keys
-            )
-            # Injetar estrutura rankeada no contexto para o template usar
-            context_data['ranked_opportunities'] = ranked_opportunities
-
-            client_context, created = await sync_to_async(ClientContext.objects.get_or_create)(user=user)
-
-            # Update the context fields (Mantendo compatibilidade com campos antigos onde possível)
-            # Para o novo motor, vamos salvar o JSON completo das oportunidades rankeadas
-            # num campo JSONField genérico ou adaptado. Como não temos um campo 'ranked_opportunities' no model,
-            # vamos salvar em 'market_opportunities' que é JSON, mas estruturado diferente.
-            # Ideal seria criar campo novo, mas por agora vamos usar 'market_opportunities' para armazenar TUDO.
-            
-            # Salvar TODAS as oportunidades (raw) em market_opportunities para persistência total
-            client_context.market_opportunities = context_data.get('mercado', {}).get('fontes_analisadas', [])
-            
-            # Salvar as Rankeadas (Top Picks) em 'market_tendencies' (campo JSON pouco usado) ou 'tendencies_data'
-            # Vamos usar 'tendencies_data' para armazenar o JSON final rankeado que o email vai usar.
-            client_context.tendencies_data = ranked_opportunities
-
-            client_context.market_panorama = context_data.get(
-                'mercado', {}).get('panorama', '') # Este campo pode vir vazio no novo schema, atenção
-            
-            # ... resto dos campos ...
-            # Adaptar leitura dos campos antigos para não quebrar se vier vazio do novo schema
-            
-            client_context.market_sources = context_data.get(
-                'mercado', {}).get('fontes', [])
-
-            client_context.competition_main = context_data.get(
-                'concorrencia', {}).get('principais', [])
-            
-            # Concorrência agora também usa schema de oportunidades, então 'acoes_taticas' pode não existir
-            # Vamos tentar extrair algo genérico ou deixar vazio
-            client_context.competition_strategies = "Ver oportunidades rankeadas."
-                
-            client_context.competition_benchmark = context_data.get(
-                'concorrencia', {}).get('fontes_analisadas', []) # Salvar raw também
-            
-            client_context.competition_sources = context_data.get(
-                'concorrencia', {}).get('fontes', [])
-
-            client_context.target_audience_profile = context_data.get(
-                'publico', {}).get('perfil', '')
-            client_context.target_audience_behaviors = context_data.get(
-                'publico', {}).get('comportamento_online', '')
-            client_context.target_audience_interests = context_data.get(
-                'publico', {}).get('interesses', [])
-            client_context.target_audience_sources = context_data.get(
-                'publico', {}).get('fontes', [])
-
-            client_context.tendencies_hashtags = context_data.get(
-                'tendencias', {}).get('hashtags', [])
-            client_context.tendencies_sources = context_data.get(
-                'tendencias', {}).get('fontes', [])
-
-            client_context.seasonal_relevant_dates = context_data.get(
-                'sazonalidade', {}).get('datas_relevantes', [])
-            client_context.seasonal_local_events = context_data.get(
-                'sazonal', {}).get('eventos_locais', [])
-            client_context.seasonal_sources = context_data.get(
-                'sazonal', {}).get('fontes', [])
-
-            client_context.brand_online_presence = context_data.get(
-                'marca', {}).get('presenca_online', '')
-            client_context.brand_reputation = context_data.get(
-                'marca', {}).get('reputacao', '')
-            client_context.brand_communication_style = context_data.get(
-                'marca', {}).get('tom_comunicacao_atual', '')
-            client_context.brand_sources = context_data.get(
-                'marca', {}).get('fontes', [])
-
-            client_context.weekly_context_error = None
-            client_context.weekly_context_error_date = None
-
-            await sync_to_async(client_context.save)()
-
-            # --- HISTÓRICO: Salvar cópia no histórico ---
-            from ClientContext.models import ClientContextHistory
-            
-            await sync_to_async(ClientContextHistory.objects.create)(
-                user=user,
-                original_context=client_context,
-                # Copiar todos os campos
-                market_panorama=client_context.market_panorama,
-                market_tendencies=client_context.market_tendencies,
-                market_challenges=client_context.market_challenges,
-                market_opportunities=client_context.market_opportunities,
-                market_sources=client_context.market_sources,
-                competition_main=client_context.competition_main,
-                competition_strategies=client_context.competition_strategies,
-                competition_benchmark=client_context.competition_benchmark,
-                competition_opportunities=client_context.competition_opportunities,
-                competition_sources=client_context.competition_sources,
-                target_audience_profile=client_context.target_audience_profile,
-                target_audience_behaviors=client_context.target_audience_behaviors,
-                target_audience_interests=client_context.target_audience_interests,
-                target_audience_sources=client_context.target_audience_sources,
-                tendencies_popular_themes=client_context.tendencies_popular_themes,
-                tendencies_hashtags=client_context.tendencies_hashtags,
-                tendencies_data=client_context.tendencies_data,
-                tendencies_keywords=client_context.tendencies_keywords,
-                tendencies_sources=client_context.tendencies_sources,
-                seasonal_relevant_dates=client_context.seasonal_relevant_dates,
-                seasonal_local_events=client_context.seasonal_local_events,
-                seasonal_sources=client_context.seasonal_sources,
-                brand_online_presence=client_context.brand_online_presence,
-                brand_reputation=client_context.brand_reputation,
-                brand_communication_style=client_context.brand_communication_style,
-                brand_sources=client_context.brand_sources
-            )
-            logger.info(f"Saved context history for user {user.id}")
-
-            await sync_to_async(self.audit_service.log_context_generation)(
-                user=user,
-                action='context_generated',
-                status='success',
-            )
-
-            # Enviar Email (Passando o context_data COMPLETO, que agora tem 'ranked_opportunities')
-            await self._send_email_async(user, context_data, bcc=bcc)
-
-            return {
-                'user_id': user_id,
-                'status': 'success',
-            }
-
-        except Exception as e:
-            await self._store_user_error(user, str(e))
-            await sync_to_async(self.audit_service.log_context_generation)(
-                user=user,
-                action='weekly_context_generation_failed',
-                status='error',
-                details=str(e)
-            )
-
-            return {
-                'user_id': user_id,
-                'status': 'failed',
-                'error': str(e),
-            }
-
-    async def _send_email_async(self, user: User, context_data: dict, bcc: list[str] = None):
-        """Send email asynchronously."""
-        # user_data from validation service returns (User, CreatorProfile) tuple
-        user_tuple = await self.user_validation_service.get_user_data(user.id)
-        
-        if not user_tuple:
-            logger.error(f"User data not found for email sending: {user.id}")
-            return
-
-        user_obj, profile_obj = user_tuple
-        
-        # Construct user_data dict expected by template
-        user_data = {
-            'business_name': profile_obj.business_name,
-            'user_name': user_obj.first_name,
-            'user__first_name': user_obj.first_name
+    """
+    Service para gerenciar contexto semanal e oportunidades de mercado.
+    """
+    
+    # MVP: Calendário brasileiro de datas importantes (curado manualmente)
+    BRAZILIAN_CALENDAR = {
+        '01-01': {
+            'title': 'Ano Novo',
+            'category': 'seasonal',
+            'keywords': ['metas', 'objetivos', 'novo ano', 'recomeço', 'planejamento'],
+            'ideal_for': ['coaching', 'consultoria', 'educação'],
+            'advance_days': 14  # Começar 2 semanas antes
+        },
+        '01-25': {
+            'title': 'Aniversário de São Paulo',
+            'category': 'regional',
+            'keywords': ['são paulo', 'sampa', 'cidade', 'paulista'],
+            'ideal_for': ['local_business', 'eventos'],
+            'advance_days': 7
+        },
+        '02-14': {
+            'title': 'Dia dos Namorados',
+            'category': 'commercial',
+            'keywords': ['amor', 'relacionamento', 'presente', 'casal'],
+            'ideal_for': ['ecommerce', 'presentes', 'restaurantes'],
+            'advance_days': 21
+        },
+        '03-08': {
+            'title': 'Dia Internacional da Mulher',
+            'category': 'awareness',
+            'keywords': ['mulher', 'empoderamento', 'igualdade', 'feminino'],
+            'ideal_for': ['consultoria', 'educação', 'saúde'],
+            'advance_days': 14
+        },
+        '04-21': {
+            'title': 'Tiradentes',
+            'category': 'feriado',
+            'keywords': ['feriado', 'descanso', 'viagem'],
+            'ideal_for': ['turismo', 'lazer'],
+            'advance_days': 7
+        },
+        '05-01': {
+            'title': 'Dia do Trabalho',
+            'category': 'awareness',
+            'keywords': ['trabalho', 'carreira', 'profissional'],
+            'ideal_for': ['rh', 'consultoria', 'coaching'],
+            'advance_days': 14
+        },
+        '05-12': {
+            'title': 'Dia das Mães',
+            'category': 'commercial',
+            'keywords': ['mãe', 'família', 'presente', 'homenagem'],
+            'ideal_for': ['ecommerce', 'presentes', 'beleza'],
+            'advance_days': 21
+        },
+        '06-12': {
+            'title': 'Dia dos Namorados',
+            'category': 'commercial',
+            'keywords': ['amor', 'casal', 'presente'],
+            'ideal_for': ['ecommerce', 'presentes'],
+            'advance_days': 21
+        },
+        '08-11': {
+            'title': 'Dia dos Pais',
+            'category': 'commercial',
+            'keywords': ['pai', 'família', 'presente', 'homenagem'],
+            'ideal_for': ['ecommerce', 'presentes', 'tech'],
+            'advance_days': 21
+        },
+        '09-07': {
+            'title': 'Independência do Brasil',
+            'category': 'feriado',
+            'keywords': ['brasil', 'pátria', 'independência'],
+            'ideal_for': ['educação', 'cultura'],
+            'advance_days': 7
+        },
+        '10-12': {
+            'title': 'Dia das Crianças',
+            'category': 'commercial',
+            'keywords': ['criança', 'brinquedo', 'diversão', 'família'],
+            'ideal_for': ['ecommerce', 'educação', 'lazer'],
+            'advance_days': 21
+        },
+        '11-15': {
+            'title': 'Proclamação da República',
+            'category': 'feriado',
+            'keywords': ['república', 'feriado'],
+            'ideal_for': ['educação'],
+            'advance_days': 7
+        },
+        '11-20': {
+            'title': 'Consciência Negra',
+            'category': 'awareness',
+            'keywords': ['consciência', 'igualdade', 'diversidade'],
+            'ideal_for': ['educação', 'cultura', 'social'],
+            'advance_days': 14
+        },
+        '11-24': {
+            'title': 'Black Friday',
+            'category': 'commercial',
+            'keywords': ['desconto', 'promoção', 'oferta', 'compra'],
+            'ideal_for': ['ecommerce', 'varejo', 'serviços'],
+            'advance_days': 30  # Começar 1 mês antes!
+        },
+        '12-25': {
+            'title': 'Natal',
+            'category': 'seasonal',
+            'keywords': ['natal', 'presente', 'família', 'celebração'],
+            'ideal_for': ['ecommerce', 'presentes', 'restaurantes'],
+            'advance_days': 30
         }
-        
-        # FIX: Remover to_email da lista de BCC se presente para evitar envio duplicado
-        if bcc and user.email in bcc:
-            bcc = [email for email in bcc if email != user.email]
-        
-        # Gerar HTML usando o novo template que suporta 'ranked_opportunities'
-        html_content = generate_weekly_context_email_template(
-            context_data, user_data)
-            
-        await self.mailjet_service.send_email(
-            to_email=user.email,
-            subject="Seu Contexto Semanal de Mercado",
-            body=html_content,
-            bcc=bcc
-        )
-
-    async def _generate_context_for_user(self, user: User) -> tuple:
-        """
-        Generate context for a specific user.
-        Retorna: (json_string_completo, dict_urls_reais_por_secao)
-        """
-        self.prompt_service.set_user(user)
-        
-        # 1. Preparar Prompts e Queries
-        profile_data = await sync_to_async(self.prompt_service._get_creator_profile_data)()
-        queries = self.prompt_service._build_optimized_search_queries(profile_data)
-
-        # Policy (auto/override) para controlar thresholds/idiomas e auditar comportamento
-        decision = resolve_policy(profile_data)
-        policy = decision.policy
-        logger.info(
-            "[POLICY] key=%s source=%s override=%s reason=%s languages=%s min_selected=%s allow_ratio_threshold=%.2f",
-            policy.key,
-            decision.source,
-            decision.override_value or "",
-            decision.reason,
-            ",".join(policy.languages),
-            policy.min_selected_by_section,
-            policy.allowlist_ratio_threshold,
-        )
-        
-        # 2. Histórico Anti-Repetição
-        excluded_topics = await self._get_recent_topics(user)
-        used_url_keys_recent = await self._get_recent_url_keys(user)
-        # Também evita duplicar links dentro do mesmo e-mail (entre seções)
-        used_url_keys_this_run: set[str] = set()
-        
-        # 3. Executar Buscas (Paralelas ou Sequenciais)
-        search_tasks = []
-        sections = ['mercado', 'concorrencia', 'publico', 'tendencias', 'sazonalidade', 'marca']
-        
-        # Executar buscas
-        search_results = {}
-        for section in sections:
-            # Sazonalidade precisa de parser especial no futuro, mas por enquanto busca normal
-            query = queries.get(section, '')
-            urls = []
-            if query:
-                def _fetch_pool(lr: str, q: str) -> list[dict]:
-                    raw: list[dict] = []
-                    for start in (1, 11, 21, 31, 41):
-                        try:
-                            page = self.google_search_service.search(
-                                q,
-                                num_results=10,
-                                start=start,
-                                lr=lr,
-                                gl=os.getenv("GOOGLE_CSE_GL", "br"),
-                            )
-                        except Exception:
-                            page = []
-                        if page:
-                            raw.extend(page)
-                    return raw
-
-                # 1) Buscar pt-BR primeiro (preferência). Tentar primeiro com restrição de allowlist (se existir).
-                doms = allowed_domains(section)
-                sanitized = sanitize_query_for_allowlist(query)
-                allow_q = build_allowlist_query(sanitized or query, doms, max_domains=8) if doms else query
-                pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", allow_q)
-                if doms and len(pt_pool) < 5:
-                    # fallback 1: query genérica (menos restritiva) ainda dentro da allowlist
-                    fallback_base = f"{profile_data.get('specialization','')} cultura organizacional gestão de processos {datetime.now().year}"
-                    fb_q = build_allowlist_query(sanitize_query_for_allowlist(fallback_base), doms, max_domains=8)
-                    pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", fb_q)
-                if doms and len(pt_pool) < 5:
-                    # fallback 2: busca geral
-                    pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", query)
-                logger.info("[SOURCE_AUDIT] seção=%s stage=raw_pt count=%s", section, len(pt_pool))
-                pt_urls = [i.get("url") for i in pt_pool if isinstance(i, dict) and isinstance(i.get("url"), str)]
-                picked_urls = pick_candidates(
-                    section,
-                    pt_urls,
-                    min_allowlist=policy.allowlist_min_coverage.get(section, 3),
-                    max_keep=12,
-                )
-                picked_items: list[dict] = []
-                raw_pt_count = len(pt_pool)
-                raw_en_count = 0
-                denied_count = 0
-                allowlist_count = 0
-                fallback_used = []
-                min_needed = policy.min_selected_by_section.get(section, 3)
-
-                # Aplicar dedupe (histórico + dentro do run) e limite por domínio
-                per_domain: dict[str, int] = {}
-                for u in picked_urls:
-                    if not u or not u.startswith("http"):
-                        continue
-                    if is_blocked_filetype(u) or is_denied(u):
-                        denied_count += 1
-                        continue
-                    if is_allowed(section, u):
-                        allowlist_count += 1
-                    k = normalize_url_key(u)
-                    if not k or k in used_url_keys_recent or k in used_url_keys_this_run:
-                        continue
-                    d = urlparse(u).netloc.lower()
-                    per_domain[d] = per_domain.get(d, 0) + 1
-                    if per_domain[d] > 2:
-                        per_domain[d] -= 1
-                        continue
-                    # recuperar item original
-                    item = next((x for x in pt_pool if isinstance(x, dict) and x.get("url") == u), None)
-                    if item:
-                        picked_items.append(item)
-                        used_url_keys_this_run.add(k)
-                    if len(picked_items) >= 6:
-                        break
-
-                # 2) Fallback en se cobertura baixa
-                if len(picked_items) < min_needed and len(policy.languages) > 1:
-                    en_pool = await sync_to_async(_fetch_pool)(policy.languages[1], allow_q)
-                    if doms and len(en_pool) < 5:
-                        en_pool = await sync_to_async(_fetch_pool)(policy.languages[1], query)
-                    logger.info("[SOURCE_AUDIT] seção=%s stage=raw_en count=%s", section, len(en_pool))
-                    raw_en_count = len(en_pool)
-                    fallback_used.append("en")
-                    en_urls = [i.get("url") for i in en_pool if isinstance(i, dict) and isinstance(i.get("url"), str)]
-                    en_picked = pick_candidates(section, en_urls, min_allowlist=2, max_keep=12)
-                    for u in en_picked:
-                        if not u or not u.startswith("http"):
-                            continue
-                        if is_blocked_filetype(u) or is_denied(u):
-                            denied_count += 1
-                            continue
-                        if is_allowed(section, u):
-                            allowlist_count += 1
-                        k = normalize_url_key(u)
-                        if not k or k in used_url_keys_recent or k in used_url_keys_this_run:
-                            continue
-                        d = urlparse(u).netloc.lower()
-                        per_domain[d] = per_domain.get(d, 0) + 1
-                        if per_domain[d] > 2:
-                            per_domain[d] -= 1
-                            continue
-                        item = next((x for x in en_pool if isinstance(x, dict) and x.get("url") == u), None)
-                        if item:
-                            picked_items.append(item)
-                            used_url_keys_this_run.add(k)
-                        if len(picked_items) >= 6:
-                            break
-
-                if len(picked_items) < min_needed:
-                    logger.info(
-                        "[LOW_SOURCE_COVERAGE] seção=%s picked=%s lookback_weeks=%s",
-                        section,
-                        len(picked_items),
-                        self.dedupe_lookback_weeks,
-                    )
-                else:
-                    # Log dos domínios finais usados por seção
-                    domains = []
-                    for it in picked_items:
-                        u = it.get("url") if isinstance(it, dict) else None
-                        if isinstance(u, str) and u.startswith("http"):
-                            domains.append(urlparse(u).netloc.lower())
-                    logger.info(
-                        "[SOURCE_AUDIT] seção=%s stage=selected count=%s domains=%s",
-                        section,
-                        len(picked_items),
-                        sorted(list(set(domains)))[:10],
-                    )
-
-                logger.info(
-                    "[SOURCE_METRICS] policy=%s seção=%s raw_pt=%s raw_en=%s denied=%s allow=%s selected=%s min_needed=%s fallback=%s",
-                    policy.key,
-                    section,
-                    raw_pt_count,
-                    raw_en_count,
-                    denied_count,
-                    allowlist_count,
-                    len(picked_items),
-                    min_needed,
-                    ",".join(fallback_used) if fallback_used else "",
-                )
-
-                # Alertas simples de qualidade
-                if section in ("mercado", "tendencias", "concorrencia") and len(picked_items) < min_needed:
-                    logger.warning(
-                        "[LOW_SOURCE_COVERAGE] policy=%s seção=%s selected=%s raw_pt=%s raw_en=%s",
-                        policy.key,
-                        section,
-                        len(picked_items),
-                        raw_pt_count,
-                        raw_en_count,
-                    )
-
-                # Ratio de allowlist (quando há allowlist definida para a seção)
-                if doms and len(picked_items) > 0:
-                    allow_ratio = allowlist_count / max(len(picked_items), 1)
-                    if allow_ratio < policy.allowlist_ratio_threshold:
-                        logger.warning(
-                            "[LOW_ALLOWLIST_RATIO] policy=%s seção=%s ratio=%.2f allow=%s selected=%s domains_allowlist=%s",
-                            policy.key,
-                            section,
-                            allow_ratio,
-                            allowlist_count,
-                            len(picked_items),
-                            len(doms),
-                        )
-
-                urls = picked_items
-            search_results[section] = urls
-            
-        # 4. Contexto Cruzado (Cross-Context Synthesis)
-        # O Público precisa saber o que está rolando no Mercado e Tendências
-        context_borrowed_for_audience = search_results.get('mercado', []) + search_results.get('tendencias', [])
-
-        # 5. Gerar Síntese com IA (Sequencial para garantir coerência ou paralelo?)
-        # Vamos fazer sequencial para simplicidade e controle de erro, mas construindo um JSON unificado
-        final_json_parts = []
-        
-        for section in sections:
-            borrowed = context_borrowed_for_audience if section == 'publico' else None
-            
-            prompt_list = self.prompt_service._build_synthesis_prompt(
-                section_name=section,
-                query=queries.get(section, ''),
-                urls=search_results.get(section, []),
-                profile_data=profile_data,
-                excluded_topics=excluded_topics,
-                context_borrowed=borrowed
-            )
-            
-            # Chamar Gemini
-            
-            # Configuração "limpa" para síntese (sem Google Search Tools)
-            # para evitar conflito com o texto já fornecido e prevenir erros de Grounding
-            synthesis_config = types.GenerateContentConfig(
-                response_modalities=["TEXT"],
-                temperature=0.7, # Criatividade balanceada
-                top_p=0.9,
-                max_output_tokens=2000,
-                response_mime_type="application/json" # Forçar JSON
-            )
-            
-            try:
-                # O método generate_text espera uma lista de prompts, não string única
-                ai_response = await sync_to_async(self.ai_service.generate_text)(
-                    prompt_list, 
-                    user, 
-                    config=synthesis_config,
-                    response_mime_type="application/json"
-                )
-                # Limpar JSON markdown se houver
-                if isinstance(ai_response, dict):
-                    ai_text = ai_response.get('text', '')
-                else:
-                    ai_text = str(ai_response)
-                
-                # Usar a nova função robusta para extrair o JSON
-                clean_json = extract_json_block(ai_text)
-                final_json_parts.append(f'"{section}": {clean_json}')
-                
-            except Exception as e:
-                logger.error(f"Error generating section {section}: {e}")
-                final_json_parts.append(f'"{section}": {{}}') # Fallback vazio
-        
-        # Montar JSON Final
-        full_json_str = "{" + ", ".join(final_json_parts) + "}"
-        return full_json_str, search_results
-
-    async def _store_user_error(self, user: User, error_msg: str):
-        """Store error message in ClientContext."""
-        from django.utils import timezone
-        client_context, _ = await sync_to_async(ClientContext.objects.get_or_create)(user=user)
-        client_context.weekly_context_error = error_msg
-        client_context.weekly_context_error_date = timezone.now()
-        await sync_to_async(client_context.save)()
-        
-    async def _get_recent_topics(self, user: User) -> list:
-        """Recupera tópicos abordados nas últimas 4 semanas para evitar repetição."""
-        from ClientContext.models import ClientContextHistory
-        from datetime import timedelta
-        from django.utils import timezone
-        
-        one_month_ago = timezone.now() - timedelta(weeks=4)
-        
-        history = await sync_to_async(lambda: list(ClientContextHistory.objects.filter(
-            user=user, 
-            created_at__gte=one_month_ago
-        ).values_list('tendencies_popular_themes', flat=True)))()
-        
-        # Flatten list
-        topics = []
-        for item in history:
-            if item: # item pode ser lista ou string JSON
-                if isinstance(item, list):
-                    topics.extend(item)
-                elif isinstance(item, str):
-                    try:
-                        topics.extend(json.loads(item))
-                    except:
-                        pass
-        return list(set(topics)) # Únicos
-
-    async def _get_recent_url_keys(self, user: User) -> set[str]:
-        """
-        Recupera chaves (domain+path) usadas recentemente a partir do histórico.
-        Janela: `self.dedupe_lookback_weeks` semanas.
-        """
-        from ClientContext.models import ClientContextHistory
-        from datetime import timedelta
-        from django.utils import timezone
-
-        now = timezone.now()
-        since = now - timedelta(days=max(self.dedupe_lookback_weeks, 1) * 7)
-
-        histories = await sync_to_async(lambda: list(
-            ClientContextHistory.objects.filter(user=user, created_at__gte=since)
-            .order_by("-created_at")
-            .values("tendencies_data")
-        ))()
-
-        used: set[str] = set()
-        for h in histories:
-            data = h.get("tendencies_data") or {}
-            if not isinstance(data, dict):
-                continue
-            for group in data.values():
-                if not isinstance(group, dict):
-                    continue
-                for item in (group.get("items") or []):
-                    if not isinstance(item, dict):
-                        continue
-                    url = item.get("url_fonte")
-                    if isinstance(url, str) and url.startswith("http"):
-                        k = normalize_url_key(url)
-                        if k:
-                            used.add(k)
-
-        return used
-
-
-    async def _aggregate_and_rank_opportunities(
+    }
+    
+    def get_opportunities_for_user(
         self,
-        context_data: dict,
-        search_results_map: dict,
-        recent_used_url_keys: Optional[set[str]] = None
-    ) -> dict:
+        user,
+        niche: Optional[str] = None,
+        limit: int = 5
+    ) -> List[Dict]:
         """
-        Agrega oportunidades de todas as seções (Mercado, Concorrência, Tendências),
-        classifica por tipo e seleciona as Top 3 de cada categoria baseada no Score.
-        Valida URLs usando requests HEAD/GET e tenta recuperação com URLs reais.
+        Retorna oportunidades relevantes para o usuário.
+        
+        Args:
+            user: Usuário (para inferir nicho se não fornecido)
+            niche: Nicho específico (opcional)
+            limit: Quantidade máxima de oportunidades
+        
+        Returns:
+            Lista de oportunidades ordenadas por relevância
         """
-        all_opportunities = []
-        
-        # 1. Coletar oportunidades de todas as seções que usam o novo schema
-        # Dedupe por URL ao longo do e-mail inteiro (domain+path)
-        used_url_keys_email: set[str] = set()
-        recent_used_url_keys = recent_used_url_keys or set()
-
-        for section in ['mercado', 'tendencias', 'concorrencia']:
-            section_data = context_data.get(section, {})
-            # Obter URLs reais para esta seção
-            real_urls_for_section = search_results_map.get(section, [])
-            candidate_urls = []
-            for item in (real_urls_for_section or []):
-                u = coerce_url_to_str(item)
-                # GoogleSearchService retorna dict com chave 'url'
-                if isinstance(item, dict) and not u:
-                    u = coerce_url_to_str(item.get('url'))
-                if u and u.startswith('http'):
-                    if is_blocked_filetype(u):
-                        continue
-                    if is_denied(u):
-                        continue
-                    candidate_urls.append(u)
-            # Priorizar candidate_urls por allowlist/score (quando houver)
-            candidate_urls = pick_candidates(section, candidate_urls, min_allowlist=1, max_keep=10)
+        try:
+            # Inferir nicho do perfil se não fornecido
+            if not niche:
+                niche = self._infer_niche_from_user(user)
             
-            # Verificar se segue o novo schema com 'fontes_analisadas'
-            if isinstance(section_data, dict) and 'fontes_analisadas' in section_data:
-                for fonte in section_data['fontes_analisadas']:
-                    # A IA pode retornar url_original como string OU como objeto.
-                    url_original_ai = fonte.get('url_original', '')
-                    url_original_ai_str = coerce_url_to_str(url_original_ai)
-                    ai_domain = ""
-                    try:
-                        ai_domain = urlparse(url_original_ai_str).netloc if url_original_ai_str else ""
-                    except Exception:
-                        ai_domain = ""
-                    
-                    # Tentar RECUPERAR a URL se a IA alucinou
-                    url_fonte = recover_url(url_original_ai, real_urls_for_section)
-                    # Regra de qualidade: quando temos resultados do Google, preferir SEMPRE uma URL do Google,
-                    # tentando primeiro manter o mesmo domínio sugerido pela IA (ex.: McKinsey).
-                    if candidate_urls:
-                        domain_candidates = [u for u in candidate_urls if ai_domain and urlparse(u).netloc == ai_domain]
-                        preferred_pool = domain_candidates or candidate_urls
-                        # Se a URL recuperada não estiver no pool do Google, escolhe a melhor candidata.
-                        if url_fonte not in preferred_pool:
-                            url_fonte = preferred_pool[0]
-
-                    # Se a URL selecionada já foi usada recentemente e não temos alternativa válida, descarta a fonte
-                    url_key_pre = normalize_url_key(url_fonte)
-                    if url_key_pre and url_key_pre in recent_used_url_keys:
-                        swapped = False
-                        for alt in candidate_urls:
-                            ak = normalize_url_key(alt)
-                            if not ak or ak in recent_used_url_keys:
-                                continue
-                            url_fonte = alt
-                            swapped = True
-                            break
-                        if not swapped:
-                            logger.info(
-                                "[DEDUP_DROP_SOURCE] seção=%s ai_url=%s reused_url=%s",
-                                section,
-                                url_original_ai_str,
-                                url_fonte,
-                            )
-                            continue
-
-                    # Auditoria: log quando a URL é "recuperada" para uma URL real do Google Search
-                    if url_original_ai_str and url_fonte and url_fonte.strip() and url_fonte.strip() != url_original_ai_str.strip():
-                        logger.info(
-                            "[URL_RECOVERY] seção=%s ai_url=%s recovered_url=%s",
-                            section,
-                            url_original_ai_str,
-                            url_fonte
-                        )
-                    
-                    # FIX: Validação básica de URL string
-                    if not url_fonte or not url_fonte.startswith('http'):
-                        continue 
-                    
-                    # FIX: Validação HTTP Permissiva
-                    # Respeitar dedupe no e-mail: evita repetir domain+path
-                    url_key = normalize_url_key(url_fonte)
-                    if url_key and (url_key in used_url_keys_email or url_key in recent_used_url_keys):
-                        # tenta pegar alternativa ainda não usada
-                        for alt in candidate_urls:
-                            ak = normalize_url_key(alt)
-                            if ak and (ak in used_url_keys_email or ak in recent_used_url_keys):
-                                continue
-                            url_fonte = alt
-                            break
-
-                    if not await validate_url_permissive_async(url_fonte):
-                        # Tentar substituir por uma URL real alternativa da busca (evita enviar 404/soft-404)
-                        replaced = False
-                        # Tenta primeiro candidatas do mesmo domínio
-                        alt_pool = []
-                        if candidate_urls:
-                            if ai_domain:
-                                alt_pool.extend([u for u in candidate_urls if urlparse(u).netloc == ai_domain])
-                            alt_pool.extend([u for u in candidate_urls if u not in alt_pool])
-
-                        for alt in (alt_pool or candidate_urls):
-                            if alt == url_fonte:
-                                continue
-                            ak = normalize_url_key(alt)
-                            if ak and (ak in used_url_keys_email or ak in recent_used_url_keys):
-                                continue
-                            if await validate_url_permissive_async(alt):
-                                logger.info(
-                                    "[URL_FALLBACK_PICKED] seção=%s ai_url=%s bad_url=%s alt_url=%s",
-                                    section,
-                                    url_original_ai_str,
-                                    url_fonte,
-                                    alt,
-                                )
-                                url_fonte = alt
-                                replaced = True
-                                break
-
-                        if not replaced:
-                            logger.warning(
-                                "[URL_DROPPED_404] seção=%s url=%s (ai_url=%s)",
-                                section,
-                                url_fonte,
-                                url_original_ai_str
-                            )
-                            continue
-
-                    # Marcar URL como usada no e-mail (após validação final)
-                    final_key = normalize_url_key(url_fonte)
-                    if final_key:
-                        used_url_keys_email.add(final_key)
-
-                    for op in fonte.get('oportunidades', []):
-                        # Enriquecer oportunidade com dados da fonte para o display
-                        op['url_fonte'] = url_fonte
-                        op['origem_secao'] = section
-                        all_opportunities.append(op)
-        
-        # 2. Agrupar por Tipo
-        grouped_ops = {}
-        for op in all_opportunities:
-            # Normalizar tipo (remover emojis e espaços extras para chave)
-            raw_type = op.get('tipo', 'Outros')
-            # Extrair palavra chave do tipo (ex: "🔥 Polêmica" -> "Polêmica")
-            clean_type = raw_type
-            for emoji in ['🔥', '🧠', '📰', '😂', '💼', '🔮']:
-                clean_type = clean_type.replace(emoji, '').strip()
+            # Buscar oportunidades próximas (próximos 60 dias)
+            today = datetime.now()
+            opportunities = []
             
-            # Padronizar chaves para o template
-            if 'Polêmica' in clean_type or 'Debate' in clean_type:
-                key = 'polemica'
-                display_title = '🔥 Polêmica & Debate'
-            elif 'Educativo' in clean_type or 'How-to' in clean_type:
-                key = 'educativo'
-                display_title = '🧠 Educativo & Utilidade'
-            elif 'Newsjacking' in clean_type or 'Urgência' in clean_type or 'Atualidade' in clean_type:
-                key = 'newsjacking'
-                display_title = '📰 Newsjacking (Urgente)'
-            elif 'Entretenimento' in clean_type or 'Meme' in clean_type:
-                key = 'entretenimento'
-                display_title = '😂 Entretenimento & Conexão'
-            elif 'Estudo de Caso' in clean_type:
-                key = 'estudo_caso'
-                display_title = '💼 Estudo de Caso'
-            elif 'Futuro' in clean_type or 'Tendência' in clean_type:
-                key = 'futuro'
-                display_title = '🔮 Futuro & Tendências'
-            else:
-                key = 'outros'
-                display_title = '⚡ Outras Oportunidades'
-            
-            if key not in grouped_ops:
-                grouped_ops[key] = {
-                    'titulo': display_title,
-                    'items': []
-                }
-            
-            # Tratamento de Score (garantir int)
-            try:
-                op['score'] = int(op.get('score', 0))
-            except:
-                op['score'] = 0
+            for day_month, data in self.BRAZILIAN_CALENDAR.items():
+                # Parse data
+                month, day = map(int, day_month.split('-'))
                 
-            grouped_ops[key]['items'].append(op)
+                # Calcular próxima ocorrência
+                event_date = datetime(today.year, month, day)
+                
+                # Se já passou este ano, pegar ano que vem
+                if event_date < today:
+                    event_date = datetime(today.year + 1, month, day)
+                
+                # Considerar apenas próximos 60 dias
+                days_until = (event_date - today).days
+                
+                if days_until > 60:
+                    continue
+                
+                # Verificar se está no período de antecedência ideal
+                advance_window_start = data['advance_days']
+                advance_window_end = 3  # Até 3 dias antes
+                
+                # Relevância baseada em timing
+                if days_until >= advance_window_end and days_until <= advance_window_start:
+                    # Janela ideal
+                    timing_relevance = 100
+                elif days_until < advance_window_end:
+                    # Muito próximo (urgente!)
+                    timing_relevance = 90
+                elif days_until > advance_window_start:
+                    # Ainda cedo
+                    timing_relevance = 70
+                else:
+                    continue
+                
+                # Relevância por nicho
+                niche_relevance = 100 if niche in data.get('ideal_for', []) else 50
+                
+                # Score final
+                relevance_score = int((timing_relevance + niche_relevance) / 2)
+                
+                opportunities.append({
+                    'id': f"cal_{day_month.replace('-', '_')}",
+                    'title': data['title'],
+                    'summary': self._generate_summary(data, event_date, days_until),
+                    'relevance_score': relevance_score,
+                    'category': data['category'],
+                    'date': event_date.strftime('%Y-%m-%d'),
+                    'days_until': days_until,
+                    'keywords': data['keywords']
+                })
             
-        # 3. Ordenar e Filtrar (Top 3 por Tipo)
-        final_structure = {}
-        for key, group in grouped_ops.items():
-            # Ordenar por Score Decrescente
-            sorted_items = sorted(group['items'], key=lambda x: x['score'], reverse=True)
-            # Pegar Top 3
-            group['items'] = sorted_items[:3]
-            final_structure[key] = group
+            # Ordenar por relevância
+            opportunities.sort(key=lambda x: x['relevance_score'], reverse=True)
             
-        return final_structure
-
+            # Retornar top N
+            return opportunities[:limit]
+            
+        except Exception as e:
+            logger.error(f"Erro ao buscar oportunidades: {str(e)}")
+            return []
+    
+    def _infer_niche_from_user(self, user) -> str:
+        """Infere nicho do perfil do usuário."""
+        try:
+            from CreatorProfile.models import CreatorProfile
+            
+            profile = CreatorProfile.objects.filter(user=user).first()
+            
+            if not profile or not profile.specialization:
+                return 'general'
+            
+            spec = profile.specialization.lower()
+            
+            # Mapear especialização para nichos amplos
+            niche_map = {
+                'ecommerce': ['ecommerce', 'loja', 'varejo', 'venda'],
+                'educação': ['educa', 'ensino', 'curso', 'professor'],
+                'saúde': ['saúde', 'médic', 'clinic', 'nutrição'],
+                'consultoria': ['consul', 'estratég', 'mentor', 'coach'],
+                'tech': ['tech', 'software', 'saas', 'digital', 'tecnologia'],
+                'marketing': ['marketing', 'publicidade', 'comunicação'],
+                'advocacia': ['advog', 'jurídic', 'direito']
+            }
+            
+            for niche, keywords in niche_map.items():
+                if any(kw in spec for kw in keywords):
+                    return niche
+            
+            return 'general'
+            
+        except Exception as e:
+            logger.warning(f"Erro ao inferir nicho: {str(e)}")
+            return 'general'
+    
+    def _generate_summary(self, data: Dict, event_date: datetime, days_until: int) -> str:
+        """Gera resumo contextualizado da oportunidade."""
+        
+        title = data['title']
+        category = data['category']
+        
+        # Templates por categoria
+        if category == 'commercial':
+            return f"{title} se aproxima ({days_until} dias). Prepare conteúdo sobre presentes, promoções e ofertas especiais para engajar seu público."
+        
+        elif category == 'seasonal':
+            return f"{title} está chegando. Crie posts inspiradores, mensagens de boas festas e conteúdo que conecte emocionalmente com sua audiência."
+        
+        elif category == 'awareness':
+            return f"{title} é uma excelente oportunidade para posicionar sua marca em causas relevantes e construir autoridade no tema."
+        
+        elif category == 'feriado':
+            return f"Feriado de {title} se aproxima. Aproveite para engajar sua audiência com conteúdo leve, inspirador ou promocional."
+        
+        else:
+            return f"{title} em {days_until} dias. Oportunidade de criar conteúdo relevante e oportuno para seu público."
+    
+    def score_relevance_for_campaign(
+        self,
+        opportunity: Dict,
+        campaign_objective: str,
+        campaign_niche: str
+    ) -> float:
+        """
+        Calcula relevância específica de uma oportunidade para uma campanha.
+        
+        Returns:
+            float: Score 0-100
+        """
+        try:
+            # Base score da oportunidade
+            base_score = opportunity.get('relevance_score', 50)
+            
+            # Boost por keyword matching
+            campaign_words = set(campaign_objective.lower().split())
+            opp_keywords = set(opportunity.get('keywords', []))
+            
+            keyword_overlap = len(campaign_words & opp_keywords)
+            keyword_boost = min(20, keyword_overlap * 5)
+            
+            # Score final
+            final_score = min(100, base_score + keyword_boost)
+            
+            return final_score
+            
+        except Exception as e:
+            logger.warning(f"Erro ao calcular relevância: {str(e)}")
+            return 50.0

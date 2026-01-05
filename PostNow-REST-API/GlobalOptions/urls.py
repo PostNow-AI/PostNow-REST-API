@@ -10,6 +10,7 @@ urlpatterns = [
     path('professions/<int:profession_id>/specializations/',
          views.get_profession_specializations, name='get_profession_specializations'),
     path('fonts/', views.get_all_fonts, name='get_all_fonts'),
+    path('visual-styles/', views.get_all_visual_styles, name='get_all_visual_styles'),
 
     # Endpoints para criar opções customizadas
     path('professions/create/', views.create_custom_profession,

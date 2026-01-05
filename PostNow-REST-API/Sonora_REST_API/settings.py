@@ -14,14 +14,13 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
-import pymysql
+import pymysql  # ✅ Restaurado: Usar PyMySQL (compatível com setup atual)
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Configure PyMySQL for Vercel compatibility
-
 pymysql.install_as_MySQLdb()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -144,6 +143,11 @@ if not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST]):
         # For now, we'll use the environment variables as-is
 
 DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+} if os.getenv('USE_SQLITE') else {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': DB_NAME,
@@ -383,6 +387,16 @@ AWS_S3_CUSTOM_DOMAIN = os.getenv('AWS_S3_CUSTOM_DOMAIN')
 AWS_S3_USE_SSL = True
 AWS_DEFAULT_ACL = None
 
+# Celery Configuration
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'America/Sao_Paulo'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos max
+
 # Logging configuration for better debugging
 LOGGING = {
     'version': 1,
@@ -394,6 +408,11 @@ LOGGING = {
     },
     'loggers': {
         'IdeaBank.services.daily_content_service': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'celery': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': True,

@@ -487,6 +487,88 @@ class VisualStyle(models.Model):
         return f"{self.name} ({self.category})"
 
 
+class VisualStyleExample(models.Model):
+    """
+    Exemplos REAIS de posts gerados com cada estilo visual.
+    Galeria pública para ajudar usuários a escolher estilos.
+    
+    Estratégia (ideia do Rogério):
+    1. Gerar 1 exemplo inicial (seed) de cada estilo ($4.60 total UMA VEZ)
+    2. Capturar automaticamente posts aprovados de usuários reais
+    3. Galeria cresce organicamente com exemplos reais (custo $0)
+    4. Usuários veem posts REAIS, não genéricos!
+    """
+    
+    visual_style = models.ForeignKey(
+        VisualStyle,
+        on_delete=models.CASCADE,
+        related_name='public_examples',
+        help_text="Estilo visual deste exemplo"
+    )
+    
+    campaign = models.ForeignKey(
+        'Campaign',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Campanha que gerou este post"
+    )
+    
+    post = models.ForeignKey(
+        'CampaignPost',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Post original (referência)"
+    )
+    
+    # Dados do exemplo
+    image_url = models.URLField(
+        help_text="URL da imagem exemplo (S3)"
+    )
+    content_preview = models.TextField(
+        max_length=200,
+        help_text="Preview do conteúdo (primeiras linhas)"
+    )
+    
+    # Origem
+    is_seed = models.BooleanField(
+        default=False,
+        help_text="Exemplo inicial (seed) ou de usuário real"
+    )
+    is_featured = models.BooleanField(
+        default=False,
+        help_text="Destacar como exemplo top"
+    )
+    
+    # Métricas (para aprendizado)
+    view_count = models.IntegerField(
+        default=0,
+        help_text="Visualizações na biblioteca"
+    )
+    selection_count = models.IntegerField(
+        default=0,
+        help_text="Levou à escolha do estilo"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'visual_style_examples'
+        verbose_name = 'Exemplo de Estilo Visual'
+        verbose_name_plural = 'Exemplos de Estilos Visuais'
+        ordering = ['-is_featured', '-selection_count', '-view_count', '-created_at']
+        indexes = [
+            models.Index(fields=['visual_style', 'is_featured']),
+            models.Index(fields=['is_seed']),
+            models.Index(fields=['-selection_count']),
+        ]
+    
+    def __str__(self):
+        origin = "Seed" if self.is_seed else "Real"
+        return f"{self.visual_style.name} - {origin} ({self.created_at.strftime('%d/%m')})"
+
+
 class CampaignTemplate(models.Model):
     """
     Template salvo de campanha bem-sucedida.
@@ -635,3 +717,79 @@ class CampaignJourneyEvent(models.Model):
             models.Index(fields=['campaign_draft', 'timestamp']),
             models.Index(fields=['event_type']),
         ]
+
+
+class CampaignGenerationProgress(models.Model):
+    """
+    Modelo para tracking de progresso da geração assíncrona de campanhas.
+    Permite que o frontend faça polling do status de geração.
+    """
+    
+    campaign = models.OneToOneField(
+        Campaign,
+        on_delete=models.CASCADE,
+        related_name='generation_progress',
+        help_text="Campanha sendo gerada"
+    )
+    task_id = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="ID da task Celery"
+    )
+    status = models.CharField(
+        max_length=50,
+        choices=[
+            ('pending', 'Pendente'),
+            ('processing', 'Processando'),
+            ('completed', 'Concluído'),
+            ('failed', 'Falhou')
+        ],
+        default='pending',
+        help_text="Status atual da geração"
+    )
+    current_step = models.IntegerField(
+        default=0,
+        help_text="Passo atual no processo de geração"
+    )
+    total_steps = models.IntegerField(
+        default=0,
+        help_text="Total de passos no processo"
+    )
+    current_action = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Descrição da ação atual"
+    )
+    error_message = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Mensagem de erro se falhou"
+    )
+    started_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Quando a geração começou"
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Quando a geração terminou"
+    )
+    
+    class Meta:
+        db_table = 'campaign_generation_progress'
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['task_id']),
+            models.Index(fields=['status', '-started_at']),
+        ]
+    
+    def __str__(self):
+        return f"Progress for Campaign {self.campaign_id} - {self.status}"
+    
+    @property
+    def percentage(self):
+        """Calcula porcentagem de progresso."""
+        if self.total_steps == 0:
+            return 0
+        return int((self.current_step / self.total_steps) * 100)
+

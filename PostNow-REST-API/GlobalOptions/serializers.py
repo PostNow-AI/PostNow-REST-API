@@ -8,6 +8,7 @@ from .models import (
     PredefinedProfession,
     PredefinedSpecialization,
 )
+from Campaigns.models import VisualStyle, VisualStyleExample
 
 
 class PredefinedProfessionSerializer(serializers.ModelSerializer):
@@ -121,3 +122,38 @@ class FontListSerializer(serializers.Serializer):
 
     predefined = PredefinedFontSerializer(many=True)
     custom = CustomFontSerializer(many=True)
+
+
+class VisualStyleExampleSerializer(serializers.ModelSerializer):
+    """Serializer para exemplos de estilos visuais."""
+    
+    class Meta:
+        model = VisualStyleExample
+        fields = [
+            'id', 'image_url', 'content_preview', 
+            'is_seed', 'is_featured', 'view_count', 'selection_count'
+        ]
+
+
+class VisualStyleSerializer(serializers.ModelSerializer):
+    """Serializer para estilos visuais com exemplos."""
+    
+    # Incluir até 3 exemplos públicos
+    examples = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VisualStyle
+        fields = [
+            'id', 'name', 'slug', 'category', 'description', 
+            'tags', 'success_rate_by_niche', 'global_success_rate',
+            'image_prompt_modifiers', 'preview_image_url',
+            'best_for_campaign_types', 'best_for_niches',
+            'is_active', 'sort_order', 'examples', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'examples']
+    
+    def get_examples(self, obj):
+        """Retorna até 3 exemplos públicos deste estilo."""
+        examples = obj.public_examples.all()[:3]
+        return VisualStyleExampleSerializer(examples, many=True).data
+

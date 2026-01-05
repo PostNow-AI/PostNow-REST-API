@@ -422,3 +422,48 @@ class WeeklyContextHistoryView(generics.GenericAPIView):
                 'success': False,
                 'message': f'Erro ao buscar histórico: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================================================
+# MARKET OPPORTUNITIES - Para Campanhas
+# ============================================================================
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_market_opportunities(request):
+    """
+    Retorna oportunidades de mercado relevantes para o usuário.
+    
+    Query params:
+    - niche (opcional): Filtrar por nicho específico
+    - limit (opcional, default=5): Quantidade de oportunidades
+    
+    Returns:
+        Lista de oportunidades ordenadas por relevância
+    """
+    try:
+        from ClientContext.services.weekly_context_service import WeeklyContextService
+        
+        # Parâmetros
+        niche = request.GET.get('niche')
+        limit = int(request.GET.get('limit', 5))
+        
+        # Buscar oportunidades
+        service = WeeklyContextService()
+        opportunities = service.get_opportunities_for_user(
+            user=request.user,
+            niche=niche,
+            limit=limit
+        )
+        
+        return Response({
+            'success': True,
+            'data': opportunities
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Erro ao buscar oportunidades: {str(e)}")
+        return Response({
+            'success': False,
+            'message': f'Erro ao buscar oportunidades: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -21,4 +21,8 @@ urlpatterns = [
          name='weekly-context-current'),
     path('weekly-context/history/', views.WeeklyContextHistoryView.as_view(),
          name='weekly-context-history'),
+    
+    # ✅ NOVO: Market opportunities para campanhas
+    path('weekly-context/opportunities/', views.get_market_opportunities,
+         name='market-opportunities'),
 ]

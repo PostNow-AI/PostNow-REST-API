@@ -48,11 +48,13 @@ class CampaignListView(generics.ListCreateAPIView):
     serializer_class = CampaignSerializer
     
     def get_queryset(self):
-        return Campaign.objects.filter(user=self.request.user).prefetch_related(
+        return Campaign.objects.filter(
+            user=self.request.user
+        ).prefetch_related(
             'campaign_posts',
             'campaign_posts__post',
             'campaign_posts__post__ideas'
-        )
+        ).order_by('-created_at')  # ✅ Mais recentes primeiro
     
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -194,8 +196,8 @@ class CampaignTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([permissions.IsAuthenticated])
 def generate_campaign_content(request, pk):
     """
-    Gera conteúdo completo da campanha (todos os posts).
-    Endpoint principal de geração.
+    Inicia geração assíncrona de campanha.
+    Retorna task_id para tracking de progress.
     """
     
     # Validar request
@@ -217,37 +219,36 @@ def generate_campaign_content(request, pk):
             user=request.user
         )
         
-        # Importar service de geração
-        from .services.campaign_builder_service import CampaignBuilderService
+        # Enfileirar task assíncrona
+        from .tasks import generate_campaign_async
         
-        builder_service = CampaignBuilderService()
-        result = builder_service.generate_campaign_content(
-            campaign=campaign,
+        task = generate_campaign_async.delay(
+            campaign_id=campaign.id,
             generation_params=serializer.validated_data
         )
         
-        # Log sucesso
+        # Log início
         AuditService.log_operation(
             user=request.user,
             operation_category='campaign',
-            action='campaign_generated',
+            action='campaign_generation_started',
             status='success',
             resource_type='Campaign',
             resource_id=str(campaign.id),
             details={
-                'posts_generated': len(result['posts']),
+                'task_id': task.id,
                 'structure': campaign.structure
             }
         )
         
         return Response({
             'success': True,
-            'data': result,
-            'message': f'Campanha gerada com {len(result["posts"])} posts!'
-        }, status=status.HTTP_200_OK)
+            'task_id': task.id,
+            'message': 'Geração iniciada! Use o task_id para acompanhar o progresso.'
+        }, status=status.HTTP_202_ACCEPTED)
         
     except Exception as e:
-        logger.error(f"Error generating campaign: {str(e)}", exc_info=True)
+        logger.error(f"Error starting campaign generation: {str(e)}", exc_info=True)
         
         AuditService.log_operation(
             user=request.user,
@@ -262,11 +263,62 @@ def generate_campaign_content(request, pk):
         return Response(
             {
                 'success': False,
-                'error': 'Erro ao gerar campanha',
+                'error': 'Erro ao iniciar geração',
                 'details': str(e)
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_generation_progress(request, pk):
+    """
+    Retorna status de geração da campanha.
+    Endpoint para polling do frontend.
+    """
+    try:
+        campaign = get_object_or_404(Campaign, id=pk, user=request.user)
+        
+        try:
+            from .models import CampaignGenerationProgress
+            progress = campaign.generation_progress
+            
+            return Response({
+                'success': True,
+                'data': {
+                    'status': progress.status,
+                    'current_step': progress.current_step,
+                    'total_steps': progress.total_steps,
+                    'current_action': progress.current_action,
+                    'percentage': int((progress.current_step / progress.total_steps) * 100) if progress.total_steps > 0 else 0,
+                    'error_message': progress.error_message,
+                    'started_at': progress.started_at.isoformat(),
+                    'completed_at': progress.completed_at.isoformat() if progress.completed_at else None
+                }
+            })
+            
+        except CampaignGenerationProgress.DoesNotExist:
+            return Response({
+                'success': True,
+                'data': {
+                    'status': 'not_started',
+                    'current_step': 0,
+                    'total_steps': 0,
+                    'percentage': 0,
+                    'current_action': '',
+                    'error_message': None,
+                    'started_at': None,
+                    'completed_at': None
+                }
+            })
+        
+    except Exception as e:
+        logger.error(f"Error fetching progress: {str(e)}", exc_info=True)
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ============================================================================
@@ -571,6 +623,155 @@ def get_briefing_suggestion(request):
         logger.error(f"Error generating briefing suggestion: {str(e)}")
         return Response(
             {'success': False, 'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+# ============================================================================
+# JORNADAS ADAPTATIVAS
+# ============================================================================
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def suggest_journey(request):
+    """
+    Sugere jornada ideal para o usuário baseado em seu perfil e histórico.
+    
+    POST /api/v1/campaigns/suggest-journey/
+    Body (opcional):
+        {
+            "explicit_choice": "quick" | "guided" | "advanced",
+            "urgency": true | false
+        }
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "journey": "guided",
+                "title": "Jornada Guiada",
+                "description": "Crie campanhas em 15-30 minutos",
+                "benefits": [...],
+                "ideal_for": "...",
+                "reasons": [...]
+            }
+        }
+    """
+    try:
+        from .services.journey_detection_service import JourneyDetectionService
+        
+        service = JourneyDetectionService()
+        
+        # Contexto da requisição
+        context = {
+            'explicit_choice': request.data.get('explicit_choice'),
+            'urgency': request.data.get('urgency', False)
+        }
+        
+        # Detectar jornada
+        detected_journey = service.detect_user_journey_type(
+            user=request.user,
+            context=context
+        )
+        
+        # Obter raciocínio
+        reasoning = service.get_journey_reasoning(
+            user=request.user,
+            detected_journey=detected_journey
+        )
+        
+        return Response({
+            'success': True,
+            'data': reasoning
+        })
+        
+    except Exception as e:
+        logger.error(f"Error suggesting journey: {str(e)}")
+        return Response(
+            {
+                'success': False,
+                'error': 'Erro ao sugerir jornada',
+                'details': str(e)
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def track_journey_event(request):
+    """
+    Registra evento de jornada para aprendizado do sistema.
+    
+    POST /api/v1/campaigns/track-journey/
+    Body:
+        {
+            "campaign_id": "uuid",
+            "event_type": "started" | "completed" | "abandoned" | "switched",
+            "journey_type": "quick" | "guided" | "advanced",
+            "time_spent_seconds": 120,  # opcional
+            "satisfaction_rating": 8     # opcional, 1-10
+        }
+    
+    Returns:
+        {
+            "success": true,
+            "message": "Evento registrado com sucesso"
+        }
+    """
+    try:
+        from .services.journey_detection_service import JourneyDetectionService
+        
+        # Validar dados
+        campaign_id = request.data.get('campaign_id')
+        event_type = request.data.get('event_type')
+        journey_type = request.data.get('journey_type')
+        
+        if not all([campaign_id, event_type, journey_type]):
+            return Response(
+                {
+                    'success': False,
+                    'error': 'Campos obrigatórios: campaign_id, event_type, journey_type'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar campanha
+        campaign = get_object_or_404(
+            Campaign,
+            id=campaign_id,
+            user=request.user
+        )
+        
+        # Processar tempo gasto
+        time_spent = None
+        if request.data.get('time_spent_seconds'):
+            time_spent = timedelta(seconds=int(request.data['time_spent_seconds']))
+        
+        # Registrar evento
+        service = JourneyDetectionService()
+        service.track_journey_event(
+            user=request.user,
+            campaign=campaign,
+            event_type=event_type,
+            journey_type=journey_type,
+            time_spent=time_spent,
+            satisfaction_rating=request.data.get('satisfaction_rating')
+        )
+        
+        return Response({
+            'success': True,
+            'message': 'Evento registrado com sucesso'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error tracking journey event: {str(e)}")
+        return Response(
+            {
+                'success': False,
+                'error': 'Erro ao registrar evento',
+                'details': str(e)
+            },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 

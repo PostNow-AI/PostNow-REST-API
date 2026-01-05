@@ -58,11 +58,13 @@ class CampaignCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Campaign
         fields = [
+            'id',  # ✅ Adicionado para retornar na resposta
             'name', 'type', 'objective', 'main_message',
             'structure', 'duration_days', 'post_count', 'post_frequency',
             'start_date', 'end_date', 'visual_styles', 'content_mix',
-            'briefing_data', 'is_auto_generated'
+            'briefing_data', 'generation_context', 'is_auto_generated'  # ✅ generation_context adicionado
         ]
+        read_only_fields = ['id']  # ✅ ID é read-only
 
 
 class CampaignPostSerializer(serializers.ModelSerializer):

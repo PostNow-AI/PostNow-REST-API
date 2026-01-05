@@ -16,11 +16,29 @@ class CustomRegisterSerializer(RegisterSerializer):
 
 
 class CustomUserDetailsSerializer(serializers.ModelSerializer):
-    """Serializer for User model including UserProfile."""
+    """Serializer for User model including CreatorProfile."""
+    
+    creator_profile = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id',  'email',
-                  'first_name', 'last_name', 'is_superuser', 'is_staff']
-        read_only_fields = ['id', 'email',
-                            'first_name', 'last_name', 'is_superuser', 'is_staff']
+        fields = ['id', 'email', 'first_name', 'last_name', 
+                  'is_superuser', 'is_staff', 'creator_profile']
+        read_only_fields = ['id', 'email', 'first_name', 'last_name', 
+                            'is_superuser', 'is_staff', 'creator_profile']
+    
+    def get_creator_profile(self, obj):
+        """Retorna dados do CreatorProfile incluindo visual_style_ids."""
+        try:
+            from CreatorProfile.models import CreatorProfile
+            profile = CreatorProfile.objects.get(user=obj)
+            return {
+                'id': profile.id,
+                'business_name': profile.business_name,
+                'visual_style_ids': profile.visual_style_ids or [],
+                'voice_tone': profile.voice_tone,
+                'specialization': profile.specialization,
+                'onboarding_completed': profile.onboarding_completed,
+            }
+        except:
+            return None

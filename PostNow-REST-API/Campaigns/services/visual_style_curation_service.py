@@ -17,7 +17,14 @@ DECISION_TYPE_STYLE_CURATION = "visual_style_curation"
 
 def curate_styles_for_user(user, profile, limit: int = 3) -> List[VisualStyle]:
     """
-    Curadoria inteligente de estilos usando Thompson Sampling.
+    Curadoria inteligente de estilos usando Thompson Sampling + Histórico.
+    
+    Priorização (como solicitado):
+    1. Estilos do onboarding (100 pontos)
+    2. Estilos de campanhas anteriores (60 pontos)
+    3. Performance no nicho via Thompson (40 pontos)
+    4. Popularidade geral (10 pontos)
+    
     Retorna estilos ordenados por probabilidade de sucesso.
     """
     
@@ -27,13 +34,34 @@ def curate_styles_for_user(user, profile, limit: int = 3) -> List[VisualStyle]:
     # Buscar todos estilos ativos
     all_styles = VisualStyle.objects.filter(is_active=True)
     
-    # Calcular score Thompson para cada estilo
+    # 🆕 NOVO: Buscar histórico de estilos usados em campanhas
+    from Campaigns.models import Campaign
+    from collections import Counter
+    
+    # Estilos do onboarding
+    onboarding_style_ids = profile.visual_style_ids if profile else []
+    
+    # Estilos de campanhas anteriores (apenas aprovadas/publicadas)
+    previous_campaigns = Campaign.objects.filter(
+        user=user,
+        status__in=['pending_approval', 'approved', 'published']
+    ).exclude(visual_styles__isnull=True)
+    
+    # Contar frequência de uso
+    campaign_style_ids = []
+    for campaign in previous_campaigns:
+        if campaign.visual_styles:
+            campaign_style_ids.extend(campaign.visual_styles)
+    
+    style_frequency = Counter(campaign_style_ids)
+    
+    # Calcular score para cada estilo
     style_scores = []
     
     for style in all_styles:
         bucket = f"niche={niche}"
         
-        # Buscar BanditArmStat
+        # Base score: Thompson Sampling
         stat = BanditArmStat.objects.filter(
             decision_type=DECISION_TYPE_STYLE_CURATION,
             policy_id="style_curation_v1",
@@ -43,10 +71,10 @@ def curate_styles_for_user(user, profile, limit: int = 3) -> List[VisualStyle]:
         
         if stat:
             # Sample de distribuição Beta
-            score = random.betavariate(stat.alpha, stat.beta)
+            thompson_score = random.betavariate(stat.alpha, stat.beta)
         else:
             # Prior: Usar global_success_rate do estilo
-            score = style.global_success_rate
+            thompson_score = style.global_success_rate
             
             # Criar BanditArmStat inicial
             BanditArmStat.objects.create(
@@ -58,7 +86,26 @@ def curate_styles_for_user(user, profile, limit: int = 3) -> List[VisualStyle]:
                 beta=(1 - style.global_success_rate) * 10
             )
         
-        style_scores.append((style, score))
+        # Inicializar score final
+        final_score = 0
+        
+        # 1️⃣ PRIORIDADE 1: Estilos do ONBOARDING (100 pontos)
+        if style.id in onboarding_style_ids:
+            final_score += 100
+        
+        # 2️⃣ PRIORIDADE 2: Histórico de CAMPANHAS (60 pontos base + frequência)
+        if style.id in style_frequency:
+            usage_count = style_frequency[style.id]
+            # 60 pontos base + até 30 pontos por uso frequente
+            final_score += 60 + min(30, usage_count * 10)
+        
+        # 3️⃣ PRIORIDADE 3: Performance no NICHO via Thompson (40 pontos)
+        final_score += thompson_score * 40
+        
+        # 4️⃣ PRIORIDADE 4: Popularidade GERAL (10 pontos)
+        final_score += style.global_success_rate * 10
+        
+        style_scores.append((style, final_score))
     
     # Ordenar por score (maior primeiro)
     sorted_styles = sorted(style_scores, key=lambda x: x[1], reverse=True)
