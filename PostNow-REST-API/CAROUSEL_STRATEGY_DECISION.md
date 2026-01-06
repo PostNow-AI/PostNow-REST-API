@@ -307,20 +307,33 @@ Esta decisão estabelece um **precedente estratégico** para a PostNow:
 
 ---
 
-## ✅ Status
+## ✅ **Status Final**
 
 - [x] Decisão tomada e aprovada
 - [x] Documentação completa atualizada
 - [x] Arquitetura adaptada para nova estratégia
 - [x] Modelos incluem logging de métricas (CarouselMetrics)
-- [x] Roadmap atualizado: Fase 1 → Dados → Fase 4
+- [x] Roadmap atualizado: Fase 1 → Dados → Fase 4 → Fase 5
+- [x] Decisões finais do MVP documentadas
+- [x] **SEM dedução de créditos no MVP**
+- [x] **SEM limites diários**
+- [x] **SEM preview**
+- [x] **Instagram → Fase 5** (nova fase criada)
 - [x] Commit realizado com toda documentação
 
-**Próximo Passo:** Iniciar Sprint Planning para Fase 1 🚀
+**Próximo Passo:** Criar branch carousel-mvp e iniciar Sprint 1 🚀
+
+**Documentos Criados:**
+1. `CAROUSEL_IMPLEMENTATION_GUIDE.md` - Atualizado com decisões MVP
+2. `CAROUSEL_CONTENT_ORIGINS.md` - Guia completo de origens
+3. `CAROUSEL_STRATEGY_DECISION.md` - Justificativa estratégica
+4. `CAROUSEL_MVP_DECISIONS.md` - ✨ Novo: Todas decisões do MVP
+5. `CAROUSEL_INDEX.md` - Índice atualizado
 
 ---
 
 _Documento criado em: Janeiro 2025_  
 _Decisão tomada por: Product Owner + Equipe de Engenharia_  
-_Status: ✅ Documentado e Aprovado_
+_Atualizado em: Janeiro 2025 (Decisões finais MVP)_  
+_Status: ✅ Documentado, Aprovado e Pronto para Desenvolvimento_
 

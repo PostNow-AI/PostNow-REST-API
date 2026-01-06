@@ -42,6 +42,28 @@
 - ✅ Logo da empresa incluída
 - ✅ Upload S3 e validação de créditos
 
+### Decisões Estratégicas Finais (Janeiro 2025)
+
+**Sistema de Créditos:**
+- ✅ Usar créditos existentes do usuário
+- ✅ **NÃO deduzir créditos no MVP** (usando créditos dev Gemini)
+- ✅ **SEM distinção free/premium**
+- ✅ **SEM limites diários**
+
+**Escopo MVP:**
+- ✅ Geração de carrosséis (3 origens)
+- ✅ CRUD completo
+- ✅ Edição de slides (padrão existente)
+- ❌ **NÃO:** Preview antes de gerar
+- ❌ **NÃO:** Publicação no Instagram (Fase 5)
+- ❌ **NÃO:** Captura de métricas Instagram (Fase 5)
+
+**Roadmap Atualizado:**
+1. **Fase 1:** MVP Core (3 sprints) ⭐ AGORA
+2. **Coleta de Dados:** 1-2 meses
+3. **Fase 4:** ML e Otimização (3-4 sprints)
+4. **Fase 5:** Integração Instagram (2-3 sprints) 🆕
+
 ---
 
 ## 📚 Pesquisa e Fundamentos
@@ -423,9 +445,9 @@ class CarouselGenerationSource(models.Model):
 
 class CarouselMetrics(models.Model):
     """
-    ⚠️ CRÍTICO PARA FASE 4!
-    Métricas detalhadas de performance do carrossel.
-    Sistema de coleta de dados para ML.
+    Métricas do carrossel.
+    MVP: Apenas métricas de geração.
+    Fase 5: Métricas do Instagram serão adicionadas.
     """
     
     carousel = models.OneToOneField(
@@ -434,82 +456,92 @@ class CarouselMetrics(models.Model):
         related_name='metrics'
     )
     
-    # Métricas Básicas
+    # ✅ MVP: Métricas básicas de geração
+    generation_time = models.FloatField(
+        default=0.0,
+        help_text="Tempo de geração em segundos"
+    )
+    
+    generation_source = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Cópia do source_type para análise rápida"
+    )
+    
+    # ⏸️ Fase 5: Métricas do Instagram (campos opcionais por enquanto)
     impressions = models.IntegerField(
         default=0,
-        help_text="Total de visualizações"
+        null=True,
+        blank=True,
+        help_text="Total de visualizações (Fase 5)"
     )
     
     reach = models.IntegerField(
         default=0,
-        help_text="Usuários únicos alcançados"
+        null=True,
+        blank=True,
+        help_text="Usuários únicos alcançados (Fase 5)"
     )
     
-    # Métricas de Swipe ⭐ CRÍTICO
     views_per_slide = models.JSONField(
         default=dict,
-        help_text="Views por slide: {'1': 1000, '2': 850, '3': 720, ...}"
+        null=True,
+        blank=True,
+        help_text="Views por slide: {'1': 1000, '2': 850, ...} (Fase 5)"
     )
     
     swipe_through_rate = models.FloatField(
         default=0.0,
-        help_text="(views_last_slide / views_first_slide) × 100"
+        help_text="(views_last_slide / views_first_slide) × 100 (Fase 5)"
     )
     
     completion_rate = models.FloatField(
         default=0.0,
-        help_text="% de usuários que viram todos os slides"
+        help_text="% de usuários que viram todos os slides (Fase 5)"
     )
     
     avg_time_spent = models.IntegerField(
         default=0,
-        help_text="Tempo médio gasto no carrossel (segundos)"
+        help_text="Tempo médio gasto no carrossel em segundos (Fase 5)"
     )
     
-    # Drop-off Analysis ⭐ CRÍTICO PARA ML
     drop_off_slide = models.IntegerField(
         null=True,
-        help_text="Slide onde maioria dos usuários parou"
+        blank=True,
+        help_text="Slide onde maioria dos usuários parou (Fase 5)"
     )
     
     drop_off_percentage = models.FloatField(
         default=0.0,
-        help_text="% de usuários que abandonaram no slide crítico"
+        help_text="% de usuários que abandonaram no slide crítico (Fase 5)"
     )
     
-    # Engajamento
-    likes = models.IntegerField(default=0)
-    comments = models.IntegerField(default=0)
-    saves = models.IntegerField(default=0)
-    shares = models.IntegerField(default=0)
+    likes = models.IntegerField(default=0, null=True, blank=True)
+    comments = models.IntegerField(default=0, null=True, blank=True)
+    saves = models.IntegerField(default=0, null=True, blank=True)
+    shares = models.IntegerField(default=0, null=True, blank=True)
     
     engagement_rate = models.FloatField(
         default=0.0,
-        help_text="((likes + comments + saves + shares) / impressions) × 100"
+        help_text="((likes + comments + saves + shares) / impressions) × 100 (Fase 5)"
     )
     
-    # Contexto Temporal ⭐ CRÍTICO PARA ML
     posted_at = models.DateTimeField(
         null=True,
-        help_text="Quando foi publicado"
+        blank=True,
+        help_text="Quando foi publicado no Instagram (Fase 5)"
     )
     
     day_of_week = models.CharField(
         max_length=10,
         blank=True,
-        help_text="Dia da semana (segunda, terca, ...)"
+        help_text="Dia da semana (Fase 5)"
     )
     
     hour_of_day = models.IntegerField(
         null=True,
-        help_text="Hora de publicação (0-23)"
-    )
-    
-    # Origem (para comparação) ⭐ CRÍTICO PARA ML
-    generation_source = models.CharField(
-        max_length=50,
         blank=True,
-        help_text="Cópia do source_type para análise rápida"
+        help_text="Hora de publicação 0-23 (Fase 5)"
     )
     
     # Metadata
@@ -517,7 +549,7 @@ class CarouselMetrics(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     def calculate_swipe_through(self):
-        """Calcula swipe-through rate baseado em views por slide."""
+        """Calcula swipe-through rate baseado em views por slide (Fase 5)."""
         if not self.views_per_slide:
             return 0.0
         
@@ -534,9 +566,9 @@ class CarouselMetrics(models.Model):
         return (last_views / first_views) * 100
     
     def identify_drop_off_slide(self):
-        """Identifica slide com maior drop-off."""
+        """Identifica slide com maior drop-off (Fase 5)."""
         if not self.views_per_slide:
-            return None
+            return None, 0
         
         slides = sorted([int(k) for k in self.views_per_slide.keys()])
         max_drop = 0
@@ -1126,13 +1158,20 @@ image_url = self.s3_service.upload_image(user, image_result)
 
 ### 🎯 Fase 1: MVP Carrossel (2-3 sprints) ⭐ PRIORIDADE MÁXIMA
 
-**Objetivo:** MVP lean com 3 origens de conteúdo + logging robusto de métricas
+**Objetivo:** MVP lean com 3 origens de conteúdo
+
+> **DECISÕES FINAIS MVP:**
+> - ✅ SEM dedução de créditos (usando dev Gemini)
+> - ✅ SEM limites diários
+> - ✅ SEM preview antes de gerar
+> - ❌ Publicação Instagram → Fase 5
+> - ❌ Captura de métricas Instagram → Fase 5
 
 #### Sprint 1-2: Funcionalidade Base + Origens 1-2
 
 **Entregáveis Core:**
 - [ ] Modelo `CarouselPost` e `CarouselSlide`
-- [ ] Modelo `CarouselMetrics` ⚠️ **CRÍTICO PARA FASE 4**
+- [ ] Modelo `CarouselMetrics` (estrutura básica para Fase 5)
 - [ ] Modelo `CarouselGenerationSource` (rastreamento de origem)
 - [ ] `CarouselGenerationService` base
 - [ ] Tipo de narrativa: `list` (lista/checklist) - ÚNICO no MVP
@@ -1140,6 +1179,7 @@ image_url = self.s3_service.upload_image(user, image_result)
 - [ ] Logo em primeiro e último slide
 - [ ] Elementos básicos de swipe (setas + numeração)
 - [ ] Reuso 100% do `DailyIdeasService` (análise semântica 3 etapas)
+- [ ] Sistema de créditos: validação simples (NÃO deduzir no MVP)
 
 **Origens de Conteúdo (Prioridade):**
 1. ✅ **Input Manual** (Sprint 1)
@@ -1151,10 +1191,10 @@ image_url = self.s3_service.upload_image(user, image_result)
    - Endpoint: `POST /api/v1/carousel/expand-post/`
    - Interface: Botão "Expandir para Carrossel" em posts diários
    - Algoritmo de sugestão: Detecta posts "expansíveis"
-   - **Reusa análise semântica já feita** (economia de créditos!)
+   - **Reusa análise semântica já feita** (economia de processamento!)
    - Estratégias: `detailed_list`, `tutorial`, `before_after`
 
-#### Sprint 3: Origem 3 + Métricas + Integração Instagram
+#### Sprint 3: Origem 3 + CRUD + Edição
 
 **Entregáveis:**
 3. ✅ **Weekly Context** (Sprint 3)
@@ -1163,19 +1203,18 @@ image_url = self.s3_service.upload_image(user, image_result)
    - Integração: `WeeklyContextService` (já existe)
    - Uso: Datas comemorativas, tendências, eventos
 
-**Logging e Métricas ⚠️ CRÍTICO:**
-- [ ] `CarouselMetrics` implementado
-- [ ] Integração com Instagram Graph API (métricas por slide)
-- [ ] Dashboard básico de métricas (frontend)
-- [ ] Export de dados para análise (CSV/JSON)
-- [ ] Tracking de:
-  - `views_per_slide` (JSON: {1: 1000, 2: 850, ...})
-  - `swipe_through_rate`
-  - `completion_rate`
-  - `drop_off_slide` (onde usuário parou)
-  - `engagement` (likes, comments, saves, shares)
-  - `posted_at`, `day_of_week`, `hour_of_day`
-  - `generation_source` (qual origem funcionou melhor)
+**CRUD Completo:**
+- [ ] `GET /api/v1/carousel/` - Listar carrosséis
+- [ ] `GET /api/v1/carousel/<id>/` - Buscar carrossel
+- [ ] `PATCH /api/v1/carousel/<id>/` - Editar carrossel (seguir padrão)
+- [ ] `DELETE /api/v1/carousel/<id>/` - Deletar carrossel
+- [ ] `GET /api/v1/carousel/suggestions/` - Sugestões de posts expansíveis
+
+**Logging Básico (MVP):**
+- [ ] `CarouselMetrics.generation_time` - Tempo de geração
+- [ ] `CarouselMetrics.generation_source` - Origem (manual/from_post/weekly_context)
+- [ ] `AuditLog` - Registrar criação/edição/deleção
+- [ ] **NÃO:** Métricas do Instagram (Fase 5)
 
 **Validação MVP:**
 ```python
@@ -1526,16 +1565,60 @@ recommendations = {
 
 ---
 
+### 🌐 Fase 5: Integração Instagram (2-3 sprints) 🆕 NOVA FASE
+
+> **Quando começar:** Após Fase 4 ou quando necessário
+
+**Objetivo:** Sistema completo end-to-end com Instagram
+
+#### Sprint 1: Autenticação Instagram
+
+**Entregáveis:**
+- [ ] OAuth 2.0 Instagram/Facebook
+- [ ] Gerenciamento de tokens
+- [ ] Refresh automático de tokens
+- [ ] Interface de conexão de conta
+
+#### Sprint 2: Publicação de Carrosséis
+
+**Entregáveis:**
+- [ ] Integração Instagram Graph API
+- [ ] Upload de múltiplas imagens
+- [ ] Criação de carousel album
+- [ ] Caption e hashtags
+- [ ] Sistema de agendamento (opcional)
+- [ ] Endpoint: `POST /api/v1/carousel/<id>/publish/`
+
+#### Sprint 3: Captura de Métricas
+
+**Entregáveis:**
+- [ ] Polling de métricas do Instagram
+- [ ] Ou Webhook (Instagram notifica)
+- [ ] Atualização de `CarouselMetrics`:
+  - `views_per_slide`
+  - `swipe_through_rate`
+  - `completion_rate`
+  - `engagement` (likes, comments, saves)
+  - `drop_off_slide`
+- [ ] Dashboard de métricas no frontend
+- [ ] Endpoint: `GET /api/v1/carousel/<id>/metrics/`
+- [ ] Endpoint: `POST /api/v1/carousel/<id>/refresh-metrics/`
+
+---
+
 ### ⚠️ CRÍTICO: Requisitos para Fase 4 Funcionar
 
 **Fase 1 DEVE ter:**
-1. ✅ Logging completo de métricas (`CarouselMetrics`)
-2. ✅ Integração com Instagram API (métricas por slide)
-3. ✅ Rastreamento de origem (`CarouselGenerationSource`)
-4. ✅ Mínimo 100 carrosséis publicados
-5. ✅ Dados de pelo menos 1-2 meses
+1. ✅ Estrutura `CarouselMetrics` criada (campos vazios OK)
+2. ✅ Rastreamento de origem (`CarouselGenerationSource`)
+3. ✅ Logging básico (tempo de geração, origem)
 
-**Sem esses dados, Fase 4 não pode ser implementada!**
+**Para Fase 4 ser eficaz, Fase 5 deve estar implementada:**
+4. ✅ Mínimo 100 carrosséis publicados no Instagram
+5. ✅ Métricas reais coletadas (1-2 meses)
+6. ✅ Dados de swipe-through, completion, drop-off
+
+**Alternativa:** Fase 4 pode ser implementada com dados simulados ou métricas parciais.
 
 ---
 
