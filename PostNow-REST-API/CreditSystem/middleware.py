@@ -28,6 +28,7 @@ class CreditCheckMiddleware:
             '/api/v1/ideabank/generate-idea/',
             '/api/v1/ideabank/improve-idea/',
             '/api/v1/ideabank/generate-campaign/',
+            '/api/v1/carousel/generate/',  # Carrossel: Input manual
             # Adicione outros endpoints que usam IA aqui
         ]
 

@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'AuditSystem',
     'ClientContext',
     'Analytics',
+    'Carousel',
 ]
 
 SITE_ID = 3

@@ -75,4 +75,7 @@ urlpatterns = [
 
     # Analytics endpoints
     path('api/v1/analytics/', include('Analytics.urls')),
+    
+    # Carousel endpoints
+    path('api/v1/carousel/', include('Carousel.urls')),
 ]
