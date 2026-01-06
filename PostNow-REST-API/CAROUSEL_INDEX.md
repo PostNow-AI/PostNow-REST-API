@@ -28,19 +28,43 @@ Posts do Instagram que contêm múltiplas imagens (2-10 slides) que os usuários
 - ✅ Especificações técnicas (dimensões, formatos, etc.)
 - ✅ Arquitetura proposta (modelos, services)
 - ✅ Sistema base para reutilizar (DailyIdeasService)
-- ✅ Roadmap de implementação (4 fases)
+- ✅ **Roadmap atualizado: Fase 1 → Fase 4 (pula Fases 2-3)**
+- ✅ **Estratégia data-driven e coleta de métricas**
 - ✅ Métricas e KPIs
 - ✅ Histórico de decisões
 
 **PÚBLICO:** Tech Leads, Product Managers, Desenvolvedores
 
-**TEMPO DE LEITURA:** 30-40 minutos
+**TEMPO DE LEITURA:** 35-45 minutos
 
 **QUANDO LER:** Antes de começar qualquer implementação
 
 ---
 
-### 2️⃣ **CAROUSEL_PROMPTS.md**
+### 2️⃣ **CAROUSEL_CONTENT_ORIGINS.md** ⭐ NOVO
+
+**O QUE É:** Guia completo sobre as origens de conteúdo para carrosséis
+
+**CONTÉM:**
+- ✅ **Origem 1: Input Manual** (Sprint 1)
+- ✅ **Origem 2: Posts Diários** (Sprint 2) - Reusa qualidade 98%
+- ✅ **Origem 3: Weekly Context** (Sprint 3) - Oportunidades
+- ✅ Algoritmo de sugestão inteligente
+- ✅ Estratégias de expansão (detailed_list, tutorial, before_after)
+- ✅ Interfaces e fluxos técnicos
+- ✅ Casos de uso e exemplos reais
+- ✅ Arquitetura unificada (CarouselGenerationSource)
+- ✅ Origens futuras (Fase 4+)
+
+**PÚBLICO:** Product Managers, Tech Leads, Desenvolvedores Backend
+
+**TEMPO DE LEITURA:** 40-50 minutos
+
+**QUANDO LER:** Após ler IMPLEMENTATION_GUIDE, antes de implementar Service
+
+---
+
+### 3️⃣ **CAROUSEL_PROMPTS.md**
 
 **O QUE É:** Biblioteca completa de prompts de IA
 
@@ -61,7 +85,28 @@ Posts do Instagram que contêm múltiplas imagens (2-10 slides) que os usuários
 
 ---
 
-### 3️⃣ **CAROUSEL_DESIGN_SYSTEM.md**
+### 3️⃣ **CAROUSEL_PROMPTS.md**
+
+**O QUE É:** Biblioteca completa de prompts de IA
+
+**CONTÉM:**
+- ✅ Prompts de estruturação de narrativa
+- ✅ Prompts por tipo (tutorial, lista, storytelling, etc.)
+- ✅ Prompts de geração de texto
+- ✅ Prompts de geração de imagem
+- ✅ Prompts de análise de consistência
+- ✅ Prompts de validação de qualidade
+- ✅ Exemplos de uso completo
+
+**PÚBLICO:** Desenvolvedores Backend, AI Engineers
+
+**TEMPO DE LEITURA:** 20-30 minutos
+
+**QUANDO LER:** Durante implementação do CarouselGenerationService
+
+---
+
+### 4️⃣ **CAROUSEL_DESIGN_SYSTEM.md**
 
 **O QUE É:** Guia visual e padrões de design
 
@@ -83,7 +128,48 @@ Posts do Instagram que contêm múltiplas imagens (2-10 slides) que os usuários
 
 ---
 
-### 4️⃣ **CAROUSEL_TESTING_GUIDE.md**
+### 4️⃣ **CAROUSEL_DESIGN_SYSTEM.md**
+
+**O QUE É:** Guia visual e padrões de design
+
+**CONTÉM:**
+- ✅ Fundamentos visuais (dimensões, hierarquia)
+- ✅ Sistema de grid e layouts
+- ✅ Tipografia e escalas
+- ✅ Paletas de cores e estratégias
+- ✅ Elementos de interface (setas, numeração, etc.)
+- ✅ Templates por tipo de narrativa
+- ✅ Tratamento de logo
+- ✅ Exemplos práticos visuais
+
+**PÚBLICO:** Designers, Desenvolvedores Frontend, Product
+
+**TEMPO DE LEITURA:** 25-35 minutos
+
+**QUANDO LER:** Ao criar templates e validar qualidade visual
+
+---
+
+### 5️⃣ **CAROUSEL_TESTING_GUIDE.md**
+
+**O QUE É:** Casos de teste e validação
+
+**CONTÉM:**
+- ✅ Casos de teste unitários
+- ✅ Casos de teste de integração
+- ✅ Métricas de qualidade
+- ✅ Checklist de validação pré-publicação
+- ✅ Benchmarks por tipo de narrativa
+
+**PÚBLICO:** QA Engineers, Desenvolvedores
+
+**TEMPO DE LEITURA:** 15-20 minutos
+
+**QUANDO LER:** Durante desenvolvimento de testes automatizados
+
+---
+
+### 5️⃣ **CAROUSEL_TESTING_GUIDE.md**
 
 **O QUE É:** Casos de teste e validação
 
@@ -106,17 +192,18 @@ Posts do Instagram que contêm múltiplas imagens (2-10 slides) que os usuários
 
 ```mermaid
 graph TD
-    A[Ler IMPLEMENTATION_GUIDE] --> B[Review com Tech Lead]
-    B --> C[Criar Branch feature/carousel]
-    C --> D[Fase 1: MVP - Modelos e Service]
-    D --> E[Consultar PROMPTS durante dev]
-    E --> F[Consultar DESIGN_SYSTEM para validação]
-    F --> G[Implementar testes usando TESTING_GUIDE]
-    G --> H[Code Review]
-    H --> I[QA e Validação Visual]
-    I --> J[Deploy Staging]
-    J --> K[Testes com Usuários Beta]
-    K --> L[Deploy Produção]
+    A[1. Ler IMPLEMENTATION_GUIDE] --> B[2. Ler CONTENT_ORIGINS]
+    B --> C[3. Review com Tech Lead]
+    C --> D[4. Criar Branch feature/carousel]
+    D --> E[5. Fase 1 Sprint 1: Input Manual]
+    E --> F[6. Consultar PROMPTS durante dev]
+    F --> G[7. Fase 1 Sprint 2: Posts Diários]
+    G --> H[8. Fase 1 Sprint 3: Weekly Context]
+    H --> I[9. Consultar DESIGN_SYSTEM para validação]
+    I --> J[10. Implementar testes usando TESTING_GUIDE]
+    J --> K[11. Deploy + Coleta de Dados 1-2 meses]
+    K --> L[12. Análise de Dados]
+    L --> M[13. Fase 4: ML e Otimização]
 ```
 
 ---
@@ -127,11 +214,16 @@ graph TD
 |---------|-----------|--------------|
 | Por que carrosséis? | IMPLEMENTATION_GUIDE | Contexto e Decisão |
 | Usar DailyIdeasService como base | IMPLEMENTATION_GUIDE | Sistema Base |
+| **Estratégia Fase 1 → Fase 4** | IMPLEMENTATION_GUIDE | Implementação por Fases |
+| **3 Origens no MVP** | CONTENT_ORIGINS | Visão Geral |
+| **Ordem: Manual → Posts → Context** | CONTENT_ORIGINS | Priorização |
+| **Reaproveitamento de Posts Diários** | CONTENT_ORIGINS | Origem 2 |
 | 6-8 slides como padrão | IMPLEMENTATION_GUIDE | Especificações Técnicas |
 | Logo em primeiro + último | DESIGN_SYSTEM | Tratamento de Logo |
 | Análise semântica em 3 etapas | PROMPTS | Prompts de Estruturação |
 | Proporção 4:5 (vertical) | DESIGN_SYSTEM | Fundamentos Visuais |
 | Tipos de narrativa suportados | PROMPTS | Prompts por Tipo |
+| **Logging de métricas (CRÍTICO)** | IMPLEMENTATION_GUIDE | Fase 1 Sprint 3 |
 
 ---
 
@@ -219,31 +311,86 @@ CreatorProfile/models.py:
 
 ## 🚀 Fases de Implementação
 
-### Fase 1: MVP Carrossel (2-3 sprints)
-- [ ] Modelos `CarouselPost` e `CarouselSlide`
-- [ ] `CarouselGenerationService` básico
-- [ ] Tipo: `list` (7 slides)
-- [ ] Logo: primeiro + último
-- [ ] Endpoint API
-- **Documento:** IMPLEMENTATION_GUIDE, seção "Fase 1"
+> **ESTRATÉGIA ATUALIZADA:** Fase 1 (MVP) → Coleta de Dados (1-2 meses) → Fase 4 (ML)  
+> **DECISÃO:** Pular Fases 2-3 para implementação data-driven
 
-### Fase 2: Múltiplas Narrativas (2 sprints)
-- [ ] Templates: tutorial, story, before_after, comparison
-- [ ] Prompts especializados
-- [ ] Escolha automática de narrativa
-- **Documento:** PROMPTS, seção "Prompts por Tipo"
+### Fase 1: MVP Lean (3 sprints) ⭐ FOCO ATUAL
 
-### Fase 3: Inteligência de Swipe (1-2 sprints)
-- [ ] Cliffhangers automáticos
-- [ ] Barra de progresso visual
-- [ ] CTAs dinâmicos
-- **Documento:** DESIGN_SYSTEM, seção "Elementos de Interface"
+**Sprint 1-2: Funcionalidade Base + Origens 1-2**
+- [ ] Modelos: `CarouselPost`, `CarouselSlide`, `CarouselMetrics`, `CarouselGenerationSource`
+- [ ] **Origem 1: Input Manual** (Sprint 1)
+- [ ] **Origem 2: Posts Diários** - Reusa análise semântica (Sprint 2)
+- [ ] Narrativa: `list` (única no MVP)
+- [ ] Logo: primeiro + último slide
+- [ ] Elementos de swipe: setas + numeração
 
-### Fase 4: Analytics (1 sprint)
-- [ ] Métricas de swipe-through
-- [ ] Dashboard de performance
-- [ ] ML para otimização
-- **Documento:** TESTING_GUIDE, seção "Métricas"
+**Sprint 3: Origem 3 + Métricas**
+- [ ] **Origem 3: Weekly Context** (Oportunidades)
+- [ ] ⚠️ **CRÍTICO:** Sistema completo de logging de métricas
+- [ ] Integração com Instagram Graph API
+- [ ] Dashboard básico de métricas
+
+**Documentos:** IMPLEMENTATION_GUIDE (Fase 1), CONTENT_ORIGINS (todas origens)
+
+---
+
+### Período de Coleta: 1-2 meses
+
+**Objetivo:** Coletar dados reais antes de desenvolver novas features
+
+**O que acontece:**
+- ✅ Usuários usam MVP em produção
+- ✅ Sistema coleta métricas automaticamente
+- ✅ Análise semanal de padrões
+- ✅ Identificação do que funciona
+
+**Análises esperadas:**
+- Qual origem performa melhor?
+- Quantos slides é o ideal (6 ou 7)?
+- Onde acontece drop-off?
+- Quais temas engajam mais?
+- Melhor horário/dia para postar?
+
+**Documento:** IMPLEMENTATION_GUIDE (Período de Coleta)
+
+---
+
+### Fase 4: ML e Otimização (3-4 sprints) 🤖
+
+**Baseado em Dados Reais:**
+
+**Sprint 1: Análise e Modelos**
+- [ ] Análise exploratória completa
+- [ ] Identificação de padrões
+- [ ] Definição de modelos de ML
+
+**Sprint 2-3: Features Inteligentes**
+- [ ] ML: Sugestão de origem ideal
+- [ ] ML: Inferir narrativa automática (substitui templates manuais!)
+- [ ] ML: Otimizar slide count
+- [ ] ML: Auto-otimização de slides críticos (drop-off)
+- [ ] Múltiplas narrativas (implementação inteligente)
+
+**Sprint 4: A/B Testing e Dashboard**
+- [ ] A/B testing automático
+- [ ] Dashboard avançado
+- [ ] Recomendações em tempo real
+
+**Documento:** IMPLEMENTATION_GUIDE (Fase 4)
+
+---
+
+### ⚠️ Fases 2-3: NÃO SERÃO IMPLEMENTADAS
+
+**Decisão:** Pular para Fase 4 após coleta de dados
+
+**Motivo:** 
+- Evitar desenvolver features baseadas em achismo
+- ML pode inferir narrativas automaticamente
+- Data-driven é mais eficiente
+- Menos dívida técnica
+
+**Ver justificativa completa:** IMPLEMENTATION_GUIDE (Comparação de Estratégias)
 
 ---
 

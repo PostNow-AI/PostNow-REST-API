@@ -263,7 +263,7 @@ Decisão: 6-8 slides por padrão
 
 ## 🏗️ Arquitetura Proposta
 
-### Novo Modelo: CarouselPost
+### Novos Modelos
 
 ```python
 # Adicionar em IdeaBank/models.py
@@ -289,14 +289,14 @@ class CarouselPost(models.Model):
     narrative_type = models.CharField(
         max_length=50,
         choices=[
-            ('tutorial', 'Tutorial Passo-a-Passo'),
-            ('list', 'Lista/Checklist'),
-            ('story', 'Storytelling'),
-            ('comparison', 'Comparação'),
-            ('before_after', 'Antes e Depois'),
-            ('myths', 'Mitos vs. Verdades'),
-            ('infographic', 'Infográfico'),
-            ('quiz', 'Quiz/Teste'),
+            ('list', 'Lista/Checklist'),  # MVP: Apenas este tipo
+            ('tutorial', 'Tutorial Passo-a-Passo'),  # Fase 4
+            ('story', 'Storytelling'),  # Fase 4
+            ('comparison', 'Comparação'),  # Fase 4
+            ('before_after', 'Antes e Depois'),  # Fase 4
+            ('myths', 'Mitos vs. Verdades'),  # Fase 4
+            ('infographic', 'Infográfico'),  # Fase 4
+            ('quiz', 'Quiz/Teste'),  # Fase 4
         ],
         default='list'
     )
@@ -381,6 +381,178 @@ class CarouselSlide(models.Model):
     class Meta:
         ordering = ['sequence_order']
         unique_together = ['carousel', 'sequence_order']
+
+
+class CarouselGenerationSource(models.Model):
+    """
+    Rastreia origem da geração do carrossel.
+    CRÍTICO para análise de dados na Fase 4.
+    """
+    
+    carousel = models.OneToOneField(
+        CarouselPost,
+        on_delete=models.CASCADE,
+        related_name='generation_source'
+    )
+    
+    # Tipo de origem (MVP: 3 tipos)
+    source_type = models.CharField(
+        max_length=50,
+        choices=[
+            ('manual', 'Input Manual do Usuário'),  # MVP
+            ('from_post', 'Expandido de Post Existente'),  # MVP
+            ('weekly_context', 'Weekly Context/Oportunidade'),  # MVP
+            ('from_campaign', 'Parte de Campanha'),  # Futuro
+            ('from_idea', 'Do IdeaBank'),  # Futuro
+            ('from_analytics', 'Sugestão baseada em Analytics'),  # Fase 4
+            ('from_calendar', 'Calendário de Conteúdo'),  # Futuro
+        ]
+    )
+    
+    # Referências (opcional, depende do tipo)
+    source_post_id = models.IntegerField(null=True, blank=True)
+    source_campaign_id = models.IntegerField(null=True, blank=True)
+    source_opportunity_id = models.CharField(max_length=100, blank=True)
+    
+    # Metadata
+    original_theme = models.TextField()
+    user_modifications = models.JSONField(default=dict)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CarouselMetrics(models.Model):
+    """
+    ⚠️ CRÍTICO PARA FASE 4!
+    Métricas detalhadas de performance do carrossel.
+    Sistema de coleta de dados para ML.
+    """
+    
+    carousel = models.OneToOneField(
+        CarouselPost,
+        on_delete=models.CASCADE,
+        related_name='metrics'
+    )
+    
+    # Métricas Básicas
+    impressions = models.IntegerField(
+        default=0,
+        help_text="Total de visualizações"
+    )
+    
+    reach = models.IntegerField(
+        default=0,
+        help_text="Usuários únicos alcançados"
+    )
+    
+    # Métricas de Swipe ⭐ CRÍTICO
+    views_per_slide = models.JSONField(
+        default=dict,
+        help_text="Views por slide: {'1': 1000, '2': 850, '3': 720, ...}"
+    )
+    
+    swipe_through_rate = models.FloatField(
+        default=0.0,
+        help_text="(views_last_slide / views_first_slide) × 100"
+    )
+    
+    completion_rate = models.FloatField(
+        default=0.0,
+        help_text="% de usuários que viram todos os slides"
+    )
+    
+    avg_time_spent = models.IntegerField(
+        default=0,
+        help_text="Tempo médio gasto no carrossel (segundos)"
+    )
+    
+    # Drop-off Analysis ⭐ CRÍTICO PARA ML
+    drop_off_slide = models.IntegerField(
+        null=True,
+        help_text="Slide onde maioria dos usuários parou"
+    )
+    
+    drop_off_percentage = models.FloatField(
+        default=0.0,
+        help_text="% de usuários que abandonaram no slide crítico"
+    )
+    
+    # Engajamento
+    likes = models.IntegerField(default=0)
+    comments = models.IntegerField(default=0)
+    saves = models.IntegerField(default=0)
+    shares = models.IntegerField(default=0)
+    
+    engagement_rate = models.FloatField(
+        default=0.0,
+        help_text="((likes + comments + saves + shares) / impressions) × 100"
+    )
+    
+    # Contexto Temporal ⭐ CRÍTICO PARA ML
+    posted_at = models.DateTimeField(
+        null=True,
+        help_text="Quando foi publicado"
+    )
+    
+    day_of_week = models.CharField(
+        max_length=10,
+        blank=True,
+        help_text="Dia da semana (segunda, terca, ...)"
+    )
+    
+    hour_of_day = models.IntegerField(
+        null=True,
+        help_text="Hora de publicação (0-23)"
+    )
+    
+    # Origem (para comparação) ⭐ CRÍTICO PARA ML
+    generation_source = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Cópia do source_type para análise rápida"
+    )
+    
+    # Metadata
+    last_updated = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def calculate_swipe_through(self):
+        """Calcula swipe-through rate baseado em views por slide."""
+        if not self.views_per_slide:
+            return 0.0
+        
+        slides = sorted([int(k) for k in self.views_per_slide.keys()])
+        if len(slides) < 2:
+            return 0.0
+        
+        first_views = self.views_per_slide[str(slides[0])]
+        last_views = self.views_per_slide[str(slides[-1])]
+        
+        if first_views == 0:
+            return 0.0
+        
+        return (last_views / first_views) * 100
+    
+    def identify_drop_off_slide(self):
+        """Identifica slide com maior drop-off."""
+        if not self.views_per_slide:
+            return None
+        
+        slides = sorted([int(k) for k in self.views_per_slide.keys()])
+        max_drop = 0
+        drop_slide = None
+        
+        for i in range(len(slides) - 1):
+            current = self.views_per_slide[str(slides[i])]
+            next_slide = self.views_per_slide[str(slides[i + 1])]
+            
+            if current > 0:
+                drop = ((current - next_slide) / current) * 100
+                if drop > max_drop:
+                    max_drop = drop
+                    drop_slide = slides[i + 1]
+        
+        return drop_slide, max_drop
 ```
 
 ### Novo Service: CarouselGenerationService
@@ -392,16 +564,19 @@ class CarouselGenerationService:
     """
     Service para geração de carrosséis usando base do DailyIdeasService.
     
-    Fluxo:
-    1. Análise semântica do tema (3 etapas - reuso)
-    2. Escolha de tipo de narrativa
-    3. Estruturação de slides (6-8)
-    4. Geração de texto para cada slide
-    5. Análise visual contextual
-    6. Geração de imagens harmônicas
-    7. Aplicação de elementos de swipe
-    8. Logo estratégica
-    9. Validação de consistência
+    MVP: 3 Origens de Conteúdo
+    1. Input Manual
+    2. Expandir Posts Diários (reusa análise semântica)
+    3. Weekly Context (oportunidades)
+    
+    Fluxo Geral:
+    1. Análise semântica do tema (3 etapas - reuso DailyIdeasService)
+    2. Estruturação de slides (7 slides padrão, narrativa: list)
+    3. Geração de texto para cada slide
+    4. Geração de imagens harmônicas (reusa DailyIdeasService)
+    5. Aplicação de elementos de swipe (setas + numeração)
+    6. Logo estratégica (primeiro + último slide)
+    7. Criação de CarouselMetrics (CRÍTICO para Fase 4)
     """
     
     def __init__(self):
@@ -409,35 +584,49 @@ class CarouselGenerationService:
         self.prompt_service = AIPromptService()
         self.ai_service = AiService()
         self.s3_service = S3Service()
+        self.weekly_context_service = WeeklyContextService()
     
-    def generate_carousel(
+    # ============================================================================
+    # ORIGEM 1: INPUT MANUAL (MVP - Sprint 1)
+    # ============================================================================
+    
+    def generate_from_manual_input(
         self,
         user: User,
         theme: str,
-        narrative_type: str = 'list',
-        slide_count: int = 7,
-        logo_placement: str = 'first_last'
+        options: Dict = None
     ) -> CarouselPost:
         """
-        Gera um carrossel completo.
+        Origem 1: Usuário digita tema manualmente.
         
         Args:
             user: Usuário que está criando
-            theme: Tema/assunto do carrossel
-            narrative_type: Tipo de narrativa (tutorial, list, story, etc)
-            slide_count: Número de slides (recomendado: 6-8)
-            logo_placement: Onde colocar a logo
+            theme: Tema/assunto do carrossel (ex: "5 dicas de Instagram")
+            options: Configurações opcionais
+                - slide_count: int (padrão: 7)
+                - logo_placement: str (padrão: 'first_last')
         
         Returns:
             CarouselPost com todos os slides gerados
+        
+        Example:
+            >>> carousel = service.generate_from_manual_input(
+            ...     user=user,
+            ...     theme="5 estratégias para aumentar engajamento",
+            ...     options={'slide_count': 7}
+            ... )
         """
+        
+        options = options or {}
+        slide_count = options.get('slide_count', 7)
+        logo_placement = options.get('logo_placement', 'first_last')
         
         # 1. Análise Semântica (reusa DailyIdeasService)
         semantic_analysis = self._perform_semantic_analysis(user, theme)
         
-        # 2. Estruturar Narrativa
-        slides_structure = self._structure_narrative(
-            theme, narrative_type, slide_count, semantic_analysis
+        # 2. Estruturar Narrativa (MVP: apenas 'list')
+        slides_structure = self._structure_list_narrative(
+            theme, slide_count, semantic_analysis
         )
         
         # 3. Gerar Texto dos Slides
@@ -450,15 +639,406 @@ class CarouselGenerationService:
             user, slides_content, logo_placement
         )
         
-        # 5. Criar CarouselPost no banco
+        # 5. Criar CarouselPost no banco + Métricas
         carousel_post = self._save_carousel_to_db(
-            user, theme, narrative_type, slides_with_images, logo_placement
+            user=user,
+            theme=theme,
+            narrative_type='list',
+            slides=slides_with_images,
+            logo_placement=logo_placement,
+            source_type='manual',
+            source_data={'original_theme': theme}
         )
         
         return carousel_post
+    
+    # ============================================================================
+    # ORIGEM 2: EXPANDIR POSTS DIÁRIOS (MVP - Sprint 2) ⭐ MÁXIMO VALOR
+    # ============================================================================
+    
+    def generate_from_daily_post(
+        self,
+        user: User,
+        post_id: int,
+        expand_strategy: str = 'auto'
+    ) -> CarouselPost:
+        """
+        Origem 2: Expandir post diário existente para carrossel.
+        REUSA análise semântica já feita (98% qualidade).
+        
+        Args:
+            user: Usuário
+            post_id: ID do post diário a expandir
+            expand_strategy: Estratégia de expansão
+                - 'auto': Sistema decide automaticamente
+                - 'detailed_list': Lista → Carrossel detalhado
+                - 'tutorial': Conceito → Passo-a-passo
+                - 'before_after': Resultado → Jornada
+        
+        Returns:
+            CarouselPost expandido do post original
+        
+        Example:
+            >>> # Post diário: "5 erros que matam engajamento"
+            >>> carousel = service.generate_from_daily_post(
+            ...     user=user,
+            ...     post_id=12345,
+            ...     expand_strategy='detailed_list'
+            ... )
+            >>> # Resultado: 7 slides (1 capa + 5 erros + 1 recap)
+        """
+        
+        # 1. Buscar post diário
+        post = Post.objects.get(id=post_id, user=user)
+        
+        # Validar se é expansível
+        if not self._is_post_expandable(post):
+            raise ValueError(
+                f"Post '{post.name}' não tem estrutura expansível. "
+                "Procure por posts com listas, tutoriais ou transformações."
+            )
+        
+        # 2. REUSAR análise semântica do post original
+        # (Economia de créditos + mantém qualidade 98%!)
+        semantic_analysis = self._extract_semantic_from_post_idea(post)
+        
+        # 3. Determinar estratégia de expansão
+        if expand_strategy == 'auto':
+            expand_strategy = self._infer_expansion_strategy(post)
+        
+        # 4. Estruturar slides baseado na estratégia
+        slides_structure = self._expand_post_to_slides(
+            post, 
+            expand_strategy,
+            semantic_analysis
+        )
+        
+        # 5. Gerar conteúdo expandido para cada slide
+        slides_content = self._generate_expanded_slides_text(
+            user,
+            post,
+            slides_structure,
+            semantic_analysis
+        )
+        
+        # 6. Gerar imagens (REUSA DailyIdeasService!)
+        slides_with_images = self._generate_images_with_daily_quality(
+            user,
+            slides_content,
+            semantic_analysis,  # Reaproveitamento!
+            logo_placement='first_last'
+        )
+        
+        # 7. Criar carrossel
+        carousel = self._save_carousel_to_db(
+            user=user,
+            theme=f"Expandido: {post.name}",
+            narrative_type='list',  # MVP: sempre list
+            slides=slides_with_images,
+            logo_placement='first_last',
+            source_type='from_post',
+            source_data={
+                'source_post_id': post_id,
+                'original_theme': post.name,
+                'expand_strategy': expand_strategy,
+                'original_engagement': post.engagement_rate if hasattr(post, 'engagement_rate') else None
+            }
+        )
+        
+        return carousel
+    
+    def _is_post_expandable(self, post: Post) -> bool:
+        """
+        Verifica se post tem estrutura expansível.
+        
+        Padrões expansíveis:
+        - Listas: "5 dicas", "7 erros", "10 estratégias"
+        - Tutoriais: "Como fazer", "Como criar", "Como aumentar"
+        - Transformações: "Antes e depois", "De X para Y"
+        """
+        
+        content = f"{post.name} {post.content}".lower()
+        
+        expandable_patterns = [
+            r'\d+ (dicas|erros|estratégias|passos|formas|maneiras|razões)',
+            r'como (fazer|criar|aumentar|diminuir|melhorar|conseguir)',
+            r'(antes|depois|transformação|evolução)',
+            r'(mitos|verdades|fatos) sobre',
+            r'guia (completo|definitivo) (de|para)',
+        ]
+        
+        for pattern in expandable_patterns:
+            if re.search(pattern, content):
+                return True
+        
+        return False
+    
+    def _infer_expansion_strategy(self, post: Post) -> str:
+        """
+        Infere melhor estratégia de expansão baseado no conteúdo.
+        """
+        
+        content = f"{post.name} {post.content}".lower()
+        
+        # Lista/Enumeração
+        if re.search(r'\d+ (dicas|erros|estratégias)', content):
+            return 'detailed_list'
+        
+        # Tutorial/Como Fazer
+        if re.search(r'como (fazer|criar|aumentar)', content):
+            return 'tutorial'
+        
+        # Transformação
+        if re.search(r'(antes|depois|de \w+ para)', content):
+            return 'before_after'
+        
+        # Fallback
+        return 'detailed_list'
+    
+    # ============================================================================
+    # ORIGEM 3: WEEKLY CONTEXT (MVP - Sprint 3)
+    # ============================================================================
+    
+    def generate_from_opportunity(
+        self,
+        user: User,
+        opportunity_id: str,
+        angle: str = None
+    ) -> CarouselPost:
+        """
+        Origem 3: Criar carrossel baseado em oportunidade do Weekly Context.
+        
+        Args:
+            user: Usuário
+            opportunity_id: ID da oportunidade (ex: 'dia-das-maes-2025')
+            angle: Ângulo/abordagem escolhida pelo usuário
+                   (ex: 'Presentes que toda mãe ama')
+        
+        Returns:
+            CarouselPost sobre a oportunidade
+        
+        Example:
+            >>> # Weekly Context detectou: Dia das Mães em 21 dias
+            >>> carousel = service.generate_from_opportunity(
+            ...     user=user,
+            ...     opportunity_id='dia-das-maes-2025',
+            ...     angle='7 presentes que toda mãe ama'
+            ... )
+        """
+        
+        # 1. Buscar oportunidade
+        opportunity = self.weekly_context_service.get_opportunity_by_id(
+            opportunity_id
+        )
+        
+        if not opportunity:
+            raise ValueError(f"Oportunidade '{opportunity_id}' não encontrada")
+        
+        # 2. Construir tema baseado na oportunidade
+        if angle:
+            theme = angle
+        else:
+            # Gerar tema automaticamente
+            theme = self._generate_theme_from_opportunity(
+                opportunity, 
+                user
+            )
+        
+        # 3. Enriquecer contexto com dados da oportunidade
+        context_enrichment = {
+            'opportunity_title': opportunity['title'],
+            'opportunity_date': opportunity['date'],
+            'keywords': opportunity['keywords'],
+            'category': opportunity['category']
+        }
+        
+        # 4. Análise Semântica (com contexto enriquecido)
+        semantic_analysis = self._perform_semantic_analysis(
+            user, 
+            theme,
+            context_enrichment
+        )
+        
+        # 5. Estruturar narrativa
+        slides_structure = self._structure_list_narrative(
+            theme, 7, semantic_analysis
+        )
+        
+        # 6. Gerar texto
+        slides_content = self._generate_slides_text(
+            user, slides_structure, semantic_analysis
+        )
+        
+        # 7. Gerar imagens
+        slides_with_images = self._generate_harmonic_images(
+            user, slides_content, 'first_last'
+        )
+        
+        # 8. Criar carrossel
+        carousel = self._save_carousel_to_db(
+            user=user,
+            theme=theme,
+            narrative_type='list',
+            slides=slides_with_images,
+            logo_placement='first_last',
+            source_type='weekly_context',
+            source_data={
+                'source_opportunity_id': opportunity_id,
+                'opportunity_title': opportunity['title'],
+                'opportunity_date': opportunity['date'],
+                'chosen_angle': angle
+            }
+        )
+        
+        return carousel
+    
+    # ============================================================================
+    # MÉTODOS AUXILIARES (Reuso DailyIdeasService)
+    # ============================================================================
+    
+    def _perform_semantic_analysis(
+        self, 
+        user: User, 
+        theme: str,
+        context_enrichment: Dict = None
+    ) -> Dict:
+        """
+        Reusa análise semântica em 3 etapas do DailyIdeasService.
+        ESTE É O DIFERENCIAL (98% qualidade).
+        """
+        
+        # Construir contexto
+        full_context = theme
+        if context_enrichment:
+            full_context += f"\nContexto adicional: {context_enrichment}"
+        
+        # Passo 1: Análise Semântica
+        semantic_prompt = self.prompt_service.semantic_analysis_prompt(full_context)
+        semantic_result = self.ai_service.generate_text(semantic_prompt, user)
+        semantic_loaded = json.loads(semantic_result)
+        
+        # Passo 2: Adaptação à Marca
+        adapted_prompt = self.prompt_service.adapted_semantic_analysis_prompt(
+            semantic_loaded
+        )
+        adapted_result = self.ai_service.generate_text(adapted_prompt, user)
+        adapted_loaded = json.loads(adapted_result)
+        
+        return adapted_loaded
+    
+    def _generate_harmonic_images(
+        self,
+        user: User,
+        slides_content: List[Dict],
+        logo_placement: str
+    ) -> List[Dict]:
+        """
+        Gera imagens mantendo harmonia visual.
+        Reusa _generate_image_for_feed_post do DailyIdeasService.
+        """
+        
+        # Buscar logo do usuário
+        creator_profile = CreatorProfile.objects.filter(user=user).first()
+        user_logo = creator_profile.logo if creator_profile else None
+        
+        slides_with_images = []
+        
+        for i, slide in enumerate(slides_content):
+            sequence = i + 1
+            is_first = sequence == 1
+            is_last = sequence == len(slides_content)
+            
+            # Decidir se inclui logo
+            include_logo = False
+            if logo_placement == 'first_last' and (is_first or is_last):
+                include_logo = True
+            elif logo_placement == 'all_minimal':
+                include_logo = True
+            elif logo_placement == 'first_only' and is_first:
+                include_logo = True
+            
+            # Gerar imagem (reusa DailyIdeasService!)
+            image_url = self._generate_image_for_slide(
+                user,
+                slide['content'],
+                slide.get('semantic_analysis'),
+                user_logo if include_logo else None
+            )
+            
+            slide['image_url'] = image_url
+            slides_with_images.append(slide)
+        
+        return slides_with_images
+    
+    def _save_carousel_to_db(
+        self,
+        user: User,
+        theme: str,
+        narrative_type: str,
+        slides: List[Dict],
+        logo_placement: str,
+        source_type: str,
+        source_data: Dict
+    ) -> CarouselPost:
+        """
+        Salva carrossel no banco + cria registros de origem e métricas.
+        """
+        
+        # 1. Criar Post base
+        post = Post.objects.create(
+            user=user,
+            name=theme,
+            content=f"Carrossel com {len(slides)} slides",
+            post_type='feed',
+            is_carousel=True
+        )
+        
+        # 2. Criar CarouselPost
+        carousel = CarouselPost.objects.create(
+            post=post,
+            slide_count=len(slides),
+            narrative_type=narrative_type,
+            logo_placement=logo_placement,
+            swipe_triggers=['arrows', 'numbering']
+        )
+        
+        # 3. Criar Slides
+        for slide_data in slides:
+            CarouselSlide.objects.create(
+                carousel=carousel,
+                sequence_order=slide_data['sequence'],
+                title=slide_data.get('title', ''),
+                content=slide_data['content'],
+                image_url=slide_data['image_url'],
+                image_description=slide_data.get('image_description', ''),
+                has_arrow=True,
+                has_numbering=True,
+                has_cliffhanger=slide_data.get('has_cliffhanger', False)
+            )
+        
+        # 4. Criar registro de origem (CRÍTICO para Fase 4)
+        CarouselGenerationSource.objects.create(
+            carousel=carousel,
+            source_type=source_type,
+            source_post_id=source_data.get('source_post_id'),
+            source_campaign_id=source_data.get('source_campaign_id'),
+            source_opportunity_id=source_data.get('source_opportunity_id', ''),
+            original_theme=theme,
+            user_modifications={}
+        )
+        
+        # 5. Criar registro de métricas (CRÍTICO para Fase 4)
+        CarouselMetrics.objects.create(
+            carousel=carousel,
+            generation_source=source_type,
+            day_of_week=timezone.now().strftime('%A').lower(),
+            hour_of_day=timezone.now().hour
+        )
+        
+        return carousel
 ```
 
-**Ver código completo em:** `CAROUSEL_PROMPTS.md`
+**Ver implementação completa dos prompts em:** `CAROUSEL_PROMPTS.md`
 
 ---
 
@@ -539,72 +1119,423 @@ image_url = self.s3_service.upload_image(user, image_result)
 
 ## 🚀 Implementação por Fases
 
-### Fase 1: MVP Carrossel (2-3 sprints)
+> **ESTRATÉGIA:** Fase 1 (MVP) → Coleta de Dados (1-2 meses) → Fase 4 (ML/Analytics)  
+> **DECISÃO:** Pular Fases 2-3 para implementação data-driven na Fase 4
 
-**Objetivo:** Gerar carrosséis básicos funcionais
+---
 
-**Entregáveis:**
+### 🎯 Fase 1: MVP Carrossel (2-3 sprints) ⭐ PRIORIDADE MÁXIMA
+
+**Objetivo:** MVP lean com 3 origens de conteúdo + logging robusto de métricas
+
+#### Sprint 1-2: Funcionalidade Base + Origens 1-2
+
+**Entregáveis Core:**
 - [ ] Modelo `CarouselPost` e `CarouselSlide`
-- [ ] `CarouselGenerationService` básico
-- [ ] Tipo de narrativa: `list` (lista/checklist)
-- [ ] 7 slides fixos
+- [ ] Modelo `CarouselMetrics` ⚠️ **CRÍTICO PARA FASE 4**
+- [ ] Modelo `CarouselGenerationSource` (rastreamento de origem)
+- [ ] `CarouselGenerationService` base
+- [ ] Tipo de narrativa: `list` (lista/checklist) - ÚNICO no MVP
+- [ ] 7 slides como padrão
 - [ ] Logo em primeiro e último slide
 - [ ] Elementos básicos de swipe (setas + numeração)
-- [ ] Reuso completo do sistema de análise semântica
-- [ ] Endpoint API: `POST /api/v1/carousel/generate/`
+- [ ] Reuso 100% do `DailyIdeasService` (análise semântica 3 etapas)
 
-**Validação:**
+**Origens de Conteúdo (Prioridade):**
+1. ✅ **Input Manual** (Sprint 1)
+   - Endpoint: `POST /api/v1/carousel/generate/`
+   - Interface: Formulário simples com campo tema
+   - Usuário digita tema → Sistema gera carrossel
+   
+2. ✅ **Expandir Posts Diários** (Sprint 2) ⭐ **MÁXIMO VALOR**
+   - Endpoint: `POST /api/v1/carousel/expand-post/`
+   - Interface: Botão "Expandir para Carrossel" em posts diários
+   - Algoritmo de sugestão: Detecta posts "expansíveis"
+   - **Reusa análise semântica já feita** (economia de créditos!)
+   - Estratégias: `detailed_list`, `tutorial`, `before_after`
+
+#### Sprint 3: Origem 3 + Métricas + Integração Instagram
+
+**Entregáveis:**
+3. ✅ **Weekly Context** (Sprint 3)
+   - Endpoint: `POST /api/v1/carousel/from-opportunity/`
+   - Interface: Card de oportunidade + botão "Criar Carrossel"
+   - Integração: `WeeklyContextService` (já existe)
+   - Uso: Datas comemorativas, tendências, eventos
+
+**Logging e Métricas ⚠️ CRÍTICO:**
+- [ ] `CarouselMetrics` implementado
+- [ ] Integração com Instagram Graph API (métricas por slide)
+- [ ] Dashboard básico de métricas (frontend)
+- [ ] Export de dados para análise (CSV/JSON)
+- [ ] Tracking de:
+  - `views_per_slide` (JSON: {1: 1000, 2: 850, ...})
+  - `swipe_through_rate`
+  - `completion_rate`
+  - `drop_off_slide` (onde usuário parou)
+  - `engagement` (likes, comments, saves, shares)
+  - `posted_at`, `day_of_week`, `hour_of_day`
+  - `generation_source` (qual origem funcionou melhor)
+
+**Validação MVP:**
 ```python
-# Teste mínimo viável
-carousel = CarouselGenerationService().generate_carousel(
+# Teste Origem 1: Input Manual
+carousel = CarouselGenerationService().generate_from_manual_input(
     user=user,
     theme="5 dicas para aumentar engajamento no Instagram",
-    narrative_type='list',
-    slide_count=7,
-    logo_placement='first_last'
+    options={'slide_count': 7}
 )
-
 assert carousel.slides.count() == 7
-assert carousel.slides.first().image_url != ''
-assert carousel.slides.first().has_arrow == True
-assert carousel.slides.first().has_numbering == True
+assert carousel.generation_source.source_type == 'manual'
+
+# Teste Origem 2: Posts Diários
+post_diario = Post.objects.get(id=12345)
+carousel = CarouselGenerationService().generate_from_daily_post(
+    user=user,
+    post_id=12345,
+    expand_strategy='detailed_list'
+)
+assert carousel.slides.count() == 7
+assert carousel.generation_source.source_type == 'from_post'
+assert carousel.generation_source.source_post_id == 12345
+
+# Teste Origem 3: Weekly Context
+carousel = CarouselGenerationService().generate_from_opportunity(
+    user=user,
+    opportunity_id='dia-das-maes-2025',
+    angle='Presentes que toda mãe ama'
+)
+assert carousel.generation_source.source_type == 'weekly_context'
+
+# Teste Métricas (CRÍTICO)
+assert CarouselMetrics.objects.filter(carousel=carousel).exists()
+assert carousel.metrics.views_per_slide is not None
 ```
 
-### Fase 2: Múltiplas Narrativas (2 sprints)
+---
 
-**Objetivo:** Suportar diferentes tipos de narrativa
+### 📊 Período de Coleta de Dados (1-2 meses)
+
+**Objetivo:** Coletar dados reais antes de desenvolver features adicionais
+
+**O que acontece:**
+- ✅ Usuários usam MVP em produção
+- ✅ Sistema coleta métricas automaticamente
+- ✅ Equipe analisa padrões semanalmente
+- ✅ Identifica o que realmente funciona
+
+**Análises a Fazer:**
+```python
+# Análise 1: Qual origem performa melhor?
+origem_performance = {
+    'manual': {'avg_engagement': 2.1%, 'completion_rate': 45%},
+    'from_post': {'avg_engagement': 6.2%, 'completion_rate': 58%},  # ⭐ MELHOR
+    'weekly_context': {'avg_engagement': 3.8%, 'completion_rate': 52%}
+}
+
+# Análise 2: Quantos slides é ideal?
+slide_count_performance = {
+    5: {'completion_rate': 72%},
+    6: {'completion_rate': 65%},  # ⭐ SWEET SPOT
+    7: {'completion_rate': 52%},
+    8: {'completion_rate': 41%},
+}
+
+# Análise 3: Onde acontece o drop-off?
+drop_off_analysis = {
+    'slide_4': 40%,  # ⚠️ CRÍTICO - maioria para aqui
+    'slide_5': 25%,
+    'slide_6': 20%,
+}
+
+# Análise 4: Quais temas engajam mais?
+theme_performance = {
+    'storytelling': +42%,  # Acima da média
+    'antes_depois': +38%,
+    'erros_comuns': +35%,
+    'dicas_genericas': -15%,  # Abaixo da média
+}
+
+# Análise 5: Melhor horário/dia
+timing_analysis = {
+    'best_days': ['terça', 'quinta'],
+    'best_hours': [19, 20, 21],
+    'worst_hours': [2, 3, 4, 14, 15]
+}
+```
+
+**Decisões Data-Driven para Fase 4:**
+- ✅ Ajustar slide count padrão (ex: de 7 para 6)
+- ✅ Identificar narrativas mais eficazes
+- ✅ Detectar padrões de drop-off
+- ✅ Priorizar temas que funcionam
+- ✅ Sugerir horários ideais
+- ✅ Treinar modelo de ML
+
+---
+
+### 🤖 Fase 4: ML e Otimização Inteligente (3-4 sprints) ⭐ PRÓXIMA FASE
+
+> **Quando começar:** Após 1-2 meses de coleta de dados (mínimo 100 carrosséis publicados)
+
+**Objetivo:** Sistema inteligente que otimiza baseado em dados reais
+
+#### Sprint 1: Análise e Modelos
 
 **Entregáveis:**
-- [ ] Template: `tutorial` (passo-a-passo)
-- [ ] Template: `story` (storytelling)
-- [ ] Template: `before_after` (antes e depois)
-- [ ] Template: `comparison` (comparação)
-- [ ] Prompts especializados por tipo
-- [ ] Escolha automática de narrativa baseada no tema
-- [ ] Análise de harmonia visual entre slides
+- [ ] Análise exploratória completa dos dados
+- [ ] Identificação de padrões e correlações
+- [ ] Definição de modelos de ML (classificação, regressão)
+- [ ] Pipeline de treinamento
 
-### Fase 3: Inteligência de Swipe (1-2 sprints)
+**Insights Esperados:**
+```python
+insights_from_data = {
+    # Descoberta 1: Origem mais eficaz
+    "origem_ideal": "from_post (6.2% engagement vs. 2.1% manual)",
+    
+    # Descoberta 2: Slide count ótimo
+    "slide_count_ideal": 6,  # Não 7!
+    
+    # Descoberta 3: Drop-off crítico
+    "drop_off_pattern": "Slide 4 é crítico - precisa gancho forte",
+    
+    # Descoberta 4: Temas campeões
+    "temas_top": ["storytelling", "antes_depois", "erros_comuns"],
+    
+    # Descoberta 5: Timing
+    "melhor_horario": "19h-21h (terça/quinta)",
+    
+    # Descoberta 6: Narrativas (inferidas dos temas)
+    "narrativas_eficazes": ["tutorial", "before_after", "myths"]
+}
+```
 
-**Objetivo:** Maximizar taxa de swipe-through
+#### Sprint 2-3: Features Inteligentes
 
 **Entregáveis:**
-- [ ] Cliffhangers automáticos entre slides
-- [ ] Barra de progresso visual
-- [ ] Variação de cor gradiente
-- [ ] CTAs intermediários dinâmicos
-- [ ] Análise de "tensão narrativa"
-- [ ] A/B testing de elementos de swipe
 
-### Fase 4: Otimização e Analytics (1 sprint)
+1. **ML: Sugestão de Origem Ideal**
+```python
+def suggest_best_origin(user, theme):
+    """
+    ML decide qual origem usar para maximizar engajamento.
+    """
+    # Análise do tema + histórico do usuário
+    if ml_model.predict_best_source(theme, user.profile) == 'from_post':
+        # Buscar post relacionado
+        related_post = find_related_daily_post(user, theme)
+        if related_post:
+            return {
+                'recommended': 'expand_post',
+                'post_id': related_post.id,
+                'reason': 'Post sobre tema similar teve 8.2% engagement',
+                'confidence': 0.87
+            }
+    
+    return {'recommended': 'manual', 'confidence': 0.65}
+```
 
-**Objetivo:** Medir e melhorar performance
+2. **ML: Inferir Narrativa Ideal** (Substitui templates manuais!)
+```python
+def infer_best_narrative(theme, content_analysis):
+    """
+    ML escolhe narrativa com base em dados históricos.
+    NÃO precisa de templates manuais - ML descobriu padrões!
+    """
+    
+    # Análise do tema
+    features = extract_theme_features(theme)
+    
+    # ML prediz narrativa com melhor performance
+    narrative = ml_model.predict_narrative(features)
+    
+    # Exemplos de decisões baseadas em dados:
+    if "passo a passo" in theme or "como fazer" in theme:
+        return "tutorial"  # Dados: 85% completion rate
+    
+    if "antes" in theme and "depois" in theme:
+        return "before_after"  # Dados: 38% acima da média
+    
+    if detecta_lista(theme):
+        return "list"  # Dados: 70% completion
+    
+    # Fallback: narrativa com melhor performance geral
+    return "storytelling"  # Dados: 42% acima da média
+```
+
+3. **ML: Otimizar Slide Count**
+```python
+def optimize_slide_count(theme, narrative):
+    """
+    ML sugere número ideal de slides baseado em dados.
+    """
+    # Dados mostraram que 6 > 7 para maioria dos casos
+    base_count = 6  # Não mais 7!
+    
+    # Ajustes baseados em narrativa
+    if narrative == 'tutorial':
+        return base_count + 1  # Tutoriais precisam mais detalhes
+    
+    return base_count
+```
+
+4. **ML: Auto-Otimização de Slide 4** (Drop-off Crítico)
+```python
+def auto_optimize_critical_slides(carousel_draft):
+    """
+    ML adiciona elementos de retenção em slides críticos.
+    """
+    # Dados identificaram slide 4 como ponto de drop-off
+    slide_4 = carousel_draft.slides[3]
+    
+    # Adicionar cliffhanger automático
+    cliffhangers = [
+        "E o melhor vem agora...",
+        "Espera! Ainda não acabou →",
+        "O próximo é meu favorito →",
+        "Você não vai querer perder o próximo"
+    ]
+    
+    slide_4.add_cliffhanger(random.choice(cliffhangers))
+    slide_4.has_cliffhanger = True
+```
+
+5. **ML: Sugestões Proativas**
+```python
+def generate_smart_suggestions(user):
+    """
+    Sistema sugere carrosséis com alta probabilidade de sucesso.
+    """
+    suggestions = []
+    
+    # Análise 1: Posts diários com potencial
+    for post in user.recent_posts:
+        if ml_model.predict_carousel_potential(post) > 0.8:
+            suggestions.append({
+                'type': 'expand_post',
+                'post_id': post.id,
+                'reason': f'Post teve {post.engagement_rate}% engagement',
+                'expected_improvement': '+45% engagement ao expandir',
+                'confidence': 0.89
+            })
+    
+    # Análise 2: Oportunidades do Weekly Context
+    for opp in weekly_context.opportunities:
+        if ml_model.is_relevant_for_user(opp, user):
+            suggestions.append({
+                'type': 'opportunity',
+                'opportunity_id': opp.id,
+                'reason': f'{opp.title} relevante para seu nicho',
+                'expected_engagement': '5.8%',
+                'confidence': 0.76
+            })
+    
+    # Análise 3: Temas em alta no nicho do usuário
+    trending = ml_model.detect_trending_topics(user.niche)
+    for topic in trending:
+        suggestions.append({
+            'type': 'trending',
+            'theme': topic.theme,
+            'reason': f'Trending +{topic.growth}% esta semana',
+            'expected_engagement': '4.2%',
+            'confidence': 0.71
+        })
+    
+    return sorted(suggestions, key=lambda x: x['confidence'], reverse=True)
+```
+
+6. **ML: Múltiplas Narrativas** (Implementação inteligente)
+```python
+# Agora que temos dados, implementar narrativas de forma inteligente:
+NARRATIVE_TEMPLATES = {
+    'tutorial': {
+        'priority': 1,  # Dados: 85% completion
+        'slide_structure': [...],
+        'swipe_elements': ['numbered_steps', 'progress_bar']
+    },
+    'before_after': {
+        'priority': 2,  # Dados: +38% engagement
+        'slide_structure': [...],
+        'swipe_elements': ['comparison_arrows', 'transformation_indicator']
+    },
+    'list': {
+        'priority': 3,  # Dados: 70% completion (já implementado no MVP)
+        'slide_structure': [...],
+        'swipe_elements': ['arrows', 'numbering']
+    },
+    'myths': {
+        'priority': 4,  # Dados: 80% completion
+        'slide_structure': [...],
+        'swipe_elements': ['myth_buster_icon', 'true_false_indicator']
+    }
+}
+# Implementar apenas narrativas que dados mostraram serem eficazes!
+```
+
+#### Sprint 4: A/B Testing e Dashboard
 
 **Entregáveis:**
-- [ ] Métricas de swipe-through
-- [ ] Dashboard de performance
-- [ ] Aprendizado de máquina (qual narrativa funciona melhor)
-- [ ] Sugestão automática de melhorias
-- [ ] Variantes automáticas para teste
+- [ ] A/B testing automático de variantes
+- [ ] Dashboard avançado de analytics
+- [ ] Recomendações em tempo real
+- [ ] Sistema de aprendizado contínuo
+- [ ] API de sugestões inteligentes
+
+**Features Avançadas:**
+```python
+# A/B Testing Automático
+def create_ab_test_variants(carousel):
+    """
+    Gera variantes do carrossel para testar.
+    """
+    variants = [
+        carousel,  # Original
+        carousel.with_different_slide_count(6),  # Teste: menos slides
+        carousel.with_cliffhangers_removed(),    # Teste: sem cliffhangers
+        carousel.with_different_narrative()      # Teste: outra narrativa
+    ]
+    return variants
+
+# Dashboard de Recomendações
+recommendations = {
+    'for_you': [
+        "Expandir post 'Storytelling' para carrossel (89% confiança)",
+        "Criar carrossel sobre 'Dia das Mães' (em 21 dias)",
+        "Reduzir slides de 7 para 6 (seus dados mostram +15% completion)"
+    ],
+    'best_time_to_post': "Terça, 19h-21h (+32% engagement vs. média)",
+    'trending_themes': ["storytelling", "antes_depois", "erros_comuns"]
+}
+```
+
+---
+
+### 🎯 Comparação: Fases 1→2→3→4 vs. Fases 1→4
+
+| Aspecto | Tradicional (1→2→3→4) | Nossa Estratégia (1→4) |
+|---------|----------------------|------------------------|
+| **Tempo até ML** | 6-8 meses | ⭐ 3-4 meses |
+| **Features baseadas em** | Achismo/Suposições | ⭐ Dados reais |
+| **Risco de desperdício** | Alto (features não usadas) | ⭐ Baixo (data-driven) |
+| **Múltiplas narrativas** | Manual (8 templates) | ⭐ ML infere automaticamente |
+| **Otimização** | Tardia, reativa | ⭐ Cedo, proativa |
+| **Dívida técnica** | Alta (refactor de Fases 2-3) | ⭐ Baixa |
+| **Foco da equipe** | Disperso | ⭐ Concentrado |
+| **ROI** | Incerto | ⭐ Validado com dados |
+
+---
+
+### ⚠️ CRÍTICO: Requisitos para Fase 4 Funcionar
+
+**Fase 1 DEVE ter:**
+1. ✅ Logging completo de métricas (`CarouselMetrics`)
+2. ✅ Integração com Instagram API (métricas por slide)
+3. ✅ Rastreamento de origem (`CarouselGenerationSource`)
+4. ✅ Mínimo 100 carrosséis publicados
+5. ✅ Dados de pelo menos 1-2 meses
+
+**Sem esses dados, Fase 4 não pode ser implementada!**
 
 ---
 
