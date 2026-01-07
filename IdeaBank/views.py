@@ -5,6 +5,7 @@ New Post-based views for IdeaBank app.
 import asyncio
 import logging
 
+from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -611,11 +612,21 @@ def get_post_options(request):
 @permission_classes([permissions.IsAuthenticated])
 def get_user_posts_with_ideas(request):
     """Get all user posts with their ideas."""
-
     try:
-        posts = Post.objects.filter(
-            user=request.user).prefetch_related('ideas')
-        serializer = PostWithIdeasSerializer(posts, many=True)
+        post_type = request.GET.get('post_type')
+        posts = None
+        if post_type == 'feed' or post_type is None:
+            posts = Post.objects.filter(
+                user=request.user,
+                type='feed',
+            ).exclude(
+                Q(ideas__image_url__isnull=True) | Q(ideas__image_url__exact="")
+            ).prefetch_related('ideas').distinct().order_by('-ideas__updated_at')
+        elif post_type == 'reels' or post_type == 'story':
+            posts = Post.objects.filter(
+                user=request.user, type=post_type
+            ).prefetch_related('ideas').distinct().order_by('-ideas__updated_at')
+        serializer = PostWithIdeasSerializer(posts, many=True, context={'post_type': post_type})
 
         return Response({
             'posts': serializer.data,
