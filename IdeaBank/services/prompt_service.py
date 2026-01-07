@@ -442,11 +442,11 @@ O resultado final deve parecer o planejamento de um estrategista de conteúdo pr
         post_type = post_data.get('type', '').lower()
 
         # Route to specific image prompt based on post type
-        if post_type == 'post':
+        if post_type == 'post' or post_type == 'feed':
             return self._build_feed_image_prompt(post_data, content)
-        elif post_type == 'reel':
+        elif post_type == 'reel' or post_type == 'reels':
             return self._build_reel_image_prompt(post_data, content)
-        elif post_type == 'story':
+        elif post_type == 'story' or post_type == 'stories':
             return self._build_story_image_prompt(post_data, content)
 
     def _build_feed_image_prompt(self, post_data: Dict, content: str) -> str:
@@ -571,6 +571,7 @@ Crie uma imagem de marketing profissional e visualmente atraente, adequada para 
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
         further_details = post_data.get('further_details', '')
+
         prompt = f"""
 Você é um especialista em design para marketing digital e redes sociais.  
 Sua missão é criar capas de Reels profissionais, modernas e impactantes, que chamem a atenção do público já no primeiro contato.  
