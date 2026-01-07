@@ -26,7 +26,6 @@ class MailDailyIdeasService:
             Post.objects.filter(
                 is_active=False,
                 further_details=week_id,
-                user_id=78,
             ).select_related('user').values(
                 'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content',
                 'ideas__image_url'
