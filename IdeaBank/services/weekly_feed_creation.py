@@ -152,13 +152,11 @@ class WeeklyFeedCreationService:
                 'json', '', 1).strip('`').strip()
             content_loaded = json.loads(content_json)
 
-            print(content_loaded)
             for post_text_feed in content_loaded:
-                print(post_text_feed)
-                post_content_feed = f"""{post_text_feed.get('legenda', '').strip()}\n\n\n{' '.join(post_text_feed.get('hashtags', []))}\n\n\n{post_text_feed.get('cta', '').strip()}
-                               """
+                post_content_feed = f"""
+                    {post_text_feed.get('legenda', '').strip()}\n\n\n{' '.join(post_text_feed.get('hashtags', []))}\n\n\n{post_text_feed.get('cta', '').strip()}
+                   """
 
-                print(post_content_feed)
                 await self._save_text_to_db(user, post_text_feed, post_content_feed, user_posts)
 
             await self._clear_user_error(user)
@@ -233,7 +231,6 @@ class WeeklyFeedCreationService:
     @staticmethod
     async def _store_user_error(user, error_message: str):
         """Store error message in user model for retry processing."""
-        print(user, error_message)
         await sync_to_async(lambda: connection.cursor().execute(
             "UPDATE auth_user SET weekly_feed_generation_error = %s WHERE id = %s",
             [error_message, user.id]
@@ -242,7 +239,6 @@ class WeeklyFeedCreationService:
     @staticmethod
     async def _clear_user_error(user):
         """Clear error message from user model after successful generation."""
-        print('entrou aqui')
         await sync_to_async(lambda: connection.cursor().execute(
             "UPDATE auth_user SET weekly_feed_generation_error = NULL WHERE id = %s",
             [user.id]
