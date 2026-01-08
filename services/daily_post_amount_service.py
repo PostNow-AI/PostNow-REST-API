@@ -17,6 +17,7 @@ class DailyPostAmountService:
                 is_active=True,
                 usersubscription__status='active',
                 creator_profile__step_1_completed=True).distinct()
+
             total_user_amount = total_users.count()
             expected_posts_amount = 3 * total_user_amount
 
@@ -27,11 +28,13 @@ class DailyPostAmountService:
                     user=user_obj,
                     created_at__date=today
                 ).prefetch_related('ideas')
-                user_daily_feed_post = Post.objects.filter(
-                    user=user_obj,
-                    type='feed',
-                    further_details=user_daily_story_reels_posts[0].further_details,
-                ).prefetch_related('ideas')
+                user_daily_feed_post = Post.objects.none()
+                if user_daily_story_reels_posts.exists():
+                    user_daily_feed_post = Post.objects.filter(
+                        user=user_obj,
+                        type='feed',
+                        further_details=user_daily_story_reels_posts[0].further_details,
+                    ).prefetch_related('ideas')
                 serialized_posts = CompletePostWithIdeasSerializer(
                     user_daily_story_reels_posts, many=True).data
                 serialized_feed_post = CompletePostWithIdeasSerializer(
