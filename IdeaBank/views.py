@@ -3,12 +3,14 @@ New Post-based views for IdeaBank app.
 """
 
 import asyncio
+import json
 import logging
 
 from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from google.genai import types
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import (
     api_view,
@@ -19,7 +21,13 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from AuditSystem.services import AuditService
+from ClientContext.models import ClientContext
+from ClientContext.serializers import ClientContextSerializer
+from CreatorProfile.models import CreatorProfile
+from services.ai_prompt_service import AIPromptService
+from services.ai_service import AiService
 from services.daily_post_amount_service import DailyPostAmountService
+from services.s3_sevice import S3Service
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
     ImageGenerationRequestSerializer,
@@ -34,7 +42,6 @@ from .serializers import (
 from .services.daily_ideas_service import DailyIdeasService
 from .services.mail_daily_error import MailDailyErrorService
 from .services.mail_daily_ideas_service import MailDailyIdeasService
-from .services.post_ai_service import PostAIService
 from .services.retry_ideas_service import RetryIdeasService
 from .services.retry_weekly_feed import RetryWeeklyFeedService
 from .services.weekly_feed_creation import WeeklyFeedCreationService
@@ -197,7 +204,7 @@ class PostIdeaDetailView(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([permissions.IsAuthenticated])
 def generate_post_idea(request):
     """Generate a post idea using AI based on post specifications."""
-
+    user = request.user
     serializer = PostGenerationRequestSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(
@@ -206,66 +213,109 @@ def generate_post_idea(request):
         )
 
     try:
-        # Create the post first
         post_data = serializer.validated_data
         include_image = post_data.get('include_image', False)
 
-        # Create the post
-        post = Post.objects.create(user=request.user, **post_data)
+        context = ClientContext.objects.filter(user=user).first()
+        serializer = ClientContextSerializer(context)
 
-        # Generate content using AI
-        post_ai_service = PostAIService()
-        result = post_ai_service.generate_post_content(
-            user=request.user,
-            post_data=post_data,
+        context_data = serializer.data if serializer else {}
+
+        ai_service = AiService()
+        prompt_service = AIPromptService()
+        s3_service = S3Service()
+
+        prompt_service.set_user(request.user)
+
+        prompt = prompt_service.build_standalone_post_prompt(post_data, context_data)
+
+        content_result = ai_service.generate_text(
+            prompt,
+            user,
+            types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
+                response_modalities=[
+                    "TEXT",
+                ],
+            )
         )
 
-        # Create the post idea with generated content
-        post_idea = PostIdea.objects.create(
-            post=post,
-            content=result['content']
-        )
+        content_json = content_result.replace(
+            'json', '', 1).strip('`').strip()
+        content_loaded = json.loads(content_json)
+
+        image_url = ''
 
         # Generate image if requested
         if include_image:
             try:
-                # Add the created post ID and post_idea ID to post_data for image generation
-                post_data_with_ids = {
-                    **post_data,
-                    'post_id': post.id,
-                    'post_idea_id': post_idea.id,
-                    'post': post
-                }
+                user_logo = CreatorProfile.objects.filter(user=user).first().logo
+                if user_logo and "data:image/" in user_logo and ";base64," in user_logo:
+                    user_logo = user_logo.split(",")[1]
 
-                image_url = post_ai_service.generate_image_for_post(
-                    user=request.user,
-                    post_data=post_data_with_ids,
-                    content=result['content'],
-                    custom_prompt=None,
-                    regenerate=False
-                )
-                post_idea.image_url = image_url
-                post_idea.save()
+                semantic_prompt = prompt_service.semantic_analysis_prompt(
+                    content_loaded)
+                semantic_result = ai_service.generate_text(
+                    semantic_prompt, user)
+                semantic_json = semantic_result.replace(
+                    'json', '', 1).strip('`').strip()
+                semantic_loaded = json.loads(semantic_json)
 
-                # Log successful image generation
-                AuditService.log_image_generation(
-                    user=request.user,
-                    action='image_generated',
-                    status='success',
-                    details={
-                        'post_id': post.id,
-                        'post_name': post.name,
-                        'content_type': 'image',
-                        'ai_provider': 'dalle'
-                    }
-                )
+                semantic_analysis = semantic_loaded.get(
+                    'analise_semantica', {})
+
+                image_prompt = prompt_service.image_generation_prompt(
+                    semantic_analysis)
+
+                image_result = ai_service.generate_image(
+                    image_prompt,
+                    user_logo,
+                    user,
+                    types.GenerateContentConfig(
+                        temperature=0.7,
+                        top_p=0.9,
+                        response_modalities=[
+                            "IMAGE",
+                        ],
+                        image_config=types.ImageConfig(
+                            aspect_ratio="4:5",
+                        ),
+                    ))
+
+                if not image_result:
+                    image_url = ''
+                else:
+                    image_url = s3_service.upload_image(
+                        user, image_result)
+
             except Exception as image_error:
                 print(f"Warning: Failed to generate image: {image_error}")
-                # Continue without image - don't fail the entire request
 
-        # Serialize the response
-        post_serializer = PostSerializer(post)
-        idea_serializer = PostIdeaSerializer(post_idea)
+        post = Post.objects.create(
+            user=user,
+            name=post_data.get('name'),
+            type=post_data.get('type'),
+            objective=post_data.get('objective'),
+            further_details=post_data.get('further_details', ''),
+            include_image=True if post_data.get('type') == 'feed' else False,
+            is_automatically_generated=True,
+            is_active=False
+        )
+
+        if post_data.get('type') == 'feed':
+            post_content = f"""
+                {content_loaded.get('legenda', '').strip()}\n\n\n{' '.join(content_loaded.get('hashtags', []))}\n\n\n{content_loaded.get('cta', '').strip()}
+             """
+        else:
+            post_content = content_loaded.get('roteiro', '').strip()
+
+        post_idea = PostIdea.objects.create(
+            post=post,
+            content=post_content,
+            image_url=image_url if include_image else '',
+            image_description=''
+        )
 
         # Log successful post and content generation
         AuditService.log_content_generation(
@@ -283,8 +333,6 @@ def generate_post_idea(request):
 
         return Response({
             'message': 'Post e ideia gerados com sucesso!',
-            'post': post_serializer.data,
-            'idea': idea_serializer.data
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
@@ -310,7 +358,10 @@ def generate_post_idea(request):
 @permission_classes([permissions.IsAuthenticated])
 def generate_image_for_idea(request, idea_id):
     """Generate an image for an existing post idea using DALL-E."""
-
+    user = request.user
+    ai_service = AiService()
+    prompt_service = AIPromptService()
+    s3_service = S3Service()
     # Get the post idea
     try:
         post_idea = PostIdea.objects.get(
@@ -331,32 +382,58 @@ def generate_image_for_idea(request, idea_id):
         )
 
     try:
-        # Get the custom prompt or use default
         custom_prompt = serializer.validated_data.get('prompt')
+        semantic_analysis = ''
+        user_logo = CreatorProfile.objects.filter(user=user).first().logo
+        if user_logo and "data:image/" in user_logo and ";base64," in user_logo:
+            user_logo = user_logo.split(",")[1]
 
-        # Prepare post data for image generation with IDs
-        post_data = {
-            'name': post_idea.post.name,
-            'objective': post_idea.post.objective,
-            'type': post_idea.post.type,
-            'further_details': post_idea.post.further_details,
-            'include_image': post_idea.post.include_image,
-            'post_id': post_idea.post.id,
-            'post_idea_id': post_idea.id,
-            'post': post_idea.post
-        }
+        if custom_prompt is not None:
+            image_result = ai_service.generate_image(custom_prompt, user_logo, user, types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
+                response_modalities=[
+                    "IMAGE",
+                ],
+                image_config=types.ImageConfig(
+                    aspect_ratio="4:5",
+                ),
+            ))
+        else:
+            prompt_service.set_user(user)
 
-        # Generate image
-        post_ai_service = PostAIService()
-        image_url = post_ai_service.generate_image_for_post(
-            user=request.user,
-            post_data=post_data,
-            content=post_idea.content,
-            custom_prompt=custom_prompt,
-            regenerate=False
-        )
+            semantic_prompt = prompt_service.semantic_analysis_prompt(
+                post_idea.content)
+            semantic_result = ai_service.generate_text(
+                semantic_prompt, user)
+            semantic_json = semantic_result.replace(
+                'json', '', 1).strip('`').strip()
+            semantic_loaded = json.loads(semantic_json)
 
-        # Update the post idea with the image URL
+            semantic_analysis = semantic_loaded.get(
+                'analise_semantica', {})
+
+            image_prompt = prompt_service.image_generation_prompt(
+                semantic_analysis)
+
+            image_result = ai_service.generate_image(image_prompt, user_logo, user, types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
+                response_modalities=[
+                    "IMAGE",
+                ],
+                image_config=types.ImageConfig(
+                    aspect_ratio="4:5",
+                ),
+            ))
+
+        if not image_result:
+            image_url = ''
+        else:
+            image_url = s3_service.upload_image(
+                user, image_result)
+
+        post_idea.image_description = json.dumps(custom_prompt if custom_prompt is not None else semantic_analysis)
         post_idea.image_url = image_url
         post_idea.save()
 
@@ -370,7 +447,6 @@ def generate_image_for_idea(request, idea_id):
                 'post_name': post_idea.post.name,
                 'content_type': 'image',
                 'ai_provider': 'dalle',
-                'custom_prompt': custom_prompt is not None
             }
         )
 
@@ -389,7 +465,6 @@ def generate_image_for_idea(request, idea_id):
             error_message=str(e),
             details={
                 'idea_id': idea_id,
-                'custom_prompt': custom_prompt is not None
             }
         )
 
@@ -403,7 +478,8 @@ def generate_image_for_idea(request, idea_id):
 @permission_classes([permissions.IsAuthenticated])
 def edit_post_idea(request, idea_id):
     """Edit/regenerate a post idea with optional AI assistance."""
-
+    ai_service = AiService()
+    prompt_service = AIPromptService()
     # Get the post idea
     try:
         post_idea = PostIdea.objects.get(
@@ -424,34 +500,50 @@ def edit_post_idea(request, idea_id):
         )
 
     try:
-        user_prompt = serializer.validated_data.get('prompt')
-        ai_provider = serializer.validated_data.get(
-            'preferred_provider', 'google')
-        ai_model = serializer.validated_data.get(
-            'preferred_model', 'gemini-2.5-flash')
+        user_prompt = request.data.get('improvement_prompt')
 
-        # Prepare post data
         post_data = {
             'name': post_idea.post.name,
             'objective': post_idea.post.objective,
             'type': post_idea.post.type,
             'further_details': post_idea.post.further_details,
             'include_image': post_idea.post.include_image,
+            'content': post_idea.content
         }
 
-        # Regenerate content
-        post_ai_service = PostAIService()
-        result = post_ai_service.regenerate_post_content(
-            user=request.user,
-            post_data=post_data,
-            current_content=post_idea.content,
-            user_prompt=user_prompt,
-            ai_provider=ai_provider,
-            ai_model=ai_model
+        context = ClientContext.objects.filter(user=request.user).first()
+        serializer = ClientContextSerializer(context)
+
+        context_data = serializer.data if serializer else {}
+
+        prompt_service.set_user(request.user)
+        prompt = prompt_service.regenerate_standalone_post_prompt(post_data, user_prompt, context_data)
+
+        content_result = ai_service.generate_text(
+            prompt,
+            request.user,
+            types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
+                response_modalities=[
+                    "TEXT",
+                ],
+            )
         )
 
+        content_json = content_result.replace(
+            'json', '', 1).strip('`').strip()
+        content_loaded = json.loads(content_json)
+
+        if post_data.get('type') == 'feed':
+            post_content = f"""
+                {content_loaded.get('legenda', '').strip()}\n\n\n{' '.join(content_loaded.get('hashtags', []))}\n\n\n{content_loaded.get('cta', '').strip()}
+             """
+        else:
+            post_content = content_loaded.get('roteiro', '').strip()
+
         # Update the post idea
-        post_idea.content = result['content']
+        post_idea.content = post_content
         post_idea.save()
 
         # Log successful content editing
@@ -462,8 +554,6 @@ def edit_post_idea(request, idea_id):
             details={
                 'post_id': post_idea.post.id,
                 'post_name': post_idea.post.name,
-                'ai_provider': ai_provider,
-                'ai_model': ai_model,
                 'user_prompt_provided': user_prompt is not None
             }
         )
@@ -482,107 +572,11 @@ def edit_post_idea(request, idea_id):
             error_message=str(e),
             details={
                 'idea_id': idea_id,
-                'ai_provider': ai_provider,
-                'ai_model': ai_model
             }
         )
 
         return Response(
             {'error': f'Erro na edição da ideia: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def regenerate_image_for_idea(request, idea_id):
-    """Regenerate the image for a post idea with optional custom prompt."""
-
-    # Get the post idea
-    try:
-        post_idea = PostIdea.objects.get(
-            id=idea_id,
-            post__user=request.user
-        )
-    except PostIdea.DoesNotExist:
-        return Response(
-            {'error': 'Ideia não encontrada'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    serializer = ImageGenerationRequestSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(
-            {'error': 'Dados inválidos', 'details': serializer.errors},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    try:
-        custom_prompt = serializer.validated_data.get('prompt')
-
-        # Prepare post data with IDs for image regeneration
-        post_data = {
-            'name': post_idea.post.name,
-            'objective': post_idea.post.objective,
-            'type': post_idea.post.type,
-            'further_details': post_idea.post.further_details,
-            'include_image': post_idea.post.include_image,
-            'post_id': post_idea.post.id,
-            'post_idea_id': post_idea.id,
-            'post': post_idea.post
-        }
-
-        # Regenerate image
-        post_ai_service = PostAIService()
-        image_url = post_ai_service.generate_image_for_post(
-            user=request.user,
-            post_data=post_data,
-            content=post_idea.content,
-            custom_prompt=custom_prompt,
-            regenerate=True
-        )
-
-        # Update the post idea with new image
-        post_idea.image_url = image_url
-        post_idea.save()
-
-        # Log successful image regeneration
-        AuditService.log_image_generation(
-            user=request.user,
-            action='image_updated',
-            status='success',
-            details={
-                'post_id': post_idea.post.id,
-                'post_name': post_idea.post.name,
-                'content_type': 'image',
-                'ai_provider': 'dalle',
-                'regenerated': True,
-                'custom_prompt': custom_prompt is not None
-            }
-        )
-
-        return Response({
-            'message': 'Imagem regenerada com sucesso!',
-            'image_url': image_url,
-            'idea': PostIdeaSerializer(post_idea).data
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        # Log failed image regeneration
-        AuditService.log_image_generation(
-            user=request.user,
-            action='image_generation_failed',
-            status='error',
-            error_message=str(e),
-            details={
-                'idea_id': idea_id,
-                'regenerated': True,
-                'custom_prompt': custom_prompt is not None
-            }
-        )
-
-        return Response(
-            {'error': f'Erro na regeneração da imagem: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 

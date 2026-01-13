@@ -31,7 +31,7 @@ urlpatterns = [
     path('ideas/<int:idea_id>/edit/',
          views.edit_post_idea, name='edit-post-idea'),
     path('ideas/<int:idea_id>/regenerate-image/',
-         views.regenerate_image_for_idea, name='regenerate-image-for-idea'),
+         views.generate_image_for_idea, name='regenerate-image-for-idea'),
 
     # Helper endpoints
     path('options/', views.get_post_options, name='post-options'),

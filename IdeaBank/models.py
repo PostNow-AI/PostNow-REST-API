@@ -1,12 +1,12 @@
-
 from django.contrib.auth.models import User
 from django.db import models
 
 
 class PostType(models.TextChoices):
     LIVE = 'live', 'Live'
-    REEL = 'reel', 'Reel'
+    REEL = 'reels', 'Reel'
     POST = 'post', 'Post'
+    FEED = 'feed', 'Feed'
     CAROUSEL = 'carousel', 'Carousel'
     STORY = 'story', 'Story'
 
