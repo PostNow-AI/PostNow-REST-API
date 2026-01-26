@@ -11,6 +11,7 @@ from google.genai import types
 from AuditSystem.services import AuditService
 from CreatorProfile.models import CreatorProfile
 from IdeaBank.models import Post, PostIdea
+from IdeaBank.services.weekly_feed_creation import WeeklyFeedCreationService
 from IdeaBank.utils.current_week import get_current_week
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
@@ -25,6 +26,7 @@ class DailyIdeasService:
     def __init__(self):
         self.user_validation_service = UserValidationService()
         self.semaphore_service = SemaphoreService()
+        self.weekly_feed_creation_service = WeeklyFeedCreationService()
         self.ai_service = AiService()
         self.prompt_service = AIPromptService()
         self.audit_service = AuditService()
@@ -33,7 +35,6 @@ class DailyIdeasService:
     @sync_to_async
     def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
         """Get a batch of users eligible for weekly context generation"""
-
         if limit is None:
             return list(
                 User.objects.extra(
@@ -56,6 +57,7 @@ class DailyIdeasService:
     async def process_daily_ideas_for_users(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
         """Process daily ideas generation for a batch of users"""
         start_time = timezone.now()
+
         offset = (batch_number - 1) * batch_size
         limit = batch_size
 
@@ -132,6 +134,7 @@ class DailyIdeasService:
                 return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
 
             validation_result = await self.user_validation_service.validate_user_eligibility(user_data)
+
             if validation_result['status'] != 'eligible':
                 return {
                     'status': 'skipped',
@@ -150,7 +153,12 @@ class DailyIdeasService:
             ).first)()
 
             if not feed_base_post:
-                raise Exception("Feed base post not found")
+                await self.weekly_feed_creation_service.process_user_weekly_ideas(user_id)
+                feed_base_post = await sync_to_async(Post.objects.filter(
+                    user=user,
+                    type='feed',
+                    further_details=week_id
+                ).first)()
 
             post_idea = await sync_to_async(lambda: feed_base_post.ideas.first())()
 

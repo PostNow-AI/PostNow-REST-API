@@ -120,10 +120,11 @@ class WeeklyFeedCreationService:
         if not user_id:
             return {'status': 'failed', 'reason': 'no_user_id', 'user_data': user_data}
 
-        return await self._process_user_weekly_ideas(user_id)
+        return await self.process_user_weekly_ideas(user_id)
 
-    async def _process_user_weekly_ideas(self, user_id: int) -> Dict[str, Any]:
+    async def process_user_weekly_ideas(self, user_id: int) -> Dict[str, Any]:
         """Generate daily ideas to the user"""
+
         user = await sync_to_async(User.objects.get)(id=user_id)
         try:
             user_data = await self.user_validation_service.get_user_data(user_id)
@@ -209,7 +210,6 @@ class WeeklyFeedCreationService:
             self.prompt_service.set_user(user)
             context = ClientContext.objects.filter(user=user).first()
             serializer = ClientContextSerializer(context)
-
             context_data = serializer.data if serializer else {}
 
             prompt = self.prompt_service.build_feed_prompts(
