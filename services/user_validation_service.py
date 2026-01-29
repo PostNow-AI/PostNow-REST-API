@@ -1,8 +1,8 @@
-
 from asgiref.sync import sync_to_async
+from django.contrib.auth.models import User
+
 from CreatorProfile.models import CreatorProfile
 from CreditSystem.services.credit_service import CreditService
-from django.contrib.auth.models import User
 
 
 class UserValidationService:
@@ -30,5 +30,8 @@ class UserValidationService:
 
         if not self.credit_service.validate_user_subscription(user[0]):
             return {"status": "ineligible", "reason": "no_active_subscription"}
+
+        if not user[0].id == 78:
+            return {"status": "ineligible", "reason": "not_authorized_user"}
 
         return {"status": "eligible", "user": user[0], "profile": user[1]}
