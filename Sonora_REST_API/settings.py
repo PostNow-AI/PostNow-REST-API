@@ -71,6 +71,7 @@ INSTALLED_APPS = [
     'CreditSystem',
     'AuditSystem',
     'ClientContext',
+    'OnboardingCampaign',
 ]
 
 SITE_ID = 3

@@ -164,6 +164,24 @@ class SubscriptionService:
                 print(
                     f"[WEBHOOK DEBUG] Error setting credits for user {user.id}: {str(e)}")
 
+            # Update subscription status
+            try:
+                from ..models import UserSubscriptionStatus
+                status_obj, created = UserSubscriptionStatus.objects.get_or_create(
+                    user=user,
+                    defaults={
+                        'has_active_subscription': True,
+                        'current_subscription': user_subscription
+                    }
+                )
+                if not created:
+                    status_obj.has_active_subscription = True
+                    status_obj.current_subscription = user_subscription
+                    status_obj.save()
+            except Exception as e:
+                print(
+                    f"[WEBHOOK DEBUG] Error updating subscription status: {str(e)}")
+
             return {
                 'status': 'success',
                 'message': 'Assinatura criada com sucesso',
