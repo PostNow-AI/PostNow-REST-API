@@ -1,6 +1,8 @@
 import base64
 import logging
 import os
+from datetime import datetime
+from typing import Any, Dict, List
 
 import requests
 from mailjet_rest import Client
@@ -17,6 +19,9 @@ class MailService():
         self.base_url = "https://api.mailjet.com/v3.1/send"
         self.mailjet_client = Client(
             auth=(self.api_key, self.secret_key), version='v3.1')
+        # Create v3 client for statistics API
+        self.mailjet_client_v3 = Client(
+            auth=(self.api_key, self.secret_key), version='v3')
 
     def send_email(self, recipient_email, subject, html_content, attachments=None) -> tuple:
         """
@@ -87,6 +92,101 @@ class MailService():
             logger.error(
                 f"Erro ao enviar email para {recipient_email}: {str(e)}")
             return None, {'error': str(e)}
+
+    def get_messages_statistics(self, start_date: datetime, end_date: datetime, exclude_emails: List[str] = None) -> Dict[str, Any]:
+        """
+        Get message statistics from Mailjet API for a date range.
+        
+        Args:
+            start_date: Start of the date range
+            end_date: End of the date range
+            exclude_emails: List of email addresses to exclude (e.g., admin emails)
+            
+        Returns:
+            Dict with sent_messages and opened_messages lists, each containing message data
+        """
+        try:
+            exclude_emails = exclude_emails or []
+            exclude_emails_lower = [email.lower().strip() for email in exclude_emails]
+            
+            # Convert datetime to Unix timestamp (Mailjet expects this)
+            from_ts = int(start_date.timestamp())
+            to_ts = int(end_date.timestamp())
+            
+            sent_messages = []
+            opened_messages = []
+            
+            # Fetch messages in batches (Mailjet API limit is 1000 per request)
+            limit = 1000
+            offset = 0
+            
+            while True:
+                # Query parameters for sent messages
+                filters = {
+                    'FromTS': from_ts,
+                    'ToTS': to_ts,
+                    'Limit': limit,
+                    'Offset': offset,
+                }
+                
+                result = self.mailjet_client_v3.message.get(filters=filters)
+                
+                if result.status_code != 200:
+                    logger.error(f"Mailjet API error fetching messages: Status {result.status_code}")
+                    break
+                
+                data = result.json()
+                messages = data.get('Data', [])
+                
+                if not messages:
+                    break
+                
+                for msg in messages:
+                    recipient_email = msg.get('ContactAlt', '').lower().strip()
+                    
+                    # Skip if email is in exclude list
+                    if recipient_email in exclude_emails_lower:
+                        continue
+                    
+                    # Add to sent messages
+                    sent_messages.append({
+                        'MessageID': msg.get('ID'),
+                        'Email': recipient_email,
+                        'ArrivedAt': msg.get('ArrivedAt'),
+                        'Status': msg.get('Status'),
+                    })
+                    
+                    # Check if message was opened (OpenedCount > 0)
+                    if msg.get('OpenedCount', 0) > 0:
+                        opened_messages.append({
+                            'MessageID': msg.get('ID'),
+                            'Email': recipient_email,
+                            'ArrivedAt': msg.get('ArrivedAt'),
+                            'OpenedAt': msg.get('OpenedAt'),
+                        })
+                
+                # Check if we've fetched all messages
+                if len(messages) < limit:
+                    break
+                
+                offset += limit
+            
+            return {
+                'sent_messages': sent_messages,
+                'opened_messages': opened_messages,
+                'total_sent': len(sent_messages),
+                'total_opened': len(opened_messages),
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching message statistics from Mailjet: {str(e)}")
+            return {
+                'sent_messages': [],
+                'opened_messages': [],
+                'total_sent': 0,
+                'total_opened': 0,
+                'error': str(e)
+            }
 
     def _process_attachment(self, attachment, index=0):
         """
