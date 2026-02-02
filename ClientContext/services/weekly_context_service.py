@@ -27,7 +27,7 @@ from ClientContext.utils.weekly_context import generate_weekly_context_email_tem
 
 logger = logging.getLogger(__name__)
 
-<< << << < HEAD
+
 
 
 def _is_blocked_filetype(url: str) -> bool:
@@ -42,8 +42,8 @@ def _sanitize_query_for_allowlist(query: str) -> str:
     """
     if not query:
         return ""
-    q = re.sub(r"(?i)(-?site:[^\\s]+)", " ", query)
-    q = re.sub(r"\\s+", " ", q).strip()
+    q = re.sub(r"(?i)(-?site:[^\s]+)", " ", query)
+    q = re.sub(r"\s+", " ", q).strip()
     # Evitar queries muito longas (CSE é sensível a tamanho)
     return q[:220]
 
