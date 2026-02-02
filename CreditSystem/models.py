@@ -14,6 +14,7 @@ class SubscriptionPlan(models.Model):
         ('semester', 'Semestral'),
         ('yearly', 'Anual'),
         ('lifetime', 'Vitalício'),
+        ('legacy', 'Plano Legado'),
     ]
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, default="")

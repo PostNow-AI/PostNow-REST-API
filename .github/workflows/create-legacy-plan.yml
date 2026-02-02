@@ -1,0 +1,41 @@
+name: Create Legacy Plan (Reactivation Campaign)
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  create-legacy-plan:
+    runs-on: ubuntu-latest
+    environment: Production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Create Legacy Plan in Stripe and Database
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DJANGO_SETTINGS_MODULE: Sonora_REST_API.settings
+        run: |
+          echo "🎯 Creating Plano Legado (R$ 10.00) for Reactivation Campaign"
+          python scripts/create_legacy_plan.py
+      
+      - name: Verify Plan Creation
+        run: |
+          echo "✅ Legacy plan creation completed"
+          echo "Next steps:"
+          echo "  1. Run reactivation-email-1 workflow"
+          echo "  2. Wait 3 days, then run reactivation-email-2"
+          echo "  3. Wait 4 more days, then run reactivation-email-3"
