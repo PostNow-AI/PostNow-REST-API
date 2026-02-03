@@ -353,14 +353,16 @@ class StripeSubscriptionWebhookView(APIView):
                 AuditService.log_system_operation(
                     user=None,
                     action='webhook_processed',
-                    status='success',
+                    status='warning',
                     resource_type='StripeWebhook',
                     details={
                         'webhook_type': 'subscription',
                         'warning': True,
                         'message': result.get('message'),
                         'subscription_id': result.get('subscription_id'),
-                        'user_id': result.get('user_id')
+                        'user_id': result.get('user_id'),
+                        'requires_action': result.get('requires_action', False),
+                        'payment_intent_status': result.get('payment_intent_status')
                     }
                 )
                 return Response({
@@ -368,6 +370,28 @@ class StripeSubscriptionWebhookView(APIView):
                     'message': result.get('message', 'Webhook processado com alerta'),
                     'warning': True
                 }, status=status.HTTP_200_OK)
+            elif result.get('status') == 'error':
+                # Log error status (payment requires action or failed)
+                AuditService.log_system_operation(
+                    user=None,
+                    action='webhook_processed',
+                    status='failure',
+                    error_message=result.get('message', 'Erro ao processar webhook'),
+                    resource_type='StripeWebhook',
+                    details={
+                        'webhook_type': 'subscription',
+                        'error_type': 'payment_validation_failed',
+                        'requires_action': result.get('requires_action', False),
+                        'payment_status': result.get('payment_status'),
+                        'payment_intent_status': result.get('payment_intent_status'),
+                        'stripe_status': result.get('stripe_status')
+                    }
+                )
+                return Response({
+                    'success': False,
+                    'message': result.get('message', 'Pagamento requer confirmação ou falhou'),
+                    'requires_action': result.get('requires_action', False)
+                }, status=status.HTTP_402_PAYMENT_REQUIRED)
             elif result.get('status') == 'ignored':
                 # Log ignored webhook
                 AuditService.log_system_operation(
@@ -1084,6 +1108,30 @@ class MonthlyCreditsView(APIView):
             return Response({
                 'success': True,
                 'data': response_data
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Erro interno do servidor',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PaymentStatusView(APIView):
+    """
+    Verifica o status de pagamento do usuário
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Retorna status de pagamento do usuário"""
+        try:
+            payment_status = CreditService.check_payment_status(request.user)
+            
+            return Response({
+                'success': True,
+                'data': payment_status
             }, status=status.HTTP_200_OK)
 
         except Exception as e:

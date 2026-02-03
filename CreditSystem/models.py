@@ -55,6 +55,7 @@ class UserSubscription(models.Model):
         ('active', 'Ativo'),
         ('cancelled', 'Cancelado'),
         ('expired', 'Expirado'),
+        ('pending_payment', 'Pagamento Pendente'),
     ]
 
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
@@ -65,6 +66,25 @@ class UserSubscription(models.Model):
         max_length=20, choices=STATUS_CHOICES, default='active')
     stripe_subscription_id = models.CharField(
         max_length=100, blank=True, null=True)
+    
+    # Payment validation fields
+    payment_requires_action = models.BooleanField(
+        default=False,
+        verbose_name="Pagamento Requer Ação",
+        help_text="Indica se o pagamento está aguardando confirmação bancária (3D Secure, etc)"
+    )
+    payment_pending_since = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name="Pagamento Pendente Desde",
+        help_text="Data/hora desde quando o pagamento está pendente"
+    )
+    last_payment_error = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Último Erro de Pagamento",
+        help_text="Detalhes do último erro de pagamento"
+    )
 
     def __str__(self):
         return f"{self.user} - {self.plan} ({self.status})"
@@ -72,6 +92,11 @@ class UserSubscription(models.Model):
     @property
     def status_display(self):
         return dict(self.STATUS_CHOICES).get(self.status, self.status)
+    
+    @property
+    def has_valid_payment(self):
+        """Verifica se o pagamento está válido (não requer ação)"""
+        return not self.payment_requires_action and self.status == 'active'
 
 
 class CreditPackage(models.Model):

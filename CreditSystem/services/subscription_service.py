@@ -19,6 +19,80 @@ class SubscriptionService:
         if not stripe.api_key:
             raise ValidationError("STRIPE_SECRET_KEY não configurada")
 
+    def _send_payment_pending_email(self, user, subscription, error_message):
+        """
+        Envia email notificando usuário sobre pagamento pendente
+        
+        Args:
+            user: Usuário
+            subscription: UserSubscription instance
+            error_message: Mensagem de erro do pagamento
+        """
+        try:
+            from services.mailjet_service import MailjetService
+            import asyncio
+            
+            mailjet_service = MailjetService()
+            
+            subject = "⚠️ Ação necessária: Confirme seu pagamento"
+            
+            body = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #d9534f;">⚠️ Seu pagamento precisa de confirmação</h2>
+                    
+                    <p>Olá {user.first_name or user.email},</p>
+                    
+                    <p>Detectamos que seu pagamento para a assinatura <strong>{subscription.plan.name}</strong> está aguardando confirmação bancária.</p>
+                    
+                    <div style="background-color: #f8d7da; border-left: 4px solid #d9534f; padding: 15px; margin: 20px 0;">
+                        <p style="margin: 0;"><strong>Status:</strong> Pagamento Pendente</p>
+                        <p style="margin: 5px 0 0 0;"><strong>Motivo:</strong> {error_message}</p>
+                    </div>
+                    
+                    <h3>O que você precisa fazer:</h3>
+                    <ol>
+                        <li>Verifique seu email para confirmação 3D Secure do seu banco</li>
+                        <li>Complete a autenticação bancária solicitada</li>
+                        <li>Aguarde alguns minutos para que o pagamento seja processado</li>
+                    </ol>
+                    
+                    <p style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+                        <strong>Importante:</strong> Enquanto o pagamento não for confirmado, você não poderá utilizar os recursos da plataforma.
+                    </p>
+                    
+                    <p>Se você já confirmou o pagamento, por favor aguarde alguns minutos. Caso o problema persista, entre em contato com nosso suporte.</p>
+                    
+                    <p style="margin-top: 30px;">
+                        Atenciosamente,<br>
+                        <strong>Equipe PostNow</strong>
+                    </p>
+                </div>
+            </body>
+            </html>
+            """
+            
+            # Envia email de forma assíncrona
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(
+                    mailjet_service.send_email(
+                        to_email=user.email,
+                        subject=subject,
+                        body=body
+                    )
+                )
+                print(f"[EMAIL] Email de pagamento pendente enviado para {user.email}")
+            finally:
+                loop.close()
+                
+        except Exception as e:
+            # Não falhar a operação se email falhar
+            print(f"[EMAIL ERROR] Erro ao enviar email de pagamento pendente: {str(e)}")
+
+
     def process_webhook(self, payload, sig_header):
         """
         Processa webhook do Stripe para eventos de assinatura
@@ -63,6 +137,10 @@ class SubscriptionService:
             return self._handle_checkout_session_completed(event['data']['object'])
         elif event['type'] == 'payment_intent.succeeded':
             return self._handle_payment_intent_succeeded(event['data']['object'])
+        elif event['type'] == 'payment_intent.requires_action':
+            return self._handle_payment_requires_action(event['data']['object'])
+        elif event['type'] == 'payment_intent.payment_failed':
+            return self._handle_payment_intent_failed(event['data']['object'])
 
         return {'status': 'ignored', 'event_type': event['type']}
 
@@ -137,12 +215,105 @@ class SubscriptionService:
 
             # Determina o status baseado no status do Stripe
             stripe_status = subscription.get('status', 'active')
+            
+            # Valida se o pagamento foi realmente completado
+            # Status que indicam pagamento pendente ou com problema
+            invalid_statuses = ['incomplete', 'incomplete_expired', 'past_due', 'unpaid']
+            
+            if stripe_status in invalid_statuses:
+                # Criar registro de assinatura com status pending_payment
+                user_subscription = UserSubscription.objects.create(
+                    user=user,
+                    plan=plan,
+                    start_date=timezone.now(),
+                    end_date=None,
+                    status='pending_payment',
+                    stripe_subscription_id=stripe_subscription_id,
+                    payment_requires_action=True,
+                    payment_pending_since=timezone.now(),
+                    last_payment_error=f'Pagamento requer confirmação. Status: {stripe_status}'
+                )
+                
+                # Enviar email de notificação
+                try:
+                    self._send_payment_pending_email(
+                        user=user,
+                        subscription=user_subscription,
+                        error_message=f'Pagamento com status: {stripe_status}'
+                    )
+                except Exception as e:
+                    print(f"[EMAIL ERROR] Falha ao enviar email: {str(e)}")
+                
+                return {
+                    'status': 'error',
+                    'message': f'Assinatura criada mas pagamento pendente: {stripe_status}',
+                    'stripe_status': stripe_status,
+                    'requires_action': True,
+                    'subscription_id': user_subscription.id,
+                    'user_id': user.id
+                }
+            
+            # Verificar status do payment_intent se disponível
+            latest_invoice = subscription.get('latest_invoice')
+            if latest_invoice:
+                # Se latest_invoice é string, buscar a invoice
+                if isinstance(latest_invoice, str):
+                    try:
+                        latest_invoice = stripe.Invoice.retrieve(latest_invoice)
+                    except:
+                        pass
+                
+                if isinstance(latest_invoice, dict):
+                    payment_intent = latest_invoice.get('payment_intent')
+                    if payment_intent:
+                        # Se payment_intent é string, buscar
+                        if isinstance(payment_intent, str):
+                            try:
+                                payment_intent = stripe.PaymentIntent.retrieve(payment_intent)
+                            except:
+                                pass
+                        
+                        if isinstance(payment_intent, dict):
+                            pi_status = payment_intent.get('status')
+                            # Status que requerem ação do usuário ou indicam falha
+                            if pi_status in ['requires_action', 'requires_payment_method', 'requires_confirmation', 'processing']:
+                                # Criar registro de assinatura pendente
+                                user_subscription = UserSubscription.objects.create(
+                                    user=user,
+                                    plan=plan,
+                                    start_date=timezone.now(),
+                                    end_date=None,
+                                    status='pending_payment',
+                                    stripe_subscription_id=stripe_subscription_id,
+                                    payment_requires_action=True,
+                                    payment_pending_since=timezone.now(),
+                                    last_payment_error=f'Payment intent requer ação: {pi_status}'
+                                )
+                                
+                                # Enviar email de notificação
+                                try:
+                                    self._send_payment_pending_email(
+                                        user=user,
+                                        subscription=user_subscription,
+                                        error_message=f'Autenticação bancária necessária (3D Secure). Status: {pi_status}'
+                                    )
+                                except Exception as e:
+                                    print(f"[EMAIL ERROR] Falha ao enviar email: {str(e)}")
+                                
+                                return {
+                                    'status': 'error',
+                                    'message': f'Pagamento requer ação do usuário: {pi_status}',
+                                    'payment_intent_status': pi_status,
+                                    'requires_action': True,
+                                    'subscription_id': user_subscription.id,
+                                    'user_id': user.id
+                                }
+            
             local_status = 'active'
-
             # Se está em trial, ainda considera como ativa (usuário tem acesso)
             if stripe_status in ['trialing', 'active']:
                 local_status = 'active'
-            elif stripe_status in ['incomplete', 'incomplete_expired', 'past_due']:
+            else:
                 local_status = 'cancelled'
 
             # Cria nova assinatura
@@ -358,6 +529,18 @@ class SubscriptionService:
             dict: Resultado do processamento
         """
         try:
+            # Validar status do pagamento antes de processar
+            payment_status = session.get('payment_status')
+            
+            # Só processar se pagamento foi realmente completado
+            if payment_status != 'paid':
+                return {
+                    'status': 'error',
+                    'message': f'Checkout completado mas pagamento não confirmado. Status: {payment_status}',
+                    'payment_status': payment_status,
+                    'requires_action': payment_status == 'unpaid'
+                }
+            
             # Verifica se é modo 'payment' (lifetime) ou 'subscription'
             mode = session.get('mode')
 
@@ -391,6 +574,15 @@ class SubscriptionService:
             dict: Resultado do processamento
         """
         try:
+            # Validar que o status é realmente 'succeeded'
+            pi_status = payment_intent.get('status')
+            if pi_status != 'succeeded':
+                return {
+                    'status': 'error',
+                    'message': f'Payment intent com status inválido: {pi_status}',
+                    'payment_intent_status': pi_status
+                }
+            
             # Verifica se temos charges associadas
             charges = payment_intent.get('charges', {}).get('data', [])
             if charges:
@@ -605,3 +797,40 @@ class SubscriptionService:
             return timezone.now() + timezone.timedelta(days=365)
         # Lifetime: retorna None
         return None
+
+    def _handle_payment_requires_action(self, payment_intent):
+        """
+        Processa payment intent que requer ação do usuário (3D Secure, etc)
+
+        Args:
+            payment_intent: Dados do payment intent
+
+        Returns:
+            dict: Resultado do processamento
+        """
+        return {
+            'status': 'warning',
+            'message': 'Pagamento requer ação do usuário (confirmação bancária)',
+            'payment_intent_id': payment_intent.get('id'),
+            'payment_intent_status': payment_intent.get('status'),
+            'requires_action': True,
+            'next_action': payment_intent.get('next_action')
+        }
+
+    def _handle_payment_intent_failed(self, payment_intent):
+        """
+        Processa falha no payment intent
+
+        Args:
+            payment_intent: Dados do payment intent
+
+        Returns:
+            dict: Resultado do processamento
+        """
+        return {
+            'status': 'error',
+            'message': 'Pagamento falhou',
+            'payment_intent_id': payment_intent.get('id'),
+            'payment_intent_status': payment_intent.get('status'),
+            'last_payment_error': payment_intent.get('last_payment_error')
+        }
