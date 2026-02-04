@@ -21,7 +21,7 @@ class CreditCheckMiddleware:
 
     def process_view(self, request, view_func, view_args, view_kwargs):
         """
-        Processa a view antes da execução para verificar créditos
+        Processa a view antes da execução para verificar pagamentos pendentes e créditos
         """
         # Lista de endpoints que requerem verificação de créditos
         credit_required_endpoints = [
@@ -33,9 +33,56 @@ class CreditCheckMiddleware:
 
         # Verifica se a requisição é para um endpoint que requer créditos
         if request.path in credit_required_endpoints and request.user.is_authenticated:
+            # Primeiro verifica pagamento pendente
+            pending_check = self._check_pending_payment(request)
+            if pending_check:
+                return pending_check
+            
+            # Depois verifica créditos
             return self._check_credits_for_ai_usage(request, view_func)
 
         return None
+
+    def _check_pending_payment(self, request):
+        """
+        Verifica se usuário tem pagamento pendente e bloqueia acesso
+        """
+        try:
+            from .models import UserSubscription
+            from django.utils import timezone
+            
+            # Buscar assinaturas com pagamento pendente
+            pending_sub = UserSubscription.objects.filter(
+                user=request.user,
+                payment_requires_action=True
+            ).first()
+            
+            if pending_sub:
+                # Calcular tempo desde que ficou pendente
+                time_pending = None
+                if pending_sub.payment_pending_since:
+                    time_pending = timezone.now() - pending_sub.payment_pending_since
+                
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Pagamento aguardando confirmação. Complete o pagamento para continuar usando o sistema.',
+                    'error_code': 'PAYMENT_PENDING',
+                    'data': {
+                        'subscription_id': pending_sub.id,
+                        'plan_name': pending_sub.plan.name,
+                        'status': pending_sub.status,
+                        'payment_requires_action': True,
+                        'pending_since': pending_sub.payment_pending_since.isoformat() if pending_sub.payment_pending_since else None,
+                        'time_pending_minutes': int(time_pending.total_seconds() / 60) if time_pending else None,
+                        'last_error': pending_sub.last_payment_error,
+                        'required_action': 'complete_payment'
+                    }
+                }, status=402)
+            
+            return None
+        except Exception:
+            # Em caso de erro, permite continuar
+            return None
 
     def _check_credits_for_ai_usage(self, request, view_func):
         """

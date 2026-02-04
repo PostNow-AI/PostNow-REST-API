@@ -50,4 +50,6 @@ urlpatterns = [
          name='user-subscription'),
     path('subscription/cancel/', views.UserSubscriptionCancelView.as_view(),
          name='subscription-cancel'),
+    path('payment-status/', views.PaymentStatusView.as_view(),
+         name='payment-status'),
 ]

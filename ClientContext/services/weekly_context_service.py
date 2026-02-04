@@ -9,9 +9,11 @@ from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
 from google.genai import types
 
-from django.contrib.auth.models import User
 from asgiref.sync import sync_to_async
+from django.contrib.auth.models import User
+from django.utils import timezone
 
+from AuditSystem.services import AuditService
 from ClientContext.models import ClientContext
 from ClientContext.utils.url_dedupe import normalize_url_key
 from ClientContext.utils.policy_resolver import resolve_policy
@@ -97,7 +99,7 @@ class WeeklyContextService:
         self.mailjet_service = MailjetService()
 
     @sync_to_async
-    def _get_eligible_users(self, offset: int, limit: int) -> list[User]:
+    def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
         """Get a batch of users eligible for weekly context generation"""
         if limit is None:
             return list(
@@ -423,10 +425,19 @@ class WeeklyContextService:
                 'error': str(e),
             }
 
+<<<<<<< HEAD
     async def _send_email_async(self, user: User, context_data: dict, bcc: list[str] = None):
         """Send email asynchronously."""
         # user_data from validation service returns (User, CreatorProfile) tuple
         user_tuple = await self.user_validation_service.get_user_data(user.id)
+=======
+    def _generate_context_for_user(self, user: User) -> str:
+        """AI service call to generate weekly context for a user."""
+        try:
+            self.prompt_service.set_user(user)
+            prompt = self.prompt_service.build_context_prompts()
+            context_result = self.ai_service.generate_text(prompt, user)
+>>>>>>> origin/main
 
         if not user_tuple:
             logger.error(f"User data not found for email sending: {user.id}")

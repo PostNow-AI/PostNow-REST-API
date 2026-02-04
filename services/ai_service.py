@@ -2,11 +2,12 @@ import base64
 import os
 from time import sleep
 
-from AuditSystem.services import AuditService
-from CreditSystem.services.credit_service import CreditService
 from django.contrib.auth.models import User
 from google import genai
 from google.genai import types
+
+from AuditSystem.services import AuditService
+from CreditSystem.services.credit_service import CreditService
 
 
 class AiService:
@@ -27,7 +28,7 @@ class AiService:
             'gemini-3-pro-preview',
             'gemini-3-pro-preview',
             'gemini-3-pro-preview',
-            'gemini-3-pro-preview',]
+            'gemini-3-pro-preview', ]
         self.image_models = [
             'gemini-3-pro-image-preview',
             'gemini-3-pro-image-preview',
@@ -36,7 +37,7 @@ class AiService:
             'gemini-3-pro-image-preview',
             'gemini-3-pro-image-preview',
             'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview',]
+            'gemini-3-pro-image-preview', ]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
         self.client = genai.Client(api_key=self.api_key)
         self.generate_text_config = types.GenerateContentConfig(
@@ -139,7 +140,8 @@ class AiService:
             )
             raise Exception(f"Error generating text: {str(e)}")
 
-    def generate_image(self, prompt_list: list[str], image_attachment: str, user: User, config: types.GenerateContentConfig = None) -> str:
+    def generate_image(self, prompt_list: list[str], image_attachment: str, user: User,
+                       config: types.GenerateContentConfig = None) -> str:
         try:
             effective_config = self.generate_image_config
 
@@ -179,7 +181,8 @@ class AiService:
             )
             raise Exception(f"Error generating image: {str(e)}")
 
-    def _try_model_with_retries(self, models: list[str], generate_function: callable, max_retries: int = 3) -> tuple[str, str]:
+    def _try_model_with_retries(self, models: list[str], generate_function: callable, max_retries: int = 3) -> tuple[
+        str, str]:
         """Try making a request to the AI model with retries for retryable errors."""
         last_error = None
         for model in models:
@@ -243,9 +246,9 @@ class AiService:
             contents.parts.append(types.Part.from_text(text=prompt))
 
         for chunk in self.client.models.generate_content_stream(
-            model=model,
-            contents=contents,
-            config=config
+                model=model,
+                contents=contents,
+                config=config
         ):
             if not self._check_for_content_parts(chunk):
                 continue
@@ -310,9 +313,11 @@ class AiService:
             'grounding_metadata': metadata_dict
         }
 
-    def _try_generate_image(self, model: str, prompt_list: list[str], image_attachment: str, config: types.GenerateContentConfig) -> bytes:
+    def _try_generate_image(self, model: str, prompt_list: list[str], image_attachment: str,
+                            config: types.GenerateContentConfig) -> bytes:
         """Try generating an image using the specified model."""
         image_bytes = None
+        print(f"Trying to generate image with model: {model}")
         contents = types.Content(
             role='user',
             parts=[]
@@ -330,16 +335,17 @@ class AiService:
             contents.parts.append(types.Part.from_text(text=prompt))
 
         for chunk in self.client.models.generate_content_stream(
-            model=model,
-            contents=contents,
-            config=config
+                model=model,
+                contents=contents,
+                config=config
         ):
             if not self._check_for_content_parts(chunk):
                 continue
 
             part = chunk.candidates[0].content.parts[0]
 
-            if hasattr(part, 'inline_data') and part.inline_data and hasattr(part.inline_data, 'data') and part.inline_data.data:
+            if hasattr(part, 'inline_data') and part.inline_data and hasattr(part.inline_data,
+                                                                             'data') and part.inline_data.data:
                 inline_data = part.inline_data
                 image_bytes = inline_data.data
                 break
@@ -352,10 +358,10 @@ class AiService:
         if not hasattr(chunk, 'candidates') or chunk.candidates is None:
             return False
         if (
-            len(chunk.candidates) == 0
-            or chunk.candidates[0].content is None
-            or chunk.candidates[0].content.parts is None
-            or len(chunk.candidates[0].content.parts) == 0
+                len(chunk.candidates) == 0
+                or chunk.candidates[0].content is None
+                or chunk.candidates[0].content.parts is None
+                or len(chunk.candidates[0].content.parts) == 0
         ):
             return False
         return True

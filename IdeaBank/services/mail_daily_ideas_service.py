@@ -3,7 +3,9 @@ from collections import defaultdict
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth import get_user_model
+
 from IdeaBank.models import Post
+from IdeaBank.utils.current_week import get_current_week
 from IdeaBank.utils.mail_templates.daily_content import daily_content_template
 from services.mailjet_service import MailjetService
 
@@ -15,13 +17,18 @@ class MailDailyIdeasService:
     def __init__(self):
         self.mailjet_service = MailjetService()
 
-    async def fetch_users_daily_ideas(self) -> list:
+    @staticmethod
+    async def fetch_users_daily_ideas() -> list:
         """Fetch users with daily ideas to be mailed."""
+        week_id = get_current_week()
+
         return await sync_to_async(list)(
             Post.objects.filter(
-                is_active=False
+                is_active=False,
+                further_details=week_id,
             ).select_related('user').values(
-                'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content', 'ideas__image_url'
+                'id', 'user__id', 'user__email', 'name', 'type', 'objective', 'created_at', 'ideas__content',
+                'ideas__image_url'
             )
         )
 
@@ -43,14 +50,21 @@ class MailDailyIdeasService:
 
         processed = 0
         failed = 0
+        skipped = 0
 
         for user_id, posts_list in user_posts.items():
             try:
-                user = await sync_to_async(User.objects.get)(id=user_id)
-                await self.send_email_to_user(user, posts_list)
-                processed += 1
-                post_ids = [p['id'] for p in posts_list]
-                await sync_to_async(lambda: Post.objects.filter(id__in=post_ids).update(is_active=True))()
+                post_types = [p['type'] for p in posts_list]
+                types = ['feed', 'reels', 'story']
+                if all((t in post_types for t in types)):
+                    user = await sync_to_async(User.objects.get)(id=user_id)
+                    await self.send_email_to_user(user, posts_list)
+                    processed += 1
+                    post_ids = [p['id'] for p in posts_list]
+                    await sync_to_async(lambda: Post.objects.filter(id__in=post_ids).update(is_active=True))()
+                else:
+                    print(f"Skipping user {user_id} due to incomplete post types.")
+                    skipped += 1
             except Exception as e:
                 logger.error(f"Failed to process user {user_id}: {str(e)}")
                 failed += 1
@@ -60,6 +74,7 @@ class MailDailyIdeasService:
             'total_users': len(user_posts),
             'processed': processed,
             'failed': failed,
+            'skipped': skipped,
         }
 
     async def send_email_to_user(self, user, posts):

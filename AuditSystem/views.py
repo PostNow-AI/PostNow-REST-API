@@ -2,18 +2,20 @@ import os
 from datetime import date, timedelta
 
 from django.db.models import Count, Q
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from IdeaBank.services.mail_service import MailService
 from rest_framework import status
 from rest_framework.decorators import (
     api_view,
     authentication_classes,
     permission_classes,
 )
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
-
-from IdeaBank.services.mail_service import MailService
 from services.daily_post_amount_service import DailyPostAmountService
+
+from .dashboard_service import BehaviorDashboardService
 from .models import AuditLog, DailyReport
 from .services import AuditService
 
@@ -693,10 +695,355 @@ def mailjet_webhook(request):
             action='system_error',
             status='error',
             error_message=f'Erro ao processar webhook do Mailjet: {str(e)}',
-            details={'request_data': request.data if hasattr(request, 'data') else {}}
+            details={'request_data': request.data if hasattr(
+                request, 'data') else {}}
         )
 
         return Response({
             'success': False,
             'error': f'Erro ao processar eventos: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================================================
+# BEHAVIOR DASHBOARD VIEWS
+# ============================================================================
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def subscription_stats_view(request):
+    """
+    Get subscription statistics for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of subscriptions created in the period
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_subscription_stats(
+            start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating subscription stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def onboarding_stats_view(request):
+    """
+    Get onboarding completion statistics for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of onboardings completed in the period
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_onboarding_stats(
+            start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating onboarding stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def image_stats_view(request):
+    """
+    Get image creation statistics for a specified date range.
+    Counts images created (excluding images for emails).
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of images created in the period
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_image_stats(start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating image stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def email_sent_stats_view(request):
+    """
+    Get email sent statistics for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of emails sent in the period
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_email_sent_stats(
+            start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating email sent stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def email_opened_stats_view(request):
+    """
+    Get email opened statistics for a specified date range.
+    Based on Mailjet webhook tracking.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of emails opened in the period
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions and limitations
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_email_opened_stats(
+            start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users. May underreport due to email client privacy features.'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating email opened stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def posts_total_stats_view(request):
+    """
+    Get total posts creation statistics for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of posts created in the period
+    - timeline: Daily breakdown of posts
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_posts_total_stats(
+            start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating posts total stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def posts_email_stats_view(request):
+    """
+    Get posts created via email statistics for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of posts created via email in the period
+    - timeline: Daily breakdown of posts
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_posts_email_stats(
+            start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users. Only automatically generated posts.'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating posts email stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def posts_manual_stats_view(request):
+    """
+    Get manually created posts statistics for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of manually created posts in the period
+    - timeline: Daily breakdown of posts
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_posts_manual_stats(
+            start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users. Only manually created posts.'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating posts manual stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

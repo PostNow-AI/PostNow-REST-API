@@ -1,0 +1,95 @@
+import logging
+from typing import Any, Dict
+
+from asgiref.sync import sync_to_async
+from django.contrib.auth.models import User
+from django.utils import timezone
+
+from services.semaphore_service import SemaphoreService
+from .weekly_feed_creation import WeeklyFeedCreationService
+
+logger = logging.getLogger(__name__)
+
+
+class RetryWeeklyFeedService:
+    def __init__(self):
+        self.semaphore_service = SemaphoreService()
+        self.weekly_feed_creation = WeeklyFeedCreationService()
+
+    @sync_to_async
+    def _get_users_with_errors(self, offset: int, limit: int) -> list[dict[str, Any]]:
+        """Get all users who have daily generation errors."""
+        if limit is None:
+            return list(
+                User.objects.extra(
+                    where=["weekly_feed_generation_error IS NOT NULL"]
+                ).filter(
+                    usersubscription__status='active',
+                    is_active=True
+                ).distinct().values('id', 'email', 'username', 'first_name')[offset:]
+            )
+
+        return list(
+            User.objects.extra(
+                where=["weekly_feed_generation_error IS NOT NULL"]
+            ).filter(
+                usersubscription__status='active',
+                is_active=True
+            ).distinct().values('id', 'email', 'username', 'first_name')[offset:offset + limit]
+        )
+
+    async def process_weekly_feed_for_failed_users(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
+        """Process daily ideas generation for a batch of users"""
+        start_time = timezone.now()
+        offset = (batch_number - 1) * batch_size
+        limit = batch_size
+
+        eligible_users = await self._get_users_with_errors(offset=offset, limit=limit)
+        total = len(eligible_users)
+
+        if total == 0:
+            return {
+                'status': 'completed',
+                'processed': 0,
+                'total_users': 0,
+                'message': 'No eligible users found',
+            }
+
+        try:
+            results = await self.semaphore_service.process_concurrently(
+                users=eligible_users,
+                function=self.weekly_feed_creation.process_single_user
+            )
+
+            processed_count = sum(
+                1 for r in results if r.get('status') == 'success')
+            failed_count = sum(
+                1 for r in results if r.get('status') == 'failed')
+            skipped_count = sum(
+                1 for r in results if r.get('status') == 'skipped')
+            created_posts_count = sum(
+                len(r.get('created_posts', [])) for r in results if r.get('status') == 'success'
+            )
+
+            end_time = timezone.now()
+            duration = (end_time - start_time).total_seconds()
+
+            result = {
+                'status': 'completed',
+                'processed': processed_count,
+                'created_posts': created_posts_count,
+                'failed': failed_count,
+                'skipped': skipped_count,
+                'total_users': total,
+                'duration_seconds': duration,
+                'details': results,
+            }
+
+            return result
+        except Exception as e:
+            return {
+                'status': 'error',
+                'processed': 0,
+                'total_users': total,
+                'message': f'Error processing users: {str(e)}',
+            }

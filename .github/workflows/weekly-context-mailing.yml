@@ -1,8 +1,8 @@
-name: Daily Content Mailing
+name: Weekly Context Mailing
 
 on:
   schedule:
-    - cron: "0 9 * * 6" # Run once at 9:00 AM UTC (6am GMT-3)
+    - cron: "0 0 * * 1" # Run once at 0:00 AM UTC on mondays
 
   workflow_dispatch:
 
