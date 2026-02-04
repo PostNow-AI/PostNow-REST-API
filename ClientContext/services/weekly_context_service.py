@@ -18,6 +18,7 @@ from ClientContext.models import ClientContext
 from ClientContext.utils.url_dedupe import normalize_url_key
 from ClientContext.utils.policy_resolver import resolve_policy
 from ClientContext.utils.source_quality import pick_candidates, is_denied, is_allowed, allowed_domains, build_allowlist_query
+from ClientContext.utils.text_utils import is_blocked_filetype, sanitize_query_for_allowlist, extract_json_block
 from services.user_validation_service import UserValidationService
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
@@ -28,65 +29,6 @@ from ClientContext.utils.weekly_context import generate_weekly_context_email_tem
 # from utils.static_events import get_niche_events
 
 logger = logging.getLogger(__name__)
-
-
-
-
-def _is_blocked_filetype(url: str) -> bool:
-    u = (url or "").lower()
-    return u.endswith((".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"))
-
-
-def _sanitize_query_for_allowlist(query: str) -> str:
-    """
-    Remove operadores de site do query original (que pode conter site:-site:),
-    para não conflitar com a injeção de allowlist.
-    """
-    if not query:
-        return ""
-    q = re.sub(r"(?i)(-?site:[^\s]+)", " ", query)
-    q = re.sub(r"\s+", " ", q).strip()
-    # Evitar queries muito longas (CSE é sensível a tamanho)
-    return q[:220]
-
-
-def extract_json_block(text: str) -> str:
-    """
-    Extrai o primeiro bloco JSON válido de uma string usando contagem de chaves.
-    Suporta objetos {} e listas [].
-    """
-    text = text.strip()
-
-    # Encontrar o primeiro caractere de início
-    start_idx = -1
-    stack = []
-
-    for i, char in enumerate(text):
-        if char == '{':
-            if start_idx == -1:
-                start_idx = i
-            stack.append('{')
-        elif char == '}':
-            if stack and stack[-1] == '{':
-                stack.pop()
-                if not stack and start_idx != -1:
-                    return text[start_idx:i+1]
-        elif char == '[':
-            if start_idx == -1:
-                start_idx = i
-            stack.append('[')
-        elif char == ']':
-            if stack and stack[-1] == '[':
-                stack.pop()
-                if not stack and start_idx != -1:
-                    return text[start_idx:i+1]
-
-    # Fallback: Tentar regex simples se a lógica de pilha falhar (ex: json malformado)
-    match = re.search(r'\{.*\}|\[.*\]', text, re.DOTALL)
-    if match:
-        return match.group(0)
-
-    return "{}"
 
 
 class WeeklyContextService:
@@ -530,14 +472,14 @@ class WeeklyContextService:
 
                 # 1) Buscar pt-BR primeiro (preferência). Tentar primeiro com restrição de allowlist (se existir).
                 doms = allowed_domains(section)
-                sanitized = _sanitize_query_for_allowlist(query)
+                sanitized = sanitize_query_for_allowlist(query)
                 allow_q = build_allowlist_query(
                     sanitized or query, doms, max_domains=8) if doms else query
                 pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", allow_q)
                 if doms and len(pt_pool) < 5:
                     # fallback 1: query genérica (menos restritiva) ainda dentro da allowlist
                     fallback_base = f"{profile_data.get('specialization', '')} cultura organizacional gestão de processos {datetime.now().year}"
-                    fb_q = build_allowlist_query(_sanitize_query_for_allowlist(
+                    fb_q = build_allowlist_query(sanitize_query_for_allowlist(
                         fallback_base), doms, max_domains=8)
                     pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", fb_q)
                 if doms and len(pt_pool) < 5:
@@ -567,7 +509,7 @@ class WeeklyContextService:
                 for u in picked_urls:
                     if not u or not u.startswith("http"):
                         continue
-                    if _is_blocked_filetype(u) or is_denied(u):
+                    if is_blocked_filetype(u) or is_denied(u):
                         denied_count += 1
                         continue
                     if is_allowed(section, u):
@@ -605,7 +547,7 @@ class WeeklyContextService:
                     for u in en_picked:
                         if not u or not u.startswith("http"):
                             continue
-                        if _is_blocked_filetype(u) or is_denied(u):
+                        if is_blocked_filetype(u) or is_denied(u):
                             denied_count += 1
                             continue
                         if is_allowed(section, u):
@@ -930,7 +872,7 @@ class WeeklyContextService:
                 if isinstance(item, dict) and not u:
                     u = self._coerce_url_to_str(item.get('url'))
                 if u and u.startswith('http'):
-                    if _is_blocked_filetype(u):
+                    if is_blocked_filetype(u):
                         continue
                     if is_denied(u):
                         continue

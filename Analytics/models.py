@@ -1,6 +1,6 @@
 import uuid
 
-from django.conf import settings
+from django.contrib.auth.models import User
 from django.db import models
 
 
@@ -20,7 +20,7 @@ class AnalyticsEvent(models.Model):
     received_at = models.DateTimeField(auto_now_add=True)
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+        User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='Usuário'
     )
 
     client_session_id = models.UUIDField()
@@ -68,7 +68,7 @@ class Decision(models.Model):
 
     occurred_at = models.DateTimeField(auto_now_add=True)
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+        User, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='Usuário'
     )
 
     resource_type = models.CharField(max_length=50, blank=True)
