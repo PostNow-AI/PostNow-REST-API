@@ -511,3 +511,41 @@ class CreditService:
                 'text_generation': float(CreditTransaction.get_fixed_price('text_generation'))
             }
         }
+
+    @staticmethod
+    def check_payment_status(user):
+        """
+        Verifica se usuário tem pagamentos pendentes
+        
+        Args:
+            user: Usuário a ser verificado
+        
+        Returns:
+            dict: Status do pagamento com detalhes
+        """
+        pending_sub = UserSubscription.objects.filter(
+            user=user,
+            payment_requires_action=True
+        ).first()
+        
+        if pending_sub:
+            time_pending = None
+            if pending_sub.payment_pending_since:
+                time_pending = timezone.now() - pending_sub.payment_pending_since
+            
+            return {
+                'has_pending_payment': True,
+                'subscription_id': pending_sub.id,
+                'plan_name': pending_sub.plan.name,
+                'status': pending_sub.status,
+                'pending_since': pending_sub.payment_pending_since,
+                'time_pending_minutes': int(time_pending.total_seconds() / 60) if time_pending else None,
+                'last_error': pending_sub.last_payment_error,
+                'can_use_system': False,
+                'required_action': 'complete_payment'
+            }
+        
+        return {
+            'has_pending_payment': False,
+            'can_use_system': True
+        }

@@ -4,8 +4,8 @@ from typing import Any, Dict
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.utils import timezone
-from services.semaphore_service import SemaphoreService
 
+from services.semaphore_service import SemaphoreService
 from .weekly_context_service import WeeklyContextService
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ class RetryClientContext:
         self.weekly_context_service = WeeklyContextService()
 
     @sync_to_async
-    def _get_eligible_users(self, offset: int, limit: int) -> list[User]:
+    def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
         """Get a batch of users with weekly context errors"""
         if limit is None:
             return list(
@@ -56,7 +56,7 @@ class RetryClientContext:
         try:
             results = await self.semaphore_service.process_concurrently(
                 users=eligible_users,
-                function=self.weekly_context_service._process_single_user
+                function=self.weekly_context_service.process_single_user
             )
 
             processed_count = sum(

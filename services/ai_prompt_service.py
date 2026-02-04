@@ -1,8 +1,7 @@
 import logging
-import random
 from datetime import datetime, timedelta
 
-from CreatorProfile.models import CreatorProfile, VisualStylePreference
+from format_weekly_context import format_weekly_context_output
 from services.get_creator_profile_data import get_creator_profile_data
 
 logger = logging.getLogger(__name__)
@@ -15,84 +14,6 @@ class AIPromptService:
     def set_user(self, user) -> None:
         """Set the user for whom the prompts will be generated."""
         self.user = user
-
-    def _get_creator_profile_data(self) -> dict:
-        """Fetch and return the creator profile data for the current user."""
-        if not self.user:
-            raise ValueError("User is not set for PromptService.")
-
-        profile = CreatorProfile.objects.filter(user=self.user).first()
-        if not profile:
-            raise CreatorProfile.DoesNotExist
-        profile_data = {
-            "business_name": profile.business_name,
-            "business_phone": profile.business_phone,
-            "business_website": profile.business_website,
-            "business_instagram_handle": profile.business_instagram_handle,
-            "specialization": profile.specialization,
-            "business_description": profile.business_description,
-            "business_purpose": profile.business_purpose,
-            "brand_personality": profile.brand_personality,
-            "products_services": profile.products_services,
-            "business_location": profile.business_location,
-            "target_audience": profile.target_audience,
-            "target_interests": profile.target_interests,
-            "main_competitors": profile.main_competitors,
-            # "benchmark_brands": profile.benchmark_brands,
-            "reference_profiles": profile.reference_profiles,
-            "voice_tone": profile.voice_tone,
-            "weekly_context_policy_override": getattr(profile, "weekly_context_policy_override", None),
-            "visual_style": self._get_random_visual_style(profile),
-            'color_palette': [] if not any([
-                profile.color_1, profile.color_2,
-                profile.color_3, profile.color_4, profile.color_5
-            ]) else [
-                profile.color_1, profile.color_2,
-                profile.color_3, profile.color_4, profile.color_5
-            ],
-            'desired_post_types': ['Nenhum'],
-        }
-
-        return profile_data
-
-    def _get_random_visual_style(self, profile) -> dict:
-        """Randomly select and fetch one visual style from the user's visual_style_ids list."""
-        if not profile.visual_style_ids or len(profile.visual_style_ids) == 0:
-            return {"name": None, "description": None}
-
-        random_style_id = random.choice(profile.visual_style_ids)
-
-        try:
-            visual_style = VisualStylePreference.objects.get(
-                id=random_style_id)
-
-            # Telemetria: registra a escolha de estilo (base pronta p/ bandit futuramente)
-            try:
-                from Analytics.models import Decision
-
-                if self.user:
-                    Decision.objects.create(
-                        decision_type="visual_style",
-                        action=str(random_style_id),
-                        policy_id="visual_style_random_v0",
-                        user=self.user,
-                        resource_type="User",
-                        resource_id=str(self.user.id),
-                        context={
-                            "styles_count": len(profile.visual_style_ids),
-                            "source": "ai_prompt_service",
-                        },
-                        properties={},
-                    )
-            except Exception:
-                # Nunca quebrar geração por causa de analytics
-                pass
-
-            return f'{visual_style.name} - {visual_style.description}'
-        except VisualStylePreference.DoesNotExist:
-            logger.warning(
-                f"VisualStylePreference with id {random_style_id} not found for user {self.user.id if self.user else 'unknown'}")
-            return {"name": None, "description": None}
 
     def _get_upcoming_holidays(self, months: int = 3) -> list:
         """Retorna uma lista de feriados brasileiros relevantes nos próximos N meses."""
@@ -663,7 +584,7 @@ class AIPromptService:
 
     def build_content_prompts(self, context: dict, posts_quantity: str) -> list[str]:
         """Build content generation prompts based on the user's creator profile."""
-        profile_data = self._get_creator_profile_data()
+        profile_data = get_creator_profile_data(self.user)
 
         return [
             """
@@ -683,7 +604,7 @@ class AIPromptService:
             - Tom de voz: {profile_data['voice_tone']}
             - Público-alvo:  {profile_data['target_audience']}
             - Interesses do Público: {profile_data['target_interests']}
-            - Tipos de post desejados: {profile_data['desired_post_types']}
+            - Tipos de post desejados: {profile_data.get('desired_post_types', ['Feed', 'Reels', 'Story'])}
             - Objetivo principal: {profile_data['business_purpose']}
             - Produtos ou serviços prioritários: {profile_data['products_services']}
 

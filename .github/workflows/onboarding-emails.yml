@@ -1,0 +1,24 @@
+name: Onboarding Emails
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # Run at 1:00 PM UTC (10:00 AM BRT)
+  workflow_dispatch:
+
+jobs:
+  send-onboarding-emails:
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Debug URL
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/onboarding-campaign/cron/send-emails/"
+
+      - name: Send onboarding emails
+        run: |
+          echo "Sending onboarding emails"
+          curl -X GET \
+            "${{ secrets.VERCEL_API_URL }}/api/v1/onboarding-campaign/cron/send-emails/" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -w "HTTP Status: %{http_code}\n" \
+            -s

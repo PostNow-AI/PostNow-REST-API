@@ -17,7 +17,8 @@ class WeeklyContextEmailService:
     def __init__(self):
         self.mailjet_service = MailjetService()
 
-    async def fetch_users_context_data(self) -> list:
+    @staticmethod
+    async def fetch_users_context_data() -> list:
         """Fetch users and their weekly context data to be mailed."""
         return await sync_to_async(list)(
             ClientContext.objects.filter(

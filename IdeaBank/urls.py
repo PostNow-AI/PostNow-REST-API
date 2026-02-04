@@ -31,7 +31,7 @@ urlpatterns = [
     path('ideas/<int:idea_id>/edit/',
          views.edit_post_idea, name='edit-post-idea'),
     path('ideas/<int:idea_id>/regenerate-image/',
-         views.regenerate_image_for_idea, name='regenerate-image-for-idea'),
+         views.generate_image_for_idea, name='regenerate-image-for-idea'),
 
     # Helper endpoints
     path('options/', views.get_post_options, name='post-options'),
@@ -42,14 +42,26 @@ urlpatterns = [
     # Cron endpoints
     path('cron/daily-content-generation/', views.vercel_cron_daily_content_generation,
          name='vercel_cron_daily_generation'),
-    path('cron/retry-failed-users/', views.vercel_cron_retry_failed_users,
-         name='vercel_cron_retry_failed_users'),
     path('admin/manual-daily-generation/', views.manual_trigger_daily_generation,
          name='manual_daily_generation'),
+
+    path('cron/retry-failed-users/', views.vercel_cron_retry_failed_users,
+         name='vercel_cron_retry_failed_users'),
     path('admin/manual-retry-failed/', views.manual_trigger_retry_failed,
          name='manual_retry_failed'),
+
     path('cron/mail-automatic-posts/',
          views.mail_all_generated_content, name='mail_automatic_posts'),
     path('cron/mail-daily-errors/',
          views.mail_all_user_errors, name='mail_daily_errors'),
+
+    path('cron/weekly-feed-generation/', views.vercel_cron_weekly_feed_generation,
+         name='vercel_cron_weekly_feed_generation'),
+    path('admin/manual-weekly-feed-generation/', views.manual_trigger_weekly_feed_generation,
+         name='manual_trigger_weekly_feed_generation'),
+
+    path('cron/weekly-feed-retry-failed-users/', views.vercel_cron_retry_weekly_feed_failed_users,
+         name='vercel_cron_retry_weekly_feed_failed_users'),
+    path('admin/manual-weekly-feed-retry-failed-users/', views.manual_retry_weekly_feed_failed_users,
+         name='manual_retry_weekly_feed_failed_users'),
 ]

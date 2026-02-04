@@ -1,0 +1,43 @@
+name: Reactivation Email 2 (Day 3)
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  send-reactivation-email-2:
+    runs-on: ubuntu-latest
+    environment: Production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Send Reactivation Email 2
+        env:
+          MJ_APIKEY_PUBLIC: ${{ secrets.MJ_APIKEY_PUBLIC }}
+          MJ_APIKEY_PRIVATE: ${{ secrets.MJ_APIKEY_PRIVATE }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_NAME: ${{ secrets.SENDER_NAME }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
+          DJANGO_SETTINGS_MODULE: Sonora_REST_API.settings
+        run: |
+          echo "📧 Sending Reactivation Email 2"
+          echo "Subject: O Plano Legado: um presente para quem começou com a gente"
+          python scripts/reactivation_email_2.py
+      
+      - name: Next Steps
+        run: |
+          echo "✅ Email 2 campaign completed"
+          echo "⏰ Next action: Run reactivation-email-3 workflow in 4 days (Day 7)"
