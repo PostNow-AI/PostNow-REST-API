@@ -29,6 +29,7 @@ from services.ai_service import AiService
 from AuditSystem.services import AuditService
 from services.google_search_service import GoogleSearchService
 from services.mailjet_service import MailjetService
+from services.semaphore_service import SemaphoreService
 from ClientContext.utils.weekly_context import generate_weekly_context_email_template
 # from utils.static_events import get_niche_events
 
@@ -43,7 +44,9 @@ class WeeklyContextService:
         self.prompt_service = AIPromptService()
         self.audit_service = AuditService()
         self.mailjet_service = MailjetService()
+        self.google_search_service = GoogleSearchService()
         self.opportunity_ranking_service = OpportunityRankingService()
+        self.dedupe_lookback_weeks = 4
 
     @sync_to_async
     def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
@@ -222,85 +225,105 @@ class WeeklyContextService:
             # Vamos usar 'tendencies_data' para armazenar o JSON final rankeado que o email vai usar.
             client_context.tendencies_data = ranked_opportunities
 
-            client_context.market_panorama = context_data.get(
-                # Este campo pode vir vazio no novo schema, atenção
-                'mercado', {}).get('panorama', '')
+            # --- Helper: extrair dados do novo formato de oportunidades ---
+            def _extract_from_opportunities(section_data):
+                """Extrai textos legíveis do formato fontes_analisadas/oportunidades."""
+                fontes_analisadas = section_data.get('fontes_analisadas', [])
+                all_opps = []
+                all_titles = []
+                for fonte in fontes_analisadas:
+                    all_titles.append(fonte.get('titulo_original', ''))
+                    for opp in fonte.get('oportunidades', []):
+                        all_opps.append(opp)
+                return fontes_analisadas, all_opps, all_titles
 
-            # ... resto dos campos ...
-            # Adaptar leitura dos campos antigos para não quebrar se vier vazio do novo schema
+            # === MERCADO ===
+            mercado = context_data.get('mercado', {})
+            mercado_raw, mercado_opps, mercado_titles = _extract_from_opportunities(mercado)
+            # Panorama: usar campo direto OU sintetizar dos textos analisados
+            client_context.market_panorama = mercado.get('panorama', '') or \
+                '. '.join([o.get('texto_base_analisado', '') for o in mercado_opps[:3] if o.get('texto_base_analisado')])
+            # Tendências: títulos das ideias geradas
+            client_context.market_tendencies = mercado.get('tendencias', []) or \
+                [o.get('titulo_ideia', '') for o in mercado_opps if o.get('titulo_ideia')]
+            # Desafios: filtrar oportunidades do tipo Polêmica como desafios
+            client_context.market_challenges = mercado.get('desafios', []) or \
+                [o.get('titulo_ideia', '') for o in mercado_opps if o.get('tipo') in ('Polêmica', 'Newsjacking')]
+            client_context.market_sources = mercado.get('fontes', [])
+            client_context.market_opportunities = mercado_raw
 
-            context_result = await sync_to_async(self._generate_context_for_user)(user)
-            context_json = context_result.replace(
-                'json', '', 1).strip('`').strip()
+            # === CONCORRÊNCIA ===
+            concorrencia = context_data.get('concorrencia', {})
+            conc_raw, conc_opps, conc_titles = _extract_from_opportunities(concorrencia)
+            # Principais: títulos das fontes analisadas (nomes dos concorrentes/artigos)
+            client_context.competition_main = concorrencia.get('principais', []) or conc_titles
+            # Estratégias: sintetizar dos gatilhos criativos
+            client_context.competition_strategies = concorrencia.get('estrategias', '') or \
+                '. '.join([o.get('gatilho_criativo', '') for o in conc_opps[:3] if o.get('gatilho_criativo')])
+            # Oportunidades: títulos das ideias
+            client_context.competition_opportunities = concorrencia.get('oportunidades', '') or \
+                ', '.join([o.get('titulo_ideia', '') for o in conc_opps[:3] if o.get('titulo_ideia')])
+            client_context.competition_benchmark = conc_raw
+            client_context.competition_sources = concorrencia.get('fontes', [])
 
-            context_data = json.loads(context_json).get(
-                'contexto_pesquisado', {})
+            # === PÚBLICO ===
+            publico = context_data.get('publico', {})
+            client_context.target_audience_profile = publico.get('perfil', '')
+            client_context.target_audience_behaviors = publico.get('comportamento_online', '')
+            client_context.target_audience_interests = publico.get('interesses', [])
+            client_context.target_audience_sources = publico.get('fontes', [])
 
-            client_context, created = await sync_to_async(ClientContext.objects.get_or_create)(user=user)
+            # === TENDÊNCIAS ===
+            tendencias = context_data.get('tendencias', {})
+            tend_raw, tend_opps, tend_titles = _extract_from_opportunities(tendencias)
+            client_context.tendencies_popular_themes = tendencias.get('temas_populares', []) or \
+                [o.get('titulo_ideia', '') for o in tend_opps if o.get('titulo_ideia')]
+            # Gerar hashtags a partir dos títulos das oportunidades (o novo formato não gera hashtags)
+            if tendencias.get('hashtags'):
+                client_context.tendencies_hashtags = tendencias['hashtags']
+            else:
+                hashtags = set()
+                for o in tend_opps + mercado_opps:
+                    titulo = o.get('titulo_ideia', '')
+                    # Extrair palavras significativas dos títulos para hashtags
+                    for word in titulo.split():
+                        clean = word.strip('?!.,;:()[]{}"\'-').capitalize()
+                        if len(clean) > 3 and clean.isalpha():
+                            hashtags.add(f"#{clean}")
+                    # Usar tipo como hashtag também
+                    tipo = o.get('tipo', '')
+                    if tipo:
+                        hashtags.add(f"#{tipo.replace(' ', '')}")
+                client_context.tendencies_hashtags = sorted(list(hashtags))[:15]
 
-            # Update the context fields
-            client_context.market_panorama = context_data.get(
-                'mercado', {}).get('panorama', '')
-            client_context.market_tendencies = context_data.get(
-                'mercado', {}).get('tendencias', [])
-            client_context.market_challenges = context_data.get(
-                'mercado', {}).get('desafios', [])
-            client_context.market_sources = context_data.get(
-                'mercado', {}).get('fontes', [])
+            # Gerar keywords a partir dos títulos e gatilhos criativos
+            if tendencias.get('keywords'):
+                client_context.tendencies_keywords = tendencias['keywords']
+            else:
+                keywords = set()
+                for o in tend_opps:
+                    titulo = o.get('titulo_ideia', '')
+                    gatilho = o.get('gatilho_criativo', '')
+                    # Extrair frases-chave dos títulos
+                    if titulo:
+                        keywords.add(titulo)
+                    if gatilho:
+                        keywords.add(gatilho)
+                client_context.tendencies_keywords = list(keywords)[:10]
+            client_context.tendencies_sources = tendencias.get('fontes', [])
 
-            client_context.competition_main = context_data.get(
-                'concorrencia', {}).get('principais', [])
+            # === SAZONALIDADE ===
+            sazonalidade = context_data.get('sazonalidade', {})
+            client_context.seasonal_relevant_dates = sazonalidade.get('datas_relevantes', [])
+            client_context.seasonal_local_events = sazonalidade.get('eventos_locais', [])
+            client_context.seasonal_sources = sazonalidade.get('fontes', [])
 
-            # Concorrência agora também usa schema de oportunidades, então 'acoes_taticas' pode não existir
-            # Vamos tentar extrair algo genérico ou deixar vazio
-            client_context.competition_strategies = "Ver oportunidades rankeadas."
-
-            client_context.competition_benchmark = context_data.get(
-                # Salvar raw também
-                'concorrencia', {}).get('fontes_analisadas', [])
-
-            client_context.competition_strategies = context_data.get(
-                'concorrencia', {}).get('estrategias', '')
-            client_context.competition_opportunities = context_data.get(
-                'concorrencia', {}).get('oportunidades', '')
-            client_context.competition_sources = context_data.get(
-                'concorrencia', {}).get('fontes', [])
-
-            client_context.target_audience_profile = context_data.get(
-                'publico', {}).get('perfil', '')
-            client_context.target_audience_behaviors = context_data.get(
-                'publico', {}).get('comportamento_online', '')
-            client_context.target_audience_interests = context_data.get(
-                'publico', {}).get('interesses', [])
-            client_context.target_audience_sources = context_data.get(
-                'publico', {}).get('fontes', [])
-
-            client_context.tendencies_hashtags = context_data.get(
-                'tendencias', {}).get('hashtags', [])
-            client_context.tendencies_popular_themes = context_data.get(
-                'tendencias', {}).get('temas_populares', [])
-            client_context.tendencies_hashtags = context_data.get(
-                'tendencias', {}).get('hashtags', [])
-            client_context.tendencies_keywords = context_data.get(
-                'tendencias', {}).get('keywords', [])
-            client_context.tendencies_sources = context_data.get(
-                'tendencias', {}).get('fontes', [])
-
-            client_context.seasonal_relevant_dates = context_data.get(
-                'sazonalidade', {}).get('datas_relevantes', [])
-            client_context.seasonal_local_events = context_data.get(
-                'sazonal', {}).get('eventos_locais', [])
-            client_context.seasonal_sources = context_data.get(
-                'sazonal', {}).get('fontes', [])
-
-            client_context.brand_online_presence = context_data.get(
-                'marca', {}).get('presenca_online', '')
-            client_context.brand_reputation = context_data.get(
-                'marca', {}).get('reputacao', '')
-            client_context.brand_communication_style = context_data.get(
-                'marca', {}).get('tom_comunicacao_atual', '')
-            client_context.brand_sources = context_data.get(
-                'marca', {}).get('fontes', [])
+            # === MARCA ===
+            marca = context_data.get('marca', {})
+            client_context.brand_online_presence = marca.get('presenca_online', '')
+            client_context.brand_reputation = marca.get('reputacao', '')
+            client_context.brand_communication_style = marca.get('tom_comunicacao_atual', '')
+            client_context.brand_sources = marca.get('fontes', [])
 
             client_context.weekly_context_error = None
             client_context.weekly_context_error_date = None
@@ -348,9 +371,6 @@ class WeeklyContextService:
                 action='context_generated',
                 status='success',
             )
-
-            # Enviar Email (Passando o context_data COMPLETO, que agora tem 'ranked_opportunities')
-            await self._send_email_async(user, context_data, bcc=bcc)
 
             return {
                 'user_id': user_id,
@@ -619,10 +639,10 @@ class WeeklyContextService:
             # para evitar conflito com o texto já fornecido e prevenir erros de Grounding
             synthesis_config = types.GenerateContentConfig(
                 response_modalities=["TEXT"],
-                temperature=0.7,  # Criatividade balanceada
+                temperature=0.7,
                 top_p=0.9,
-                max_output_tokens=2000,
-                response_mime_type="application/json"  # Forçar JSON
+                max_output_tokens=4096,
+                response_mime_type="application/json"
             )
 
             try:
@@ -630,8 +650,7 @@ class WeeklyContextService:
                 ai_response = await sync_to_async(self.ai_service.generate_text)(
                     prompt_list,
                     user,
-                    config=synthesis_config,
-                    response_mime_type="application/json"
+                    config=synthesis_config
                 )
                 # Limpar JSON markdown se houver
                 if isinstance(ai_response, dict):
