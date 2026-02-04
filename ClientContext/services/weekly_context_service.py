@@ -21,6 +21,8 @@ from ClientContext.utils.source_quality import pick_candidates, is_denied, is_al
 from ClientContext.utils.text_utils import is_blocked_filetype, sanitize_query_for_allowlist, extract_json_block
 from ClientContext.utils.url_validation import coerce_url_to_str, recover_url, validate_url_permissive_async
 from ClientContext.services.opportunity_ranking_service import OpportunityRankingService
+from services.get_creator_profile_data import get_creator_profile_data
+from services.prompt_utils import build_optimized_search_queries
 from services.user_validation_service import UserValidationService
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
@@ -378,9 +380,8 @@ class WeeklyContextService:
         self.prompt_service.set_user(user)
 
         # 1. Preparar Prompts e Queries
-        profile_data = await sync_to_async(self.prompt_service._get_creator_profile_data)()
-        queries = self.prompt_service._build_optimized_search_queries(
-            profile_data)
+        profile_data = await sync_to_async(get_creator_profile_data)(user)
+        queries = build_optimized_search_queries(profile_data)
 
         # Policy (auto/override) para controlar thresholds/idiomas e auditar comportamento
         decision = resolve_policy(profile_data)
