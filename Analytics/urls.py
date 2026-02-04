@@ -5,6 +5,6 @@ from .views import AnalyticsEventCreateView
 app_name = "analytics"
 
 urlpatterns = [
-    path("events/", AnalyticsEventCreateView.as_view(), name="events"),
+    path("analytic-events/", AnalyticsEventCreateView.as_view(), name="analytic-events"),
 ]
 

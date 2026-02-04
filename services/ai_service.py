@@ -12,14 +12,6 @@ from CreditSystem.services.credit_service import CreditService
 
 class AiService:
     def __init__(self):
-        # Prioridade padrão (como antes): Gemini 3 preview primeiro.
-        # Flash/lite ficam como fallback.
-        self.flash_models = [
-            'gemini-2.0-flash', # Atualizado para 2.0 Flash que é o mais recente/rápido
-            'gemini-2.0-flash-lite',
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-8b'
-        ]
         self.models = [
             'gemini-3-pro-preview',
             'gemini-3-pro-preview',
@@ -44,9 +36,6 @@ class AiService:
             response_modalities=[
                 "TEXT",
             ],
-            tools=[types.Tool(
-                google_search=types.GoogleSearch()
-            )],
         )
         self.generate_image_config = types.GenerateContentConfig(
             response_modalities=[
@@ -58,40 +47,12 @@ class AiService:
             ),
         )
 
-    def generate_text(self, prompt_list: list[str], user: User, config: types.GenerateContentConfig = None, return_metadata: bool = False, preferred_model: str = None, response_mime_type: str = None) -> dict | str:
-        """Generate text using Gemini AI.
-        
-        Args:
-            prompt_list: List of prompts to send to the model
-            user: User making the request
-            config: Optional custom generation config
-            return_metadata: If True, returns dict with 'text' and 'grounding_metadata'. 
-                           If False, returns only the text string (default for backward compatibility)
-            preferred_model: Optional. If 'flash', forces use of faster Flash models.
-            response_mime_type: Optional. If set (e.g. 'application/json'), forces the model to return data in this format.
-        
-        Returns:
-            str if return_metadata=False (default)
-            dict if return_metadata=True: {
-                'text': str,
-                'grounding_metadata': dict or None
-            }
-        """
+    def generate_text(self, prompt_list: list[str], user: User, config: types.GenerateContentConfig = None) -> str:
         try:
             effective_config = self.generate_text_config
 
             if config is not None:
                 effective_config = config
-            
-            # Apply response_mime_type if provided
-            if response_mime_type:
-                # Create a new config object
-                # We intentionally DO NOT copy 'tools' (like Google Search) when requesting JSON,
-                # to prevent Grounding metadata/artifacts from polluting the structured output.
-                effective_config = types.GenerateContentConfig(
-                    response_modalities=effective_config.response_modalities,
-                    response_mime_type=response_mime_type
-                )
 
             user_has_credits = self._validate_credits(
                 user=user, operation='text_generation')
@@ -99,15 +60,8 @@ class AiService:
                 raise Exception(
                     "Créditos insuficientes para gerar texto. Por favor, adquira mais créditos.")
 
-            # Select models based on preference
-            target_models = self.models
-            if preferred_model == 'flash':
-                target_models = self.flash_models
-                # Fallback to regular models if flash models fail all retries? 
-                # For now, let's stick to flash if requested for speed.
-
             model, result = self._try_model_with_retries(
-                models=target_models,
+                models=self.models,
                 generate_function=lambda model: self._try_generate_text(
                     model, prompt_list, effective_config),
                 max_retries=3
@@ -124,12 +78,16 @@ class AiService:
                 details={'model': model}
             )
 
-            # Return based on return_metadata flag
-            if return_metadata:
-                return result
-            else:
-                # Backward compatibility: return only text
-                return result['text'] if isinstance(result, dict) else result
+            return result
+
+        except Exception as e:
+            AuditService.log_content_generation(
+                user=user,
+                action='content_generation_failed',
+                status='failure',
+                details={'error': str(e)}
+            )
+            raise Exception(f"Error generating text: {str(e)}")
 
         except Exception as e:
             AuditService.log_content_generation(
@@ -227,17 +185,9 @@ class AiService:
         ]
         return any(indicator in error_str.lower() for indicator in retryable_indicators)
 
-    def _try_generate_text(self, model: str, prompt_list: list[str], config: types.GenerateContentConfig) -> dict:
-        """Try generating text using the specified model.
-        
-        Returns:
-            dict: {
-                'text': str - The generated text
-                'grounding_metadata': dict - Grounding metadata if Google Search is used
-            }
-        """
+    def _try_generate_text(self, model: str, prompt_list: list[str], config: types.GenerateContentConfig) -> str:
+        """Try generating text using the specified model."""
         response_text = ''
-        grounding_metadata = None
         contents = types.Content(
             role='user',
             parts=[]
@@ -256,62 +206,7 @@ class AiService:
             part = chunk.candidates[0].content.parts[0]
             if hasattr(part, 'text') and part.text:
                 response_text += part.text
-            
-            # Capture grounding metadata from the last chunk (it's cumulative)
-            if hasattr(chunk.candidates[0], 'grounding_metadata') and chunk.candidates[0].grounding_metadata:
-                grounding_metadata = chunk.candidates[0].grounding_metadata
-        
-        # Extract structured metadata if available
-        metadata_dict = None
-        if grounding_metadata:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"[GROUNDING_DEBUG] Metadata object received: {type(grounding_metadata)}")
-            
-            metadata_dict = {
-                'web_search_queries': [],
-                'grounding_chunks': []
-            }
-            
-            # Extract web search queries
-            if hasattr(grounding_metadata, 'web_search_queries') and grounding_metadata.web_search_queries:
-                metadata_dict['web_search_queries'] = list(grounding_metadata.web_search_queries)
-                logger.info(f"[GROUNDING_DEBUG] Found {len(metadata_dict['web_search_queries'])} search queries")
-            
-            # Extract grounding chunks with URLs
-            if hasattr(grounding_metadata, 'grounding_chunks') and grounding_metadata.grounding_chunks:
-                logger.info(f"[GROUNDING_DEBUG] Found {len(grounding_metadata.grounding_chunks)} grounding chunks")
-                for chunk in grounding_metadata.grounding_chunks:
-                    chunk_data = {}
-                    if hasattr(chunk, 'web') and chunk.web:
-                        # Try to get direct URI first
-                        if hasattr(chunk.web, 'uri') and chunk.web.uri:
-                            chunk_data['uri'] = chunk.web.uri
-                        if hasattr(chunk.web, 'title') and chunk.web.title:
-                            chunk_data['title'] = chunk.web.title
-                    
-                    # Also check for retrieved_context which might have different URL format
-                    elif hasattr(chunk, 'retrieved_context') and chunk.retrieved_context:
-                        if hasattr(chunk.retrieved_context, 'uri') and chunk.retrieved_context.uri:
-                            chunk_data['uri'] = chunk.retrieved_context.uri
-                        if hasattr(chunk.retrieved_context, 'title') and chunk.retrieved_context.title:
-                            chunk_data['title'] = chunk.retrieved_context.title
-                    
-                    # Log chunk structure for debugging
-                    if not chunk_data and hasattr(chunk, '__dict__'):
-                        logger.debug(f"[GROUNDING_DEBUG] Chunk structure: {chunk.__dict__}")
-                    
-                    if chunk_data:  # Only add if we have data
-                        metadata_dict['grounding_chunks'].append(chunk_data)
-                
-                logger.info(f"[GROUNDING_DEBUG] Extracted {len(metadata_dict['grounding_chunks'])} URLs from chunks")
-            else:
-                logger.warning("[GROUNDING_DEBUG] NO grounding_chunks found in metadata!")
-        
-        return {
-            'text': response_text,
-            'grounding_metadata': metadata_dict
-        }
+        return response_text
 
     def _try_generate_image(self, model: str, prompt_list: list[str], image_attachment: str,
                             config: types.GenerateContentConfig) -> bytes:
