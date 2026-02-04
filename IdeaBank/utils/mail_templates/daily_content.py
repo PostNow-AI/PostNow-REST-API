@@ -1,6 +1,19 @@
+import re
+
+
+def format_text_with_bold(text: str) -> str:
+    """Convert **text** markdown syntax to HTML <strong>text</strong> tags."""
+    if not text:
+        return text
+    return re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
 
 
 def daily_content_template(user_name: str, feed_image: str, feed_text: str, reels_text: str, story_text: str) -> str:
+    # Format text with bold markers
+    feed_text = format_text_with_bold(feed_text)
+    story_text = format_text_with_bold(story_text)
+    reels_text = format_text_with_bold(reels_text)
+    
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -36,7 +49,7 @@ def daily_content_template(user_name: str, feed_image: str, feed_text: str, reel
                                             Copie a legenda e baixe a imagem para colocar no Instagram.
                                         </p>
                                         {f'<img src="{feed_image}" alt="Imagem do Post" style="width: 100%; max-width: 520px; height: auto; border-radius: 8px; margin: 20px 0; display: block;">' if feed_image else '<div style="background-color: #f0f0f0; padding: 40px; text-align: center; border-radius: 8px; margin: 20px 0; color: #888;">Nenhuma imagem disponível</div>'}
-                                        <div style="color: #64748b; font-size: 16px; line-height: 1.6;">
+                                        <div style="color: #64748b; font-size: 16px; line-height: 1.6; white-space: pre-line;">
                                             {feed_text or 'Nenhum conteúdo de feed foi gerado.'}
                                         </div>
                                     </td>
@@ -51,7 +64,7 @@ def daily_content_template(user_name: str, feed_image: str, feed_text: str, reel
                                         <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">
                                             Utilize o roteiro para gravar um story para o Instagram.
                                         </p>
-                                        <div style="color: #64748b; font-size: 16px; line-height: 1.6;">
+                                        <div style="color: #64748b; font-size: 16px; line-height: 1.6; white-space: pre-line;">
                                             {story_text or 'Nenhum conteúdo de story foi gerado.'}
                                         </div>
                                     </td>
@@ -66,7 +79,7 @@ def daily_content_template(user_name: str, feed_image: str, feed_text: str, reel
                                         <p style="margin: 0 0 20px 0; color: #1e293b; font-size: 16px;">
                                             Utilize o roteiro para gravar um reels para o Instagram.
                                         </p>
-                                        <div style="color: #64748b; font-size: 16px; line-height: 1.6;">
+                                        <div style="color: #64748b; font-size: 16px; line-height: 1.6; white-space: pre-line;">
                                             {reels_text or 'Nenhum conteúdo de reels foi gerado.'}
                                         </div>
                                     </td>
