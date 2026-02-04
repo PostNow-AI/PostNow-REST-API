@@ -1,8 +1,14 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from format_weekly_context import format_weekly_context_output
 from services.get_creator_profile_data import get_creator_profile_data
+from services.prompt_utils import (
+    build_optimized_search_queries,
+    format_date_ptbr,
+    get_json_schema,
+    get_upcoming_holidays,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -15,164 +21,6 @@ class AIPromptService:
         """Set the user for whom the prompts will be generated."""
         self.user = user
 
-    def _get_upcoming_holidays(self, months: int = 3) -> list:
-        """Retorna uma lista de feriados brasileiros relevantes nos próximos N meses."""
-        today = datetime.now()
-        end_date = today + timedelta(days=months * 30)
-        
-        # Principais feriados e datas comemorativas fixas (Mês, Dia, Nome)
-        fixed_holidays = [
-            (1, 1, "Ano Novo / Confraternização Universal"),
-            (1, 25, "Aniversário de São Paulo (Regional)"),
-            (2, 14, "Dia de São Valentim / Valentine's Day (Internacional)"),
-            (3, 8, "Dia Internacional da Mulher"),
-            (3, 15, "Dia do Consumidor"),
-            (4, 1, "Dia da Mentira"),
-            (4, 21, "Tiradentes"),
-            (5, 1, "Dia do Trabalhador"),
-            (5, 12, "Dia das Mães (2024/2025 aprox - 2º domingo)"),
-            (6, 12, "Dia dos Namorados (Brasil)"),
-            (6, 24, "Dia de São João / Festas Juninas"),
-            (7, 26, "Dia dos Avós"),
-            (8, 11, "Dia dos Pais (2024/2025 aprox - 2º domingo)"),
-            (9, 7, "Independência do Brasil"),
-            (9, 15, "Dia do Cliente"),
-            (10, 12, "Dia das Crianças / N. Sra. Aparecida"),
-            (10, 31, "Halloween / Dia das Bruxas"),
-            (11, 2, "Finados"),
-            (11, 15, "Proclamação da República"),
-            (11, 20, "Dia da Consciência Negra"),
-            (11, 29, "Black Friday (2024 - Data Móvel fim nov)"),
-            (12, 25, "Natal"),
-            (12, 31, "Véspera de Ano Novo"),
-        ]
-        
-        upcoming = []
-        
-        for month, day, name in fixed_holidays:
-            try:
-                # Tentar ano atual
-                holiday_date = datetime(today.year, month, day)
-                if today <= holiday_date <= end_date:
-                    upcoming.append(f"{day:02d}/{month:02d} - {name}")
-                
-                # Tentar próximo ano (se estivermos no fim do ano)
-                holiday_date_next = datetime(today.year + 1, month, day)
-                if today <= holiday_date_next <= end_date:
-                    upcoming.append(f"{day:02d}/{month:02d} - {name}")
-            except ValueError:
-                continue 
-
-        return upcoming
-    
-    def _build_optimized_search_queries(self, profile_data: dict) -> dict:
-        """Constrói queries de busca otimizadas para cada seção do relatório."""
-        
-        # --- Helper para Datas Dinâmicas ---
-        months_pt = {
-            1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril",
-            5: "maio", 6: "junho", 7: "julho", 8: "agosto",
-            9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
-        }
-        
-        today = datetime.now()
-        current_year = today.year
-        next_year = current_year + 1
-        
-        # Contexto temporal para forçar conteúdo recente (este ano ou próximo)
-        time_context = f"{current_year} OR {next_year}"
-        
-        # Filtros Universais de Qualidade (Remove lixo acadêmico e PDFs estáticos)
-        quality_filters = "-filetype:pdf -filetype:doc -filetype:docx"
-        
-        # Calcular próximos 3 meses para Sazonalidade
-        future_dates = []
-        for i in range(3):
-            # i=0 (mês atual), i=1 (próximo), i=2 (seguinte)
-            future_month = today.month + i
-            future_year = today.year
-            
-            # Ajuste de ano
-            if future_month > 12:
-                future_month -= 12
-                future_year += 1
-                
-            future_dates.append(f"{months_pt[future_month]} {future_year}")
-            
-        seasonality_dates_query = " OR ".join(future_dates)
-        
-        # Extrair palavras-chave dos produtos/serviços (com fallback)
-        products_services = profile_data.get('products_services') or profile_data.get('business_description') or ''
-        products_keywords = products_services.replace(',', ' OR ') if products_services else profile_data.get('specialization', '')
-        
-        # Extrair interesses do público (com fallback)
-        target_interests = profile_data.get('target_interests') or ''
-        audience_keywords = target_interests.replace(',', ' OR ') if target_interests else profile_data.get('specialization', '')
-        
-        # Domínio do país baseado na localização
-        location = (profile_data.get('business_location') or 'Brasil').lower()
-        location_domain = 'br' if 'brasil' in location or 'br' in location else 'com'
-        
-        # Concorrentes (com fallback)
-        competitors = profile_data.get('main_competitors') or f"principais empresas {profile_data.get('specialization', '')}"
-        competitors_query = competitors.replace(',', ' OR ')
-        
-        # Benchmarks (Top Players)
-        benchmarks = profile_data.get('benchmark_brands') or f"melhores {profile_data.get('specialization', '')} referência mundo brasil"
-        benchmarks_query = benchmarks.replace(',', ' OR ')
-
-        # Instagram handle (com fallback)
-        instagram_raw = profile_data.get('business_instagram_handle') or ''
-        instagram = instagram_raw.strip('@') if instagram_raw else profile_data.get('business_name', '')
-        
-        queries = {
-            'mercado': f"""
-                {products_keywords} {profile_data['specialization']}
-                {profile_data['business_location']}
-                {time_context}
-                (notícia OR lei OR mudança OR novidade OR lançamento OR regulamentação)
-                site:{location_domain} {quality_filters} -site:medium.com -site:pinterest.* -site:slideshare.net
-            """.strip(),
-
-            'concorrencia': f"""
-                ({competitors_query} OR {benchmarks_query})
-                {products_keywords}
-                (case de sucesso OR campanha viral OR estratégia de marketing OR lançamento inovador OR "analise de campanha")
-                site:meioemensagem.com.br OR site:b9.com.br OR site:adnews.com.br OR site:propmark.com.br OR site:exame.com OR site:linkedin.com OR site:{location_domain} {quality_filters} -site:medium.com -site:pinterest.*
-            """.strip(),
-
-            'publico': f"""
-                "{profile_data['target_audience']}"
-                ({audience_keywords})
-                comportamento tendências desejos dores {time_context}
-                (pesquisa OR estudo OR relatório OR dados OR estatística) {quality_filters} -site:pinterest.* -site:slideshare.net
-            """.strip(),
-
-            'tendencias': f"""
-                {profile_data['specialization']} {products_keywords}
-                (polêmica OR debate OR discussão OR mudança OR "nova regra" OR opinião OR futuro OR desafio)
-                {time_context}
-                ("em alta" OR viral OR trend OR "hot topic")
-                (site:linkedin.com OR site:{location_domain}) {quality_filters} -site:pinterest.* -site:slideshare.net
-            """.strip(),
-
-            'sazonalidade': f"""
-                eventos conferências workshops
-                {profile_data['specialization']} {products_keywords}
-                {profile_data['business_location']}
-                ({seasonality_dates_query} OR eventos {current_year})
-                (site:sympla.com.br OR site:eventbrite.com.br OR site:feirasdobrasil.com.br OR site:e-inscricao.com OR site:linkedin.com OR agenda OR calendário)
-                {quality_filters}
-            """.strip(),
-
-            'marca': f"""
-                {profile_data['specialization']} "comportamento do consumidor" "sentimento" {current_year}
-                (tendência de comportamento OR mood do mercado OR clima cultural) {quality_filters} -site:pinterest.*
-            """.strip()
-        }
-        
-        return queries
-    
     def _build_market_prompt(self, profile_data: dict, queries: dict) -> list:
         """Constrói prompt específico para análise de mercado."""
         # Unificando lógica de prompt para seções de conteúdo (Mercado, Tendências, Concorrência)
@@ -248,7 +96,7 @@ class AIPromptService:
             }}
             
             SAÍDA FINAL (JSON ESTRUTURADO):
-            {self._get_json_schema('mercado')}
+            {get_json_schema('mercado')}
             """
         ]
     
@@ -282,7 +130,7 @@ class AIPromptService:
                - [0-20] Urgência.
             
             SAÍDA (JSON ESTRUTURADO):
-            {self._get_json_schema('concorrencia')}
+            {get_json_schema('concorrencia')}
             """
         ]
 
@@ -315,14 +163,14 @@ class AIPromptService:
                - [0-20] Facilidade.
             
             SAÍDA (JSON ESTRUTURADO):
-            {self._get_json_schema('tendencias')}
+            {get_json_schema('tendencias')}
             """
         ]
     
     def _build_seasonality_prompt(self, profile_data: dict, queries: dict) -> list:
         """Constrói prompt específico para sazonalidade (Parser de Eventos)."""
         current_date_str = datetime.now().strftime("%d/%m/%Y")
-        upcoming_holidays = self._get_upcoming_holidays(months=3)
+        upcoming_holidays = get_upcoming_holidays(months=3)
         upcoming_holidays_text = "\n            ".join(upcoming_holidays)
 
         return [
@@ -402,73 +250,6 @@ class AIPromptService:
             CRÍTICO: O campo "fontes" deve conter as URLs EXATAS retornadas pela busca.
             """
         ]
-
-    def _format_date_ptbr(self, date_obj) -> str:
-        """Converte objeto date em string 'DD de mês' (ex: '25 de dezembro')."""
-        months = {
-            1: 'janeiro', 2: 'fevereiro', 3: 'março', 4: 'abril',
-            5: 'maio', 6: 'junho', 7: 'julho', 8: 'agosto',
-            9: 'setembro', 10: 'outubro', 11: 'novembro', 12: 'dezembro'
-        }
-        return f"{date_obj.day} de {months[date_obj.month]}"
-
-    def _get_json_schema(self, section_name: str) -> str:
-        """Retorna o schema JSON esperado para cada seção."""
-        
-        # Schema padronizado para oportunidades com múltiplos ângulos e scoring
-        opportunities_schema = """
-        {
-            "fontes_analisadas": [
-                {
-                    "url_original": "URL exata da fonte analisada",
-                    "titulo_original": "Título da matéria original",
-                    "oportunidades": [
-                        {
-                            "titulo_ideia": "Título criativo e engajador para o post",
-                            "tipo": "Escolha um: Polêmica, Educativo, Newsjacking, Entretenimento, Estudo de Caso, Futuro",
-                            "score": 85,
-                            "explicacao_score": "Por que recebeu essa nota? (ex: Alta polêmica + Urgência)",
-                            "texto_base_analisado": "Trecho ou resumo do parágrafo que inspirou esta ideia",
-                            "gatilho_criativo": "Instrução rápida de como executar (ex: Faça um vídeo reagindo...)"
-                        }
-                    ]
-                }
-            ],
-                  "fontes": ["URL 1", "URL 2"]
-        }
-        """
-
-        schemas = {
-            'mercado': opportunities_schema,
-            'tendencias': opportunities_schema,
-            'concorrencia': opportunities_schema, # Unificando estrutura para simplificar agregação
-            'publico': """
-            {
-                "perfil": "Dados demográficos ou comportamentais recentes",
-                "comportamento_online": "Onde estão engajando agora",
-                  "interesses": ["Interesse 1", "Interesse 2"],
-                  "fontes": ["URL 1", "URL 2"]
-            }
-            """,
-            'sazonalidade': """
-            {
-                "datas_relevantes": [
-                    { "data": "YYYY-MM-DD", "evento": "Nome do Evento", "sugestao": "Sugestão de ação" }
-                ],
-                "eventos_locais": ["Nome do Evento (Local) - Data"],
-                "fontes": ["URL do calendário/evento"]
-            }
-            """,
-            'marca': """
-            {
-                "presenca_online": "Resumo do que foi encontrado",
-                "reputacao": "Sentimento geral",
-                "tom_comunicacao_atual": "Análise do tom",
-                  "fontes": ["URL 1", "URL 2"]
-            }
-            """
-        }
-        return schemas.get(section_name, "{}")
 
     def _build_synthesis_prompt(self, section_name: str, query: str, urls: list, profile_data: dict, excluded_topics: list = None, context_borrowed: list = None) -> list:
         """Constrói prompt para síntese de dados de busca."""
@@ -577,7 +358,7 @@ class AIPromptService:
         5. Não inclua citações no formato [cite:...] ou [1] no texto final.
         
         FORMATO JSON ESPERADO:
-        {self._get_json_schema(section_name)}
+        {get_json_schema(section_name)}
         """
         
         return [prompt]
