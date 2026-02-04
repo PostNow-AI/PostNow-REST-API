@@ -280,12 +280,12 @@ def generate_weekly_context_email_template(context_data, user_data):
                                             {brand_data.get('reputacao', 'Análise de reputação não disponível.')}
                                         </p>
                                         
-                                        {'''
+                                        {f"""
                                         <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
                                             <strong>Estilo de Comunicação:</strong><br>
                                             {brand_data.get('estilo_comunicacao', 'Análise de comunicação não disponível.')}
                                         </p>
-                                        ''' if brand_data.get('estilo_comunicacao') else ''}
+                                        """ if brand_data.get('estilo_comunicacao') else ''}
                                     </td>
                                 </tr>
                             </table>
