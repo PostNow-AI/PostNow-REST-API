@@ -1,8 +1,19 @@
+from datetime import date, datetime, time, timedelta
+
+from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Count
+from django.db.models.functions import TruncDate
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from AuditSystem.models import AuditLog
+from AuditSystem.services import AuditService
+from CreditSystem.models import UserSubscription
 
 from .models import (
     CustomFont,
@@ -20,6 +31,229 @@ from .serializers import (
     PredefinedFontSerializer,
     PredefinedSpecializationSerializer,
 )
+
+User = get_user_model()
+
+
+class DashboardStatsView(APIView):
+    """
+    Dashboard administrativo (somente admin) com métricas agregadas.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        period = self._parse_period(request)
+
+        # ===== Clientes (sem recorte por período) =====
+        non_admin_users = User.objects.filter(is_superuser=False)
+
+        active_subscriber_user_ids = UserSubscription.objects.filter(
+            status='active'
+        ).values_list('user_id', flat=True).distinct()
+
+        ever_subscriber_user_ids = UserSubscription.objects.values_list(
+            'user_id', flat=True
+        ).distinct()
+
+        active_clients = non_admin_users.filter(
+            id__in=active_subscriber_user_ids).count()
+
+        never_subscribed = non_admin_users.exclude(
+            id__in=ever_subscriber_user_ids).count()
+
+        cancelled_or_expired = non_admin_users.filter(id__in=ever_subscriber_user_ids).exclude(
+            id__in=active_subscriber_user_ids
+        ).count()
+
+        inactive_total = never_subscribed + cancelled_or_expired
+        total_clients = active_clients + inactive_total
+
+        # ===== E-mails (com recorte por período) =====
+        sent_qs = AuditLog.objects.filter(
+            action='email_sent', status='success')
+        opened_qs = AuditLog.objects.filter(
+            action='email_opened', status='success')
+
+        if period:
+            start_dt, end_dt = period
+            sent_qs = sent_qs.filter(
+                timestamp__gte=start_dt, timestamp__lte=end_dt)
+            opened_qs = opened_qs.filter(
+                timestamp__gte=start_dt, timestamp__lte=end_dt)
+
+        emails_sent = sent_qs.count()
+        emails_opened = opened_qs.count()
+        open_rate = round((emails_opened / emails_sent * 100),
+                          1) if emails_sent > 0 else 0
+
+        series_daily = self._build_daily_series(sent_qs, opened_qs, period)
+
+        return Response(
+            {
+                'success': True,
+                'data': {
+                    'clients': {
+                        'active': active_clients,
+                        'inactive': {
+                            'never_subscribed': never_subscribed,
+                            'cancelled_or_expired': cancelled_or_expired,
+                            'total': inactive_total,
+                        },
+                        'total': total_clients,
+                    },
+                    'emails': {
+                        'sent': emails_sent,
+                        'opened': emails_opened,
+                        'rate': open_rate,
+                    },
+                    'series': {
+                        'daily': series_daily,
+                    },
+                    'period': self._serialize_period(period),
+                    'generated_at': timezone.now().isoformat(),
+                },
+            }
+        )
+
+    def _parse_period(self, request):
+        """
+        Aceita:
+        - preset=7d|30d
+        - start=YYYY-MM-DD & end=YYYY-MM-DD
+        Retorna (start_dt, end_dt) timezone-aware ou None.
+        """
+        preset = (request.query_params.get('preset') or '').strip()
+        start_str = (request.query_params.get('start') or '').strip()
+        end_str = (request.query_params.get('end') or '').strip()
+
+        tz = timezone.get_current_timezone()
+        today = timezone.localdate()
+
+        if preset in {'7d', '30d'}:
+            days = 7 if preset == '7d' else 30
+            start_date = today - timedelta(days=days - 1)
+            end_date = today
+            return self._to_day_range(start_date, end_date, tz)
+
+        if start_str and end_str:
+            try:
+                start_date = date.fromisoformat(start_str)
+                end_date = date.fromisoformat(end_str)
+            except ValueError:
+                return None
+
+            if start_date > end_date:
+                return None
+
+            return self._to_day_range(start_date, end_date, tz)
+
+        return None
+
+    def _to_day_range(self, start_date: date, end_date: date, tz):
+        start_dt = timezone.make_aware(
+            datetime.combine(start_date, time.min), tz)
+        end_dt = timezone.make_aware(datetime.combine(end_date, time.max), tz)
+        return start_dt, end_dt
+
+    def _serialize_period(self, period):
+        if not period:
+            return None
+        start_dt, end_dt = period
+        return {
+            'start': timezone.localtime(start_dt).date().isoformat(),
+            'end': timezone.localtime(end_dt).date().isoformat(),
+        }
+
+    def _build_daily_series(self, sent_qs, opened_qs, period):
+        # Agregar por data local
+        sent_by_day = {
+            row['day'].isoformat(): row['count']
+            for row in sent_qs.annotate(day=TruncDate('timestamp')).values('day').annotate(count=Count('id'))
+        }
+        opened_by_day = {
+            row['day'].isoformat(): row['count']
+            for row in opened_qs.annotate(day=TruncDate('timestamp')).values('day').annotate(count=Count('id'))
+        }
+
+        if period:
+            start_dt, end_dt = period
+            start_date = timezone.localtime(start_dt).date()
+            end_date = timezone.localtime(end_dt).date()
+        else:
+            # Sem período: retornar somente dias existentes (ordenados)
+            all_days = sorted(set(sent_by_day.keys()) |
+                              set(opened_by_day.keys()))
+            return [
+                {
+                    'date': d,
+                    'emails_sent': sent_by_day.get(d, 0),
+                    'emails_opened': opened_by_day.get(d, 0),
+                }
+                for d in all_days
+            ]
+
+        days = []
+        cursor = start_date
+        while cursor <= end_date:
+            d = cursor.isoformat()
+            days.append(
+                {
+                    'date': d,
+                    'emails_sent': sent_by_day.get(d, 0),
+                    'emails_opened': opened_by_day.get(d, 0),
+                }
+            )
+            cursor += timedelta(days=1)
+        return days
+
+
+class MailjetWebhookView(APIView):
+    """
+    Webhook do Mailjet para registrar eventos (ex.: abertura).
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        payload = request.data
+        events = payload if isinstance(payload, list) else [payload]
+
+        audit_service = AuditService()
+        opened_count = 0
+
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+
+            if event.get('event') != 'open':
+                continue
+
+            opened_count += 1
+            audit_service.log_email_operation(
+                user=None,
+                action='email_opened',
+                status='success',
+                details={
+                    'email': event.get('email'),
+                    'time': event.get('time'),
+                    'MessageID': event.get('MessageID') or event.get('message_id'),
+                    'mj_campaign_id': event.get('mj_campaign_id'),
+                    'mj_contact_id': event.get('mj_contact_id'),
+                    'ip': event.get('ip'),
+                    'user_agent': event.get('useragent'),
+                    'original_event': event,
+                },
+            )
+
+        return Response(
+            {
+                'success': True,
+                'processed': len(events),
+                'opened_registered': opened_count,
+            }
+        )
 
 
 @api_view(['GET'])
