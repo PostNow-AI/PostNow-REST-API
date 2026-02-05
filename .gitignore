@@ -52,7 +52,6 @@ Thumbs.db
 
 
 # Scripts
-scripts/
 *.sh
 build_files.sh
 vercel_build.sh
