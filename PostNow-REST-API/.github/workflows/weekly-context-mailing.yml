@@ -1,22 +1,22 @@
-name: Daily Content Mailing
+name: Weekly Opportunities Email (Monday)
 
 on:
   schedule:
-    - cron: "0 9 * * 6" # Run once at 9:00 AM UTC (6am GMT-3)
+    - cron: "0 0 * * 1" # Monday 00:00 UTC
 
   workflow_dispatch:
 
 jobs:
-  mail-content:
+  mail-opportunities:
     runs-on: ubuntu-latest
     environment: Production
     steps:
       - name: Debug Url
         run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/send-weekly-context-email/"
 
-      - name: Call api for mailing
+      - name: Send opportunities email
         run: |
-          echo "Mailing automatically generated context"
+          echo "Sending weekly opportunities email"
           curl -X GET \
             "${{ secrets.VERCEL_API_URL}}/api/v1/client-context/send-weekly-context-email/" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \

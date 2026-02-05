@@ -1,0 +1,25 @@
+name: Weekly Market Intelligence Email (Wednesday)
+
+on:
+  schedule:
+    - cron: "0 0 * * 3" # Wednesday 00:00 UTC
+
+  workflow_dispatch:
+
+jobs:
+  mail-market-intelligence:
+    runs-on: ubuntu-latest
+    environment: Production
+    steps:
+      - name: Debug Url
+        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/send-market-intelligence-email/"
+
+      - name: Send market intelligence email
+        run: |
+          echo "Sending weekly market intelligence email"
+          curl -X GET \
+            "${{ secrets.VERCEL_API_URL}}/api/v1/client-context/send-market-intelligence-email/" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -w "HTTP Status: %{http_code}\n" \
+            -s

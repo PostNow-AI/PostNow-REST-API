@@ -1,8 +1,13 @@
+"""
+GlobalOptions Views - Admin dashboard and global configuration endpoints.
+Refactored to follow DRY principles.
+"""
 from datetime import date, datetime, time, timedelta
 
 from django.db import transaction
 from django.db.models import Count
 from django.db.models.functions import TruncDate
+from django.http import Http404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -35,39 +40,118 @@ from .serializers import (
 User = get_user_model()
 
 
+# =============================================================================
+# Response Helpers (DRY)
+# =============================================================================
+
+def success_response(data, status_code=status.HTTP_200_OK):
+    """Build a success response."""
+    return Response({'success': True, 'data': data}, status=status_code)
+
+
+def error_response(message, status_code=status.HTTP_400_BAD_REQUEST, errors=None):
+    """Build an error response."""
+    response = {'success': False, 'message': message}
+    if errors:
+        response['errors'] = errors
+    return Response(response, status=status_code)
+
+
+def server_error_response(action, error):
+    """Build a server error response."""
+    return Response(
+        {'success': False, 'message': f'Erro ao {action}: {str(error)}'},
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
+
+
+# =============================================================================
+# Validation Helpers (DRY)
+# =============================================================================
+
+def check_duplicate_name(model, name, extra_filters=None):
+    """Check if a name already exists in a model."""
+    filters = {'name__iexact': name, 'is_active': True}
+    if extra_filters:
+        filters.update(extra_filters)
+    return model.objects.filter(**filters).exists()
+
+
+def find_profession(profession_id):
+    """Find a profession by ID (custom or predefined)."""
+    # Try custom first
+    try:
+        return CustomProfession.objects.get(id=profession_id, is_active=True), True
+    except CustomProfession.DoesNotExist:
+        pass
+
+    # Try predefined
+    try:
+        return PredefinedProfession.objects.get(id=profession_id, is_active=True), False
+    except PredefinedProfession.DoesNotExist:
+        return None, None
+
+
+# =============================================================================
+# Dashboard Views
+# =============================================================================
+
 class DashboardStatsView(APIView):
-    """
-    Dashboard administrativo (somente admin) com métricas agregadas.
-    """
+    """Admin dashboard with aggregated metrics."""
 
     permission_classes = [IsAdminUser]
 
     def get(self, request):
         period = self._parse_period(request)
 
-        # ===== Clientes (sem recorte por período) =====
+        # Client stats (no period filter)
+        client_stats = self._get_client_stats()
+
+        # Email stats (with period filter)
+        email_stats, series_daily = self._get_email_stats(period)
+
+        return Response({
+            'success': True,
+            'data': {
+                'clients': client_stats,
+                'emails': email_stats,
+                'series': {'daily': series_daily},
+                'period': self._serialize_period(period),
+                'generated_at': timezone.now().isoformat(),
+            },
+        })
+
+    def _get_client_stats(self):
+        """Get client statistics."""
         non_admin_users = User.objects.filter(is_superuser=False)
 
-        active_subscriber_user_ids = UserSubscription.objects.filter(
+        active_ids = UserSubscription.objects.filter(
             status='active'
         ).values_list('user_id', flat=True).distinct()
 
-        ever_subscriber_user_ids = UserSubscription.objects.values_list(
+        ever_subscribed_ids = UserSubscription.objects.values_list(
             'user_id', flat=True
         ).distinct()
 
-        active_clients = non_admin_users.filter(id__in=active_subscriber_user_ids).count()
+        active = non_admin_users.filter(id__in=active_ids).count()
+        never_subscribed = non_admin_users.exclude(id__in=ever_subscribed_ids).count()
+        cancelled = non_admin_users.filter(
+            id__in=ever_subscribed_ids
+        ).exclude(id__in=active_ids).count()
+        inactive_total = never_subscribed + cancelled
 
-        never_subscribed = non_admin_users.exclude(id__in=ever_subscriber_user_ids).count()
+        return {
+            'active': active,
+            'inactive': {
+                'never_subscribed': never_subscribed,
+                'cancelled_or_expired': cancelled,
+                'total': inactive_total,
+            },
+            'total': active + inactive_total,
+        }
 
-        cancelled_or_expired = non_admin_users.filter(id__in=ever_subscriber_user_ids).exclude(
-            id__in=active_subscriber_user_ids
-        ).count()
-
-        inactive_total = never_subscribed + cancelled_or_expired
-        total_clients = active_clients + inactive_total
-
-        # ===== E-mails (com recorte por período) =====
+    def _get_email_stats(self, period):
+        """Get email statistics with optional period filter."""
         sent_qs = AuditLog.objects.filter(action='email_sent', status='success')
         opened_qs = AuditLog.objects.filter(action='email_opened', status='success')
 
@@ -76,46 +160,16 @@ class DashboardStatsView(APIView):
             sent_qs = sent_qs.filter(timestamp__gte=start_dt, timestamp__lte=end_dt)
             opened_qs = opened_qs.filter(timestamp__gte=start_dt, timestamp__lte=end_dt)
 
-        emails_sent = sent_qs.count()
-        emails_opened = opened_qs.count()
-        open_rate = round((emails_opened / emails_sent * 100), 1) if emails_sent > 0 else 0
+        sent = sent_qs.count()
+        opened = opened_qs.count()
+        rate = round((opened / sent * 100), 1) if sent > 0 else 0
 
-        series_daily = self._build_daily_series(sent_qs, opened_qs, period)
+        series = self._build_daily_series(sent_qs, opened_qs, period)
 
-        return Response(
-            {
-                'success': True,
-                'data': {
-                    'clients': {
-                        'active': active_clients,
-                        'inactive': {
-                            'never_subscribed': never_subscribed,
-                            'cancelled_or_expired': cancelled_or_expired,
-                            'total': inactive_total,
-                        },
-                        'total': total_clients,
-                    },
-                    'emails': {
-                        'sent': emails_sent,
-                        'opened': emails_opened,
-                        'rate': open_rate,
-                    },
-                    'series': {
-                        'daily': series_daily,
-                    },
-                    'period': self._serialize_period(period),
-                    'generated_at': timezone.now().isoformat(),
-                },
-            }
-        )
+        return {'sent': sent, 'opened': opened, 'rate': rate}, series
 
     def _parse_period(self, request):
-        """
-        Aceita:
-        - preset=7d|30d
-        - start=YYYY-MM-DD & end=YYYY-MM-DD
-        Retorna (start_dt, end_dt) timezone-aware ou None.
-        """
+        """Parse period from request parameters."""
         preset = (request.query_params.get('preset') or '').strip()
         start_str = (request.query_params.get('start') or '').strip()
         end_str = (request.query_params.get('end') or '').strip()
@@ -125,25 +179,20 @@ class DashboardStatsView(APIView):
 
         if preset in {'7d', '30d'}:
             days = 7 if preset == '7d' else 30
-            start_date = today - timedelta(days=days - 1)
-            end_date = today
-            return self._to_day_range(start_date, end_date, tz)
+            return self._to_day_range(today - timedelta(days=days - 1), today, tz)
 
         if start_str and end_str:
             try:
                 start_date = date.fromisoformat(start_str)
                 end_date = date.fromisoformat(end_str)
+                if start_date <= end_date:
+                    return self._to_day_range(start_date, end_date, tz)
             except ValueError:
-                return None
-
-            if start_date > end_date:
-                return None
-
-            return self._to_day_range(start_date, end_date, tz)
+                pass
 
         return None
 
-    def _to_day_range(self, start_date: date, end_date: date, tz):
+    def _to_day_range(self, start_date, end_date, tz):
         start_dt = timezone.make_aware(datetime.combine(start_date, time.min), tz)
         end_dt = timezone.make_aware(datetime.combine(end_date, time.max), tz)
         return start_dt, end_dt
@@ -158,51 +207,40 @@ class DashboardStatsView(APIView):
         }
 
     def _build_daily_series(self, sent_qs, opened_qs, period):
-        # Agregar por data local
-        sent_by_day = {
-            row['day'].isoformat(): row['count']
-            for row in sent_qs.annotate(day=TruncDate('timestamp')).values('day').annotate(count=Count('id'))
-        }
-        opened_by_day = {
-            row['day'].isoformat(): row['count']
-            for row in opened_qs.annotate(day=TruncDate('timestamp')).values('day').annotate(count=Count('id'))
-        }
+        sent_by_day = self._aggregate_by_day(sent_qs)
+        opened_by_day = self._aggregate_by_day(opened_qs)
 
-        if period:
-            start_dt, end_dt = period
-            start_date = timezone.localtime(start_dt).date()
-            end_date = timezone.localtime(end_dt).date()
-        else:
-            # Sem período: retornar somente dias existentes (ordenados)
+        if not period:
             all_days = sorted(set(sent_by_day.keys()) | set(opened_by_day.keys()))
-            return [
-                {
-                    'date': d,
-                    'emails_sent': sent_by_day.get(d, 0),
-                    'emails_opened': opened_by_day.get(d, 0),
-                }
-                for d in all_days
-            ]
+            return [self._day_entry(d, sent_by_day, opened_by_day) for d in all_days]
+
+        start_dt, end_dt = period
+        start_date = timezone.localtime(start_dt).date()
+        end_date = timezone.localtime(end_dt).date()
 
         days = []
         cursor = start_date
         while cursor <= end_date:
-            d = cursor.isoformat()
-            days.append(
-                {
-                    'date': d,
-                    'emails_sent': sent_by_day.get(d, 0),
-                    'emails_opened': opened_by_day.get(d, 0),
-                }
-            )
+            days.append(self._day_entry(cursor.isoformat(), sent_by_day, opened_by_day))
             cursor += timedelta(days=1)
         return days
 
+    def _aggregate_by_day(self, qs):
+        return {
+            row['day'].isoformat(): row['count']
+            for row in qs.annotate(day=TruncDate('timestamp')).values('day').annotate(count=Count('id'))
+        }
+
+    def _day_entry(self, d, sent_by_day, opened_by_day):
+        return {
+            'date': d,
+            'emails_sent': sent_by_day.get(d, 0),
+            'emails_opened': opened_by_day.get(d, 0),
+        }
+
 
 class MailjetWebhookView(APIView):
-    """
-    Webhook do Mailjet para registrar eventos (ex.: abertura).
-    """
+    """Mailjet webhook for email events."""
 
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -215,10 +253,7 @@ class MailjetWebhookView(APIView):
         opened_count = 0
 
         for event in events:
-            if not isinstance(event, dict):
-                continue
-
-            if event.get('event') != 'open':
+            if not isinstance(event, dict) or event.get('event') != 'open':
                 continue
 
             opened_count += 1
@@ -238,440 +273,282 @@ class MailjetWebhookView(APIView):
                 },
             )
 
-        return Response(
-            {
-                'success': True,
-                'processed': len(events),
-                'opened_registered': opened_count,
-            }
-        )
+        return Response({
+            'success': True,
+            'processed': len(events),
+            'opened_registered': opened_count,
+        })
 
+
+# =============================================================================
+# Profession & Specialization Views
+# =============================================================================
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_all_professions(request):
-    """Retorna todas as profissões disponíveis (predefinidas + customizadas)."""
+    """Return all available professions (predefined + custom)."""
     try:
-        # Buscar profissões predefinidas ativas
-        predefined_professions = PredefinedProfession.objects.filter(
-            is_active=True)
+        professions = []
 
-        # Buscar profissões customizadas ativas
-        custom_professions = CustomProfession.objects.filter(is_active=True)
+        # Add predefined
+        for prof in PredefinedProfession.objects.filter(is_active=True):
+            professions.append(_serialize_profession(prof, is_custom=False))
 
-        # Combinar e ordenar por nome
-        all_professions = []
+        # Add custom
+        for prof in CustomProfession.objects.filter(is_active=True):
+            professions.append(_serialize_profession(prof, is_custom=True))
 
-        # Adicionar predefinidas
-        for prof in predefined_professions:
-            all_professions.append({
-                'id': prof.id,
-                'name': prof.name,
-                'is_custom': False,
-                'is_predefined': True
-            })
-
-        # Adicionar customizadas
-        for prof in custom_professions:
-            all_professions.append({
-                'id': prof.id,
-                'name': prof.name,
-                'is_custom': True,
-                'is_predefined': False
-            })
-
-        # Ordenar por nome
-        all_professions.sort(key=lambda x: x['name'])
-
-        return Response({
-            'success': True,
-            'data': all_professions
-        })
+        # Sort by name
+        professions.sort(key=lambda x: x['name'])
+        return success_response(professions)
 
     except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'Erro ao buscar profissões: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return server_error_response('buscar profissões', e)
+
+
+def _serialize_profession(prof, is_custom):
+    """Serialize a profession object (DRY helper)."""
+    return {
+        'id': prof.id,
+        'name': prof.name,
+        'is_custom': is_custom,
+        'is_predefined': not is_custom
+    }
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_profession_specializations(request, profession_id):
-    """Retorna todas as especializações de uma profissão específica."""
+    """Return all specializations for a specific profession."""
     try:
-        # Tentar buscar em ambas as tabelas
-        profession = None
-        is_custom = None
-
-        # Tentar buscar na profissão customizada
-        try:
-            profession = CustomProfession.objects.get(
-                id=profession_id, is_active=True)
-            is_custom = True
-        except CustomProfession.DoesNotExist:
-            pass
-
-        # Se não encontrou na customizada, tentar na predefinida
+        profession, is_custom = find_profession(profession_id)
         if profession is None:
-            try:
-                profession = PredefinedProfession.objects.get(
-                    id=profession_id, is_active=True)
-                is_custom = False
-            except PredefinedProfession.DoesNotExist:
-                pass
-
-        # Se não encontrou em nenhuma, retornar 404
-        if profession is None:
-            from django.http import Http404
             raise Http404("Profissão não encontrada")
 
-        # Buscar especializações baseado no tipo de profissão
-        predefined_specializations = []
-        custom_specializations = []
-        custom_specializations_for_profession = []
+        specializations = _get_specializations_for_profession(profession, is_custom)
 
-        if is_custom:
-            # Para profissões customizadas, buscar apenas especializações customizadas
-            custom_specializations = CustomSpecialization.objects.filter(
-                profession=profession, is_active=True
-            )
-            custom_specializations_for_profession = CustomSpecializationForProfession.objects.filter(
-                profession_name=profession.name, is_active=True
-            )
-        else:
-            # Para profissões predefinidas, buscar especializações predefinidas e customizadas
-            predefined_specializations = PredefinedSpecialization.objects.filter(
-                profession=profession, is_active=True
-            )
-            # Para profissões predefinidas, não buscar especializações customizadas por enquanto
-            # custom_specializations = CustomSpecialization.objects.filter(
-            #     profession=profession, is_active=True
-            # )
-            custom_specializations_for_profession = CustomSpecializationForProfession.objects.filter(
-                profession_name=profession.name, is_active=True
-            )
-
-        # Combinar as duas listas
-        all_specializations = list(predefined_specializations) + list(
-            custom_specializations) + list(custom_specializations_for_profession)
-
-        # Serializar todas as especializações
-        serialized_specializations = []
-
-        for spec in all_specializations:
-            if isinstance(spec, PredefinedSpecialization):
-                serialized_spec = PredefinedSpecializationSerializer(spec).data
-                serialized_spec['is_custom'] = False
-            elif isinstance(spec, CustomSpecialization):
-                serialized_spec = CustomSpecializationSerializer(spec).data
-                serialized_spec['is_custom'] = True
-            else:  # CustomSpecializationForProfession
-                serialized_spec = {
-                    'id': spec.id,
-                    'name': spec.name,
-                    'profession_name': spec.profession_name,
-                    'created_by': spec.created_by.id if spec.created_by else None,
-                    'usage_count': spec.usage_count,
-                    'is_active': spec.is_active,
-                    'created_at': spec.created_at.isoformat() if spec.created_at else None,
-                }
-                serialized_spec['is_custom'] = True
-
-            serialized_specializations.append(serialized_spec)
-
-        return Response({
-            'success': True,
-            'data': {
-                'profession': {
-                    'id': profession.id,
-                    'name': profession.name,
-                    'is_custom': is_custom
-                },
-                'specializations': serialized_specializations
-            }
+        return success_response({
+            'profession': {
+                'id': profession.id,
+                'name': profession.name,
+                'is_custom': is_custom
+            },
+            'specializations': specializations
         })
 
     except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'Erro ao buscar especializações: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return server_error_response('buscar especializações', e)
 
+
+def _get_specializations_for_profession(profession, is_custom):
+    """Get and serialize all specializations for a profession."""
+    all_specs = []
+
+    if is_custom:
+        all_specs.extend(CustomSpecialization.objects.filter(
+            profession=profession, is_active=True
+        ))
+    else:
+        all_specs.extend(PredefinedSpecialization.objects.filter(
+            profession=profession, is_active=True
+        ))
+
+    # Add custom specializations for profession name
+    all_specs.extend(CustomSpecializationForProfession.objects.filter(
+        profession_name=profession.name, is_active=True
+    ))
+
+    return [_serialize_specialization(spec) for spec in all_specs]
+
+
+def _serialize_specialization(spec):
+    """Serialize a specialization object (DRY helper)."""
+    if isinstance(spec, PredefinedSpecialization):
+        data = PredefinedSpecializationSerializer(spec).data
+        data['is_custom'] = False
+    elif isinstance(spec, CustomSpecialization):
+        data = CustomSpecializationSerializer(spec).data
+        data['is_custom'] = True
+    else:  # CustomSpecializationForProfession
+        data = {
+            'id': spec.id,
+            'name': spec.name,
+            'profession_name': spec.profession_name,
+            'created_by': spec.created_by.id if spec.created_by else None,
+            'usage_count': spec.usage_count,
+            'is_active': spec.is_active,
+            'created_at': spec.created_at.isoformat() if spec.created_at else None,
+            'is_custom': True
+        }
+    return data
+
+
+# =============================================================================
+# Font Views
+# =============================================================================
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_all_fonts(request):
-    """Retorna todas as fontes disponíveis (predefinidas + customizadas)."""
+    """Return all available fonts (predefined + custom)."""
     try:
-        # Buscar fontes predefinidas ativas
-        predefined_fonts = PredefinedFont.objects.filter(is_active=True)
+        predefined = PredefinedFontSerializer(
+            PredefinedFont.objects.filter(is_active=True), many=True
+        ).data
+        custom = CustomFontSerializer(
+            CustomFont.objects.filter(is_active=True), many=True
+        ).data
 
-        # Buscar fontes customizadas ativas
-        custom_fonts = CustomFont.objects.filter(is_active=True)
-
-        # Serializar
-        predefined_serializer = PredefinedFontSerializer(
-            predefined_fonts, many=True)
-        custom_serializer = CustomFontSerializer(custom_fonts, many=True)
-
-        return Response({
-            'success': True,
-            'data': {
-                'predefined': predefined_serializer.data,
-                'custom': custom_serializer.data
-            }
-        })
+        return success_response({'predefined': predefined, 'custom': custom})
 
     except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'Erro ao buscar fontes: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return server_error_response('buscar fontes', e)
 
+
+# =============================================================================
+# Create Custom Resources Views
+# =============================================================================
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_custom_profession(request):
-    """Cria uma nova profissão customizada."""
-    try:
-        serializer = CustomProfessionSerializer(
-            data=request.data,
-            context={'request': request}
-        )
-
-        if serializer.is_valid():
-            with transaction.atomic():
-                # Verificar se já existe uma profissão com o mesmo nome
-                name = serializer.validated_data['name'].strip()
-
-                # Verificar em profissões predefinidas
-                if PredefinedProfession.objects.filter(name__iexact=name, is_active=True).exists():
-                    return Response({
-                        'success': False,
-                        'message': 'Já existe uma profissão com este nome.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                # Verificar em profissões customizadas
-                if CustomProfession.objects.filter(name__iexact=name, is_active=True).exists():
-                    return Response({
-                        'success': False,
-                        'message': 'Já existe uma profissão customizada com este nome.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                # Criar a profissão
-                profession = serializer.save()
-
-                return Response({
-                    'success': True,
-                    'message': 'Profissão criada com sucesso!',
-                    'data': CustomProfessionSerializer(profession).data
-                }, status=status.HTTP_201_CREATED)
-        else:
-            return Response({
-                'success': False,
-                'message': 'Dados inválidos.',
-                'errors': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'Erro ao criar profissão: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_custom_specialization(request):
-    """Cria uma nova especialização customizada."""
-    try:
-        serializer = CustomSpecializationSerializer(
-            data=request.data,
-            context={'request': request}
-        )
-
-        if serializer.is_valid():
-            with transaction.atomic():
-                # Verificar se já existe uma especialização com o mesmo nome para a profissão
-                name = serializer.validated_data['name'].strip()
-                profession = serializer.validated_data['profession']
-
-                # Verificar se já existe uma especialização com o mesmo nome para esta profissão
-                # Como estamos criando uma especialização customizada, só precisamos verificar nas customizadas
-                if CustomSpecialization.objects.filter(
-                    name__iexact=name,
-                    profession=profession,
-                    is_active=True
-                ).exists():
-                    return Response({
-                        'success': False,
-                        'message': 'Já existe uma especialização customizada com este nome para esta profissão.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                # Criar a especialização
-                specialization = serializer.save()
-
-                return Response({
-                    'success': True,
-                    'message': 'Especialização criada com sucesso!',
-                    'data': CustomSpecializationSerializer(specialization).data
-                }, status=status.HTTP_201_CREATED)
-        else:
-            return Response({
-                'success': False,
-                'message': 'Dados inválidos.',
-                'errors': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-    except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'Erro ao criar especialização: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    """Create a new custom profession."""
+    return _create_custom_resource(
+        request,
+        serializer_class=CustomProfessionSerializer,
+        duplicate_checks=[
+            (PredefinedProfession, 'Já existe uma profissão com este nome.'),
+            (CustomProfession, 'Já existe uma profissão customizada com este nome.'),
+        ],
+        action='criar profissão'
+    )
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_custom_font(request):
-    """Cria uma nova fonte customizada."""
+    """Create a new custom font."""
+    return _create_custom_resource(
+        request,
+        serializer_class=CustomFontSerializer,
+        duplicate_checks=[
+            (PredefinedFont, 'Já existe uma fonte com este nome.'),
+            (CustomFont, 'Já existe uma fonte customizada com este nome.'),
+        ],
+        action='criar fonte'
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_custom_specialization(request):
+    """Create a new custom specialization."""
     try:
-        serializer = CustomFontSerializer(
-            data=request.data,
-            context={'request': request}
+        serializer = CustomSpecializationSerializer(
+            data=request.data, context={'request': request}
         )
 
-        if serializer.is_valid():
-            with transaction.atomic():
-                # Verificar se já existe uma fonte com o mesmo nome
-                name = serializer.validated_data['name'].strip()
+        if not serializer.is_valid():
+            return error_response('Dados inválidos.', errors=serializer.errors)
 
-                # Verificar em fontes predefinidas
-                if PredefinedFont.objects.filter(name__iexact=name, is_active=True).exists():
-                    return Response({
-                        'success': False,
-                        'message': 'Já existe uma fonte com este nome.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            name = serializer.validated_data['name'].strip()
+            profession = serializer.validated_data['profession']
 
-                # Verificar em fontes customizadas
-                if CustomFont.objects.filter(name__iexact=name, is_active=True).exists():
-                    return Response({
-                        'success': False,
-                        'message': 'Já existe uma fonte customizada com este nome.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
+            if check_duplicate_name(CustomSpecialization, name, {'profession': profession}):
+                return error_response(
+                    'Já existe uma especialização customizada com este nome para esta profissão.'
+                )
 
-                # Criar a fonte
-                font = serializer.save()
-
-                return Response({
-                    'success': True,
-                    'message': 'Fonte criada com sucesso!',
-                    'data': CustomFontSerializer(font).data
-                }, status=status.HTTP_201_CREATED)
-        else:
-            return Response({
-                'success': False,
-                'message': 'Dados inválidos.',
-                'errors': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+            specialization = serializer.save()
+            return success_response(
+                CustomSpecializationSerializer(specialization).data,
+                status_code=status.HTTP_201_CREATED
+            )
 
     except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'Erro ao criar fonte: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return server_error_response('criar especialização', e)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_custom_specialization_for_profession(request):
-    """Cria uma nova especialização customizada para qualquer profissão."""
+    """Create a custom specialization for any profession."""
     try:
         name = request.data.get('name', '').strip()
         profession_id = request.data.get('profession')
 
         if not name or not profession_id:
-            return Response({
-                'success': False,
-                'message': 'Nome e profissão são obrigatórios.'
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return error_response('Nome e profissão são obrigatórios.')
 
         with transaction.atomic():
-            # Buscar a profissão (pode ser predefinida ou customizada)
-            # Priorizar profissões customizadas para evitar conflitos de ID
-            profession = None
-            try:
-                profession = CustomProfession.objects.get(
-                    id=profession_id, is_active=True)
-            except CustomProfession.DoesNotExist:
-                try:
-                    profession = PredefinedProfession.objects.get(
-                        id=profession_id, is_active=True)
-                except PredefinedProfession.DoesNotExist:
-                    return Response({
-                        'success': False,
-                        'message': 'Profissão não encontrada ou inativa.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
+            profession, is_custom = find_profession(profession_id)
+            if profession is None:
+                return error_response('Profissão não encontrada ou inativa.')
 
-            # Verificar se já existe uma especialização com o mesmo nome para a profissão
-            # Só verificar em PredefinedSpecialization se a profissão for predefinida
-            if isinstance(profession, PredefinedProfession):
-                # É uma profissão predefinida
-                if PredefinedSpecialization.objects.filter(
-                    name__iexact=name,
-                    profession=profession,
-                    is_active=True
-                ).exists():
-                    return Response({
-                        'success': False,
-                        'message': 'Já existe uma especialização com este nome para esta profissão.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-            # Só verificar em CustomSpecialization se a profissão for customizada
-            if isinstance(profession, CustomProfession):
-                if CustomSpecialization.objects.filter(
-                    name__iexact=name,
-                    profession=profession,
-                    is_active=True
-                ).exists():
-                    return Response({
-                        'success': False,
-                        'message': 'Já existe uma especialização customizada com este nome para esta profissão.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
+            # Check duplicates based on profession type
+            if not is_custom:
+                if check_duplicate_name(PredefinedSpecialization, name, {'profession': profession}):
+                    return error_response(
+                        'Já existe uma especialização com este nome para esta profissão.'
+                    )
+            else:
+                if check_duplicate_name(CustomSpecialization, name, {'profession': profession}):
+                    return error_response(
+                        'Já existe uma especialização customizada com este nome para esta profissão.'
+                    )
 
             if CustomSpecializationForProfession.objects.filter(
                 name__iexact=name,
                 profession_name__iexact=profession.name,
                 is_active=True
             ).exists():
-                return Response({
-                    'success': False,
-                    'message': 'Já existe uma especialização customizada com este nome para esta profissão.'
-                }, status=status.HTTP_400_BAD_REQUEST)
+                return error_response(
+                    'Já existe uma especialização customizada com este nome para esta profissão.'
+                )
 
-            # Criar a especialização
             specialization = CustomSpecializationForProfession.objects.create(
                 name=name,
                 profession_name=profession.name,
                 created_by=request.user
             )
 
-            return Response({
-                'success': True,
-                'message': 'Especialização criada com sucesso!',
-                'data': {
-                    'id': specialization.id,
-                    'name': specialization.name,
-                    'profession_name': specialization.profession_name,
-                    'created_by': specialization.created_by.id if specialization.created_by else None,
-                    'usage_count': specialization.usage_count,
-                    'is_active': specialization.is_active,
-                    'created_at': specialization.created_at.isoformat() if specialization.created_at else None,
-                }
-            }, status=status.HTTP_201_CREATED)
+            return success_response({
+                'id': specialization.id,
+                'name': specialization.name,
+                'profession_name': specialization.profession_name,
+                'created_by': specialization.created_by.id if specialization.created_by else None,
+                'usage_count': specialization.usage_count,
+                'is_active': specialization.is_active,
+                'created_at': specialization.created_at.isoformat() if specialization.created_at else None,
+            }, status_code=status.HTTP_201_CREATED)
 
     except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'Erro ao criar especialização: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return server_error_response('criar especialização', e)
+
+
+def _create_custom_resource(request, serializer_class, duplicate_checks, action):
+    """Generic helper for creating custom resources (DRY)."""
+    try:
+        serializer = serializer_class(data=request.data, context={'request': request})
+
+        if not serializer.is_valid():
+            return error_response('Dados inválidos.', errors=serializer.errors)
+
+        with transaction.atomic():
+            name = serializer.validated_data['name'].strip()
+
+            # Check all duplicate rules
+            for model, message in duplicate_checks:
+                if check_duplicate_name(model, name):
+                    return error_response(message)
+
+            resource = serializer.save()
+            return success_response(
+                serializer_class(resource).data,
+                status_code=status.HTTP_201_CREATED
+            )
+
+    except Exception as e:
+        return server_error_response(action, e)

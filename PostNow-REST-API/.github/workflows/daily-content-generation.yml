@@ -2,81 +2,54 @@ name: Daily Content Generation
 
 on:
   schedule:
-    - cron: "0 3 * * *" # Run once at 3:00 AM UTC
+    - cron: "0 3 * * *"  # Run at 3:00 AM UTC daily
   workflow_dispatch:
+
+env:
+  STAGGER_DELAY_SECONDS: 300  # 5 minutes between batches
+  MAX_REQUEST_TIME: 800
+  RETRY_COUNT: 3
+  RETRY_DELAY: 10
 
 jobs:
   generate-content:
     runs-on: ubuntu-latest
-    environment: Production # <-- Add this line
+    environment: Production
     strategy:
       matrix:
-        batch:
-          [
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24,
-            25,
-            26,
-            27,
-            28,
-          ]
-      max-parallel: 3 # Limit concurrent batches to avoid overwhelming your API
+        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+      max-parallel: 3
+      fail-fast: false
 
     steps:
-      - name: Debug URL
-        run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/daily-content-generation/?batch=${{ matrix.batch }}"
-      - name: Wait for staggered execution
+      - name: Stagger batch execution
         run: |
-          # Stagger the batches by 5 minutes each
-          DELAY=$(( (${{ matrix.batch }} - 1) * 300 ))
-          echo "Waiting $DELAY seconds before executing batch ${{ matrix.batch }}"
+          DELAY=$(( (${{ matrix.batch }} - 1) * ${{ env.STAGGER_DELAY_SECONDS }} ))
+          echo "Batch ${{ matrix.batch }}: waiting $DELAY seconds"
           sleep $DELAY
 
-      - name: Call Vercel API for batch ${{ matrix.batch }}
+      - name: Generate content for batch ${{ matrix.batch }}
         run: |
           echo "Processing batch ${{ matrix.batch }}"
+
           RESPONSE=$(curl -X GET \
             "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/daily-content-generation/?batch=${{ matrix.batch }}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            --max-time 800 \
-            --retry 3 \
-            --retry-delay 10 \
-            -w "\nHTTP Status: %{http_code}" \
+            --max-time ${{ env.MAX_REQUEST_TIME }} \
+            --retry ${{ env.RETRY_COUNT }} \
+            --retry-delay ${{ env.RETRY_DELAY }} \
+            -w "\nHTTP_STATUS:%{http_code}" \
             -s -S)
-          
+
           echo "$RESPONSE"
-          
-          # Extract HTTP status code
-          HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP Status:" | awk '{print $3}')
-          
-          # Check if successful (2xx status codes)
+
+          # Extract and validate HTTP status
+          HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
+
           if [[ "$HTTP_CODE" =~ ^2 ]]; then
-            echo "Batch ${{ matrix.batch }} completed successfully"
-            exit 0
+            echo "✓ Batch ${{ matrix.batch }} completed successfully"
           else
-            echo "Batch ${{ matrix.batch }} failed with status $HTTP_CODE"
+            echo "✗ Batch ${{ matrix.batch }} failed with status $HTTP_CODE"
             exit 1
           fi

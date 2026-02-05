@@ -17,6 +17,8 @@ from ClientContext.models import ClientContext
 from ClientContext.services.retry_client_context import RetryClientContext
 from ClientContext.services.weekly_context_email_service import (
     WeeklyContextEmailService,
+    EMAIL_TYPE_OPPORTUNITIES,
+    EMAIL_TYPE_MARKET_INTELLIGENCE,
 )
 from ClientContext.services.weekly_context_service import WeeklyContextService
 
@@ -249,7 +251,7 @@ def retry_generate_client_context(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def send_weekly_context_email(request):
-    """Send weekly context email view."""
+    """Send weekly opportunities email view (Monday)."""
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -257,12 +259,12 @@ def send_weekly_context_email(request):
         try:
             email_service = WeeklyContextEmailService()
             result = loop.run_until_complete(
-                email_service.mail_weekly_context()
+                email_service.mail_weekly_context(email_type=EMAIL_TYPE_OPPORTUNITIES)
             )
 
             AuditService.log_system_operation(
                 user=None,
-                action='weekly_context_email_sent',
+                action='weekly_opportunities_email_sent',
                 status='success' if result['status'] == 'success' else 'failure',
                 resource_type='WeeklyContextEmail',
                 details=result
@@ -273,7 +275,53 @@ def send_weekly_context_email(request):
         except Exception as e:
             AuditService.log_system_operation(
                 user=None,
-                action='weekly_context_email_failed',
+                action='weekly_opportunities_email_failed',
+                status='error',
+                resource_type='WeeklyContextEmail',
+                details={'error': str(e)}
+            )
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        finally:
+            loop.close()
+
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def send_market_intelligence_email(request):
+    """Send weekly market intelligence email view (Wednesday)."""
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            email_service = WeeklyContextEmailService()
+            result = loop.run_until_complete(
+                email_service.mail_weekly_context(email_type=EMAIL_TYPE_MARKET_INTELLIGENCE)
+            )
+
+            AuditService.log_system_operation(
+                user=None,
+                action='weekly_market_intelligence_email_sent',
+                status='success' if result['status'] == 'success' else 'failure',
+                resource_type='WeeklyContextEmail',
+                details=result
+            )
+
+            return Response(result, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            AuditService.log_system_operation(
+                user=None,
+                action='weekly_market_intelligence_email_failed',
                 status='error',
                 resource_type='WeeklyContextEmail',
                 details={'error': str(e)}

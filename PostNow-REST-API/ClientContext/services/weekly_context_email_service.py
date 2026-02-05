@@ -4,12 +4,19 @@ from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
 from ClientContext.models import ClientContext
-from ClientContext.utils.weekly_context import generate_weekly_context_email_template
+from ClientContext.utils.weekly_context import (
+    generate_weekly_context_email_template,
+    generate_opportunities_email_template,
+    generate_market_intelligence_email_template,
+)
 from CreatorProfile.models import CreatorProfile
 from django.contrib.auth.models import User
 from services.mailjet_service import MailjetService
 
 logger = logging.getLogger(__name__)
+
+EMAIL_TYPE_OPPORTUNITIES = 'opportunities'
+EMAIL_TYPE_MARKET_INTELLIGENCE = 'market_intelligence'
 
 
 class WeeklyContextEmailService:
@@ -28,12 +35,12 @@ class WeeklyContextEmailService:
                 'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources', 
                 'tendencies_popular_themes', 'tendencies_data', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources', 
                 'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources', 
-                'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_mentions', 'brand_sources', 
+                'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources', 
                 'created_at', 'updated_at', 'user_id', 'weekly_context_error', 'weekly_context_error_date'
             )
         )
 
-    async def mail_weekly_context(self):
+    async def mail_weekly_context(self, email_type=EMAIL_TYPE_OPPORTUNITIES):
         """Send weekly context emails to users."""
         contexts = await self.fetch_users_context_data()
         if not contexts:
@@ -57,7 +64,7 @@ class WeeklyContextEmailService:
                 user = await sync_to_async(User.objects.get)(id=user_id)
                 # Assuming one context per user
                 context_data = users_context[user_id][0]
-                await self.send_weekly_context_email(user, context_data)
+                await self.send_weekly_context_email(user, context_data, email_type=email_type)
                 processed += 1
             except Exception as e:
                 logger.error(f"Failed to process user {user_id}: {str(e)}")
@@ -75,16 +82,26 @@ class WeeklyContextEmailService:
             'failed': failed,
         }
 
-    async def send_weekly_context_email(self, user: User, context_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def send_weekly_context_email(self, user: User, context_data: Dict[str, Any], email_type=None) -> Dict[str, Any]:
         """Send weekly context email to a single user."""
         try:
             # Get user profile data
             user_data = await self._get_user_profile_data(user)
 
-            # Generate email content
-            subject = f"📈 Seu Contexto Semanal de Mercado - {user_data['business_name']}"
-            html_content = generate_weekly_context_email_template(
-                context_data, user_data)
+            # Generate email content based on type
+            if email_type == EMAIL_TYPE_OPPORTUNITIES:
+                subject = f"🎯 Oportunidades de Conteúdo - {user_data['business_name']}"
+                html_content = generate_opportunities_email_template(
+                    context_data, user_data)
+            elif email_type == EMAIL_TYPE_MARKET_INTELLIGENCE:
+                subject = f"📊 Inteligência de Mercado - {user_data['business_name']}"
+                html_content = generate_market_intelligence_email_template(
+                    context_data, user_data)
+            else:
+                # Default: combined email (used by generate_single_client_context)
+                subject = f"📈 Seu Contexto Semanal de Mercado - {user_data['business_name']}"
+                html_content = generate_weekly_context_email_template(
+                    context_data, user_data)
 
             # Send email
             success, response = await self.mailjet_service.send_email(
