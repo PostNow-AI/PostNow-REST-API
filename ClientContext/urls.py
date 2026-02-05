@@ -15,4 +15,8 @@ urlpatterns = [
          name='send_weekly_context_email'),
     path('generate-single-client-context/', views.generate_single_client_context,
          name='generate_single_client_context'),
+    path('weekly-context/', views.get_weekly_context,
+         name='get_weekly_context'),
+    path('weekly-context/history/', views.get_weekly_context_history,
+         name='get_weekly_context_history'),
 ]

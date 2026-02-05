@@ -52,6 +52,66 @@ def generate_weekly_context_email_template(context_data, user_data):
         'fontes': context_data.get('seasonal_sources', [])
     }
 
+    # Ranked opportunities data
+    ranked_opportunities = context_data.get('tendencies_data', {})
+    if not isinstance(ranked_opportunities, dict):
+        ranked_opportunities = {}
+
+    SECTION_STYLES = {
+        'polemica': {'emoji': '🔥', 'titulo': 'Polêmica & Debate', 'border': '#ef4444', 'bg': '#fef2f2'},
+        'educativo': {'emoji': '📚', 'titulo': 'Educativo & Utilidade', 'border': '#10b981', 'bg': '#ecfdf5'},
+        'newsjacking': {'emoji': '📰', 'titulo': 'Newsjacking (Urgente)', 'border': '#f59e0b', 'bg': '#fffbeb'},
+        'futuro': {'emoji': '🔮', 'titulo': 'Futuro & Tendências', 'border': '#8b5cf6', 'bg': '#f5f3ff'},
+        'estudo_caso': {'emoji': '📊', 'titulo': 'Estudo de Caso', 'border': '#06b6d4', 'bg': '#ecfeff'},
+        'entretenimento': {'emoji': '🎭', 'titulo': 'Entretenimento', 'border': '#ec4899', 'bg': '#fdf2f8'},
+        'outros': {'emoji': '💡', 'titulo': 'Outras Oportunidades', 'border': '#3b82f6', 'bg': '#eff6ff'},
+    }
+
+    frontend_url = os.getenv('FRONTEND_URL', 'https://app.postnow.com.br')
+
+    # Build ranked opportunities HTML
+    opportunities_html = ''
+    for section_key in ['polemica', 'newsjacking', 'educativo', 'futuro', 'estudo_caso', 'entretenimento', 'outros']:
+        section = ranked_opportunities.get(section_key, {})
+        if not section or not isinstance(section, dict):
+            continue
+        items = section.get('items', [])
+        if not items:
+            continue
+
+        style = SECTION_STYLES.get(section_key, SECTION_STYLES['outros'])
+        titulo = section.get('titulo', f"{style['emoji']} {style['titulo']}")
+
+        cards_html = ''
+        for item in items[:3]:  # Max 3 per section in email
+            score = item.get('score', 0)
+            titulo_ideia = item.get('titulo_ideia', '')
+            explicacao = item.get('explicacao_score', '')
+            gatilho = item.get('gatilho_criativo', '')
+            url_fonte = item.get('url_fonte', '')
+
+            cards_html += f"""
+                <div style="background-color: #ffffff; border-left: 4px solid {style['border']}; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                    <div style="margin-bottom: 8px;">
+                        <span style="font-size: 16px; font-weight: 600; color: #1e293b;">{titulo_ideia}</span>
+                        <span style="display: inline-block; background-color: {style['border']}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 700; margin-left: 8px; vertical-align: middle;">{score}</span>
+                    </div>
+                    <p style="margin: 0 0 8px 0; color: #64748b; font-size: 13px;">{explicacao}</p>
+                    <div style="background-color: {style['bg']}; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                        <p style="margin: 0; color: #334155; font-size: 13px;">💡 <strong>Sugestão:</strong> {gatilho}</p>
+                    </div>
+                    <div>
+                        <a href="{frontend_url}/weekly-context" style="display: inline-block; background-color: {style['border']}; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">Criar Post</a>
+                        {'<a href="' + url_fonte + '" style="display: inline-block; color: ' + style["border"] + '; padding: 8px 16px; font-size: 13px; text-decoration: none; font-weight: 500;">Ver Fonte →</a>' if url_fonte else ''}
+                    </div>
+                </div>"""
+
+        opportunities_html += f"""
+            <div style="margin-bottom: 24px;">
+                <h3 style="margin: 0 0 12px 0; color: {style['border']}; font-size: 18px; font-weight: 600;">{titulo} ({len(items)})</h3>
+                {cards_html}
+            </div>"""
+
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -95,6 +155,28 @@ def generate_weekly_context_email_template(context_data, user_data):
                                     </td>
                                 </tr>
                             </table>
+
+                            <!-- Ranked Opportunities Section (Hero) -->
+                            {f"""
+                            <table role="presentation" style="width: 100%; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                                <tr>
+                                    <td style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 20px; color: white;">
+                                        <h2 style="margin: 0; font-size: 20px; font-weight: 600;">🎯 Oportunidades de Conteúdo da Semana</h2>
+                                        <p style="margin: 6px 0 0 0; color: #94a3b8; font-size: 14px;">Rankeadas por potencial de engajamento</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 24px; background-color: #f8fafc;">
+                                        {opportunities_html}
+                                        <div style="text-align: center; margin-top: 16px;">
+                                            <a href="{frontend_url}/weekly-context" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                                                🚀 Ver Todas as Oportunidades no App
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                            """ if opportunities_html else ''}
 
                             <!-- Market Overview Section -->
                             <table role="presentation" style="width: 100%; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
@@ -421,8 +503,8 @@ def generate_weekly_context_email_template(context_data, user_data):
                                         <p style="margin: 0 0 20px 0; color: #e2e8f0; font-size: 16px; line-height: 1.5;">
                                             Use estes insights para criar posts que realmente conectam com seu público
                                         </p>
-                                        <a href="{os.getenv('FRONTEND_URL')}" style="display: inline-block; background-color: #ffffff; color: #667eea; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
-                                            Acessar Dashboard
+                                        <a href="{frontend_url}/weekly-context" style="display: inline-block; background-color: #ffffff; color: #667eea; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                                            Abrir Radar de Oportunidades
                                         </a>
                                     </td>
                                 </tr>

@@ -240,24 +240,60 @@ class WeeklyContextService:
             # === MERCADO ===
             mercado = context_data.get('mercado', {})
             mercado_raw, mercado_opps, mercado_titles = _extract_from_opportunities(mercado)
-            # Panorama: usar campo direto OU sintetizar dos textos analisados
-            client_context.market_panorama = mercado.get('panorama', '') or \
-                '. '.join([o.get('texto_base_analisado', '') for o in mercado_opps[:3] if o.get('texto_base_analisado')])
-            # Tendências: títulos das ideias geradas
+            # Panorama: sintetizar um resumo coerente dos textos analisados
+            if mercado.get('panorama'):
+                client_context.market_panorama = mercado['panorama']
+            else:
+                # Tentar extrair textos da seção mercado OU dos ranked_opportunities de origem mercado
+                textos = [o.get('texto_base_analisado', '') for o in mercado_opps if o.get('texto_base_analisado')]
+                if not textos and ranked_opportunities:
+                    for section in ranked_opportunities.values():
+                        if isinstance(section, dict):
+                            for item in section.get('items', []):
+                                if item.get('origem_secao') == 'mercado' and item.get('texto_base_analisado'):
+                                    textos.append(item['texto_base_analisado'])
+                if textos:
+                    client_context.market_panorama = (
+                        f"Esta semana, as análises de mercado destacam: {textos[0]}"
+                        + (f" Além disso, {textos[1]}" if len(textos) > 1 else "")
+                        + (f" Outro ponto relevante: {textos[2]}" if len(textos) > 2 else "")
+                    )
+                else:
+                    client_context.market_panorama = ''
+            # Tendências: títulos das ideias do mercado (com fallback para ranked)
+            all_mercado_opps = list(mercado_opps)
+            if not all_mercado_opps and ranked_opportunities:
+                for section in ranked_opportunities.values():
+                    if isinstance(section, dict):
+                        for item in section.get('items', []):
+                            if item.get('origem_secao') == 'mercado':
+                                all_mercado_opps.append(item)
             client_context.market_tendencies = mercado.get('tendencias', []) or \
-                [o.get('titulo_ideia', '') for o in mercado_opps if o.get('titulo_ideia')]
-            # Desafios: filtrar oportunidades do tipo Polêmica como desafios
+                [o.get('titulo_ideia', '') for o in all_mercado_opps if o.get('titulo_ideia')]
+            # Desafios: filtrar oportunidades do tipo Polêmica/Newsjacking
             client_context.market_challenges = mercado.get('desafios', []) or \
-                [o.get('titulo_ideia', '') for o in mercado_opps if o.get('tipo') in ('Polêmica', 'Newsjacking')]
+                [o.get('titulo_ideia', '') for o in all_mercado_opps if o.get('tipo') in ('Polêmica', 'Newsjacking')]
             client_context.market_sources = mercado.get('fontes', [])
             client_context.market_opportunities = mercado_raw
 
             # === CONCORRÊNCIA ===
             concorrencia = context_data.get('concorrencia', {})
             conc_raw, conc_opps, conc_titles = _extract_from_opportunities(concorrencia)
-            # Principais: títulos das fontes analisadas (nomes dos concorrentes/artigos)
-            client_context.competition_main = concorrencia.get('principais', []) or conc_titles
-            # Estratégias: sintetizar dos gatilhos criativos
+            # Principais: extrair nomes das ferramentas/empresas dos títulos
+            if concorrencia.get('principais'):
+                client_context.competition_main = concorrencia['principais']
+            else:
+                # Títulos de artigos geralmente têm formato "Nome: Descrição" ou são o nome direto
+                nomes = []
+                for t in conc_titles:
+                    if ':' in t:
+                        nomes.append(t.split(':')[0].strip())
+                    elif ' - ' in t:
+                        nomes.append(t.split(' - ')[0].strip())
+                    else:
+                        nomes.append(t)
+                client_context.competition_main = nomes
+            # Estratégias: sintetizar um texto coerente
             client_context.competition_strategies = concorrencia.get('estrategias', '') or \
                 '. '.join([o.get('gatilho_criativo', '') for o in conc_opps[:3] if o.get('gatilho_criativo')])
             # Oportunidades: títulos das ideias
@@ -278,38 +314,31 @@ class WeeklyContextService:
             tend_raw, tend_opps, tend_titles = _extract_from_opportunities(tendencias)
             client_context.tendencies_popular_themes = tendencias.get('temas_populares', []) or \
                 [o.get('titulo_ideia', '') for o in tend_opps if o.get('titulo_ideia')]
-            # Gerar hashtags a partir dos títulos das oportunidades (o novo formato não gera hashtags)
+            # Gerar hashtags a partir dos tipos e temas das oportunidades
             if tendencias.get('hashtags'):
                 client_context.tendencies_hashtags = tendencias['hashtags']
             else:
                 hashtags = set()
-                for o in tend_opps + mercado_opps:
-                    titulo = o.get('titulo_ideia', '')
-                    # Extrair palavras significativas dos títulos para hashtags
-                    for word in titulo.split():
-                        clean = word.strip('?!.,;:()[]{}"\'-').capitalize()
-                        if len(clean) > 3 and clean.isalpha():
-                            hashtags.add(f"#{clean}")
-                    # Usar tipo como hashtag também
+                # Adicionar tipos como hashtags (mais relevantes que palavras aleatórias)
+                STOP_WORDS = {'para', 'como', 'será', 'pode', 'vai', 'que', 'por', 'uma', 'seu', 'sobre', 'mais', 'isso', 'este', 'esta', 'com', 'não', 'dos', 'das'}
+                for o in tend_opps + mercado_opps + conc_opps:
                     tipo = o.get('tipo', '')
                     if tipo:
                         hashtags.add(f"#{tipo.replace(' ', '')}")
-                client_context.tendencies_hashtags = sorted(list(hashtags))[:15]
+                    # Extrair apenas substantivos relevantes (palavras maiores de 5 chars)
+                    titulo = o.get('titulo_ideia', '')
+                    for word in titulo.split():
+                        clean = word.strip('?!.,;:()[]{}"\'-').lower()
+                        if len(clean) > 5 and clean.isalpha() and clean not in STOP_WORDS:
+                            hashtags.add(f"#{clean.capitalize()}")
+                client_context.tendencies_hashtags = sorted(list(hashtags))[:12]
 
-            # Gerar keywords a partir dos títulos e gatilhos criativos
+            # Gerar keywords a partir dos títulos das oportunidades
             if tendencias.get('keywords'):
                 client_context.tendencies_keywords = tendencias['keywords']
             else:
-                keywords = set()
-                for o in tend_opps:
-                    titulo = o.get('titulo_ideia', '')
-                    gatilho = o.get('gatilho_criativo', '')
-                    # Extrair frases-chave dos títulos
-                    if titulo:
-                        keywords.add(titulo)
-                    if gatilho:
-                        keywords.add(gatilho)
-                client_context.tendencies_keywords = list(keywords)[:10]
+                keywords = [o.get('titulo_ideia', '') for o in tend_opps if o.get('titulo_ideia')]
+                client_context.tendencies_keywords = keywords[:8]
             client_context.tendencies_sources = tendencias.get('fontes', [])
 
             # === SAZONALIDADE ===

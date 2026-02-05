@@ -13,8 +13,9 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from ClientContext.models import ClientContext
+from ClientContext.models import ClientContext, ClientContextHistory
 from ClientContext.services.retry_client_context import RetryClientContext
+from CreatorProfile.models import CreatorProfile
 from ClientContext.services.weekly_context_email_service import (
     WeeklyContextEmailService,
 )
@@ -290,3 +291,105 @@ def send_weekly_context_email(request):
         return Response({
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _build_weekly_context_response(context_record, user, has_previous=False, has_next=False):
+    """Build the standardized response for weekly context endpoints."""
+    ranked_opportunities = context_record.tendencies_data or {}
+
+    # Add count to each section if missing
+    for section_key, section_data in ranked_opportunities.items():
+        if isinstance(section_data, dict) and 'items' in section_data:
+            section_data['count'] = len(section_data.get('items', []))
+
+    created_at = context_record.created_at
+    week_number = created_at.isocalendar()[1]
+    # Build week range string (Monday-Sunday)
+    from datetime import timedelta
+    week_start = created_at - timedelta(days=created_at.weekday())
+    week_end = week_start + timedelta(days=6)
+    week_range = f"{week_start.strftime('%d %b')} - {week_end.strftime('%d %b')}"
+
+    business_name = ""
+    profile = CreatorProfile.objects.filter(user=user).first()
+    if profile:
+        business_name = profile.business_name or ""
+
+    return {
+        'success': True,
+        'data': {
+            'week_number': week_number,
+            'week_range': week_range,
+            'created_at': created_at.isoformat(),
+            'business_name': business_name,
+            'has_previous': has_previous,
+            'has_next': has_next,
+            'ranked_opportunities': ranked_opportunities,
+        }
+    }
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_weekly_context(request):
+    """Return the current week's ranked opportunities for the authenticated user."""
+    try:
+        user = request.user
+        context = ClientContext.objects.filter(
+            user=user,
+            weekly_context_error__isnull=True,
+        ).select_related('user').first()
+
+        if not context or not context.tendencies_data:
+            return Response(
+                {'success': False, 'data': None, 'message': 'No context available'},
+                status=status.HTTP_200_OK
+            )
+
+        has_previous = ClientContextHistory.objects.filter(user=user).count() > 1
+        response_data = _build_weekly_context_response(
+            context, user, has_previous=has_previous, has_next=False
+        )
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'success': False, 'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_weekly_context_history(request):
+    """Return historical weekly context by offset (0 = most recent, 1 = previous, etc.)."""
+    try:
+        user = request.user
+        offset = int(request.GET.get('offset', 0))
+
+        history_qs = ClientContextHistory.objects.filter(
+            user=user
+        ).order_by('-created_at')
+
+        total = history_qs.count()
+
+        if offset < 0 or offset >= total:
+            return Response(
+                {'success': False, 'data': None, 'message': 'No context for this period'},
+                status=status.HTTP_200_OK
+            )
+
+        record = history_qs[offset]
+        has_previous = (offset + 1) < total
+        has_next = offset > 0
+
+        response_data = _build_weekly_context_response(
+            record, user, has_previous=has_previous, has_next=has_next
+        )
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'success': False, 'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
