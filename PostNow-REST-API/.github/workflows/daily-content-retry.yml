@@ -1,0 +1,55 @@
+name: Retry Daily Content Generation - Failed Users
+
+on:
+  schedule:
+    - cron: "0 12 * * *"  # Run at 12:00 PM UTC (after main generation)
+  workflow_dispatch:
+
+env:
+  STAGGER_DELAY_SECONDS: 300  # 5 minutes between batches
+  MAX_REQUEST_TIME: 800
+  RETRY_COUNT: 3
+  RETRY_DELAY: 10
+
+jobs:
+  retry-failed-users:
+    runs-on: ubuntu-latest
+    environment: Production
+    strategy:
+      matrix:
+        batch: [1, 2, 3, 4, 5, 6, 7, 8]
+      max-parallel: 3
+      fail-fast: false
+
+    steps:
+      - name: Stagger batch execution
+        run: |
+          DELAY=$(( (${{ matrix.batch }} - 1) * ${{ env.STAGGER_DELAY_SECONDS }} ))
+          echo "Batch ${{ matrix.batch }}: waiting $DELAY seconds"
+          sleep $DELAY
+
+      - name: Retry failed users for batch ${{ matrix.batch }}
+        run: |
+          echo "Retrying failed users - batch ${{ matrix.batch }}"
+
+          RESPONSE=$(curl -X GET \
+            "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/retry-failed-users/?batch=${{ matrix.batch }}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time ${{ env.MAX_REQUEST_TIME }} \
+            --retry ${{ env.RETRY_COUNT }} \
+            --retry-delay ${{ env.RETRY_DELAY }} \
+            -w "\nHTTP_STATUS:%{http_code}" \
+            -s -S)
+
+          echo "$RESPONSE"
+
+          # Extract and validate HTTP status
+          HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d':' -f2)
+
+          if [[ "$HTTP_CODE" =~ ^2 ]]; then
+            echo "✓ Retry batch ${{ matrix.batch }} completed successfully"
+          else
+            echo "✗ Retry batch ${{ matrix.batch }} failed with status $HTTP_CODE"
+            exit 1
+          fi
