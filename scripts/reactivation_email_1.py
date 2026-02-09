@@ -125,7 +125,7 @@ async def send_reactivation_email_1(user, dry_run=False):
         subject = "Apenas um obrigado (e algumas novidades por aqui)"
 
         if dry_run:
-            print(f"   [DRY RUN] Enviaria email para: {user.email}")
+            print(f"   [DRY RUN] Enviaria email para: {user.email} - {user.id}")
             print(f"   Assunto: {subject}")
             return True, "Dry run - email não enviado"
 
