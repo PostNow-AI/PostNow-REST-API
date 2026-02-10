@@ -42,6 +42,10 @@ class RetryClientContext:
         offset = (batch_number - 1) * batch_size
         limit = batch_size
 
+        if batch_size == 0:
+            offset = 0
+            limit = None  # Process all users with errors
+
         eligible_users = await self._get_eligible_users(offset, limit)
         total = len(eligible_users)
 
