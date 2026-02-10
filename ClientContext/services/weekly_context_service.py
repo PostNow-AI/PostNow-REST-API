@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
@@ -16,15 +16,69 @@ from services.user_validation_service import UserValidationService
 
 logger = logging.getLogger(__name__)
 
+# DRY: Mapeamento centralizado JSON -> Model fields
+CONTEXT_FIELD_MAPPING = {
+    'mercado': {
+        'panorama': ('market_panorama', ''),
+        'tendencias': ('market_tendencies', []),
+        'desafios': ('market_challenges', []),
+        'fontes': ('market_sources', []),
+    },
+    'concorrencia': {
+        'principais': ('competition_main', []),
+        'estrategias': ('competition_strategies', ''),
+        'oportunidades': ('competition_opportunities', ''),
+        'fontes': ('competition_sources', []),
+    },
+    'publico': {
+        'perfil': ('target_audience_profile', ''),
+        'comportamento_online': ('target_audience_behaviors', ''),
+        'interesses': ('target_audience_interests', []),
+        'fontes': ('target_audience_sources', []),
+    },
+    'tendencias': {
+        'temas_populares': ('tendencies_popular_themes', []),
+        'hashtags': ('tendencies_hashtags', []),
+        'keywords': ('tendencies_keywords', []),
+        'fontes': ('tendencies_sources', []),
+    },
+    'sazonalidade': {
+        'datas_relevantes': ('seasonal_relevant_dates', []),
+    },
+    'sazonal': {
+        'eventos_locais': ('seasonal_local_events', []),
+        'fontes': ('seasonal_sources', []),
+    },
+    'marca': {
+        'presenca_online': ('brand_online_presence', ''),
+        'reputacao': ('brand_reputation', ''),
+        'tom_comunicacao_atual': ('brand_communication_style', ''),
+        'fontes': ('brand_sources', []),
+    },
+}
+
 
 class WeeklyContextService:
-    def __init__(self):
-        self.user_validation_service = UserValidationService()
-        self.semaphore_service = SemaphoreService()
-        self.ai_service = AiService()
-        self.prompt_service = AIPromptService()
-        self.audit_service = AuditService()
-        self.mailjet_service = MailjetService()
+    """Service for generating weekly context for users.
+
+    Supports dependency injection for testing and flexibility (DIP).
+    """
+
+    def __init__(
+        self,
+        user_validation_service: Optional[UserValidationService] = None,
+        semaphore_service: Optional[SemaphoreService] = None,
+        ai_service: Optional[AiService] = None,
+        prompt_service: Optional[AIPromptService] = None,
+        audit_service: Optional[AuditService] = None,
+        mailjet_service: Optional[MailjetService] = None,
+    ):
+        self.user_validation_service = user_validation_service or UserValidationService()
+        self.semaphore_service = semaphore_service or SemaphoreService()
+        self.ai_service = ai_service or AiService()
+        self.prompt_service = prompt_service or AIPromptService()
+        self.audit_service = audit_service or AuditService()
+        self.mailjet_service = mailjet_service or MailjetService()
 
     @sync_to_async
     def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
@@ -143,58 +197,8 @@ class WeeklyContextService:
 
             client_context, created = await sync_to_async(ClientContext.objects.get_or_create)(user=user)
 
-            # Update the context fields
-            client_context.market_panorama = context_data.get(
-                'mercado', {}).get('panorama', '')
-            client_context.market_tendencies = context_data.get(
-                'mercado', {}).get('tendencias', [])
-            client_context.market_challenges = context_data.get(
-                'mercado', {}).get('desafios', [])
-            client_context.market_sources = context_data.get(
-                'mercado', {}).get('fontes', [])
-
-            client_context.competition_main = context_data.get(
-                'concorrencia', {}).get('principais', [])
-            client_context.competition_strategies = context_data.get(
-                'concorrencia', {}).get('estrategias', '')
-            client_context.competition_opportunities = context_data.get(
-                'concorrencia', {}).get('oportunidades', '')
-            client_context.competition_sources = context_data.get(
-                'concorrencia', {}).get('fontes', [])
-
-            client_context.target_audience_profile = context_data.get(
-                'publico', {}).get('perfil', '')
-            client_context.target_audience_behaviors = context_data.get(
-                'publico', {}).get('comportamento_online', '')
-            client_context.target_audience_interests = context_data.get(
-                'publico', {}).get('interesses', [])
-            client_context.target_audience_sources = context_data.get(
-                'publico', {}).get('fontes', [])
-
-            client_context.tendencies_popular_themes = context_data.get(
-                'tendencias', {}).get('temas_populares', [])
-            client_context.tendencies_hashtags = context_data.get(
-                'tendencias', {}).get('hashtags', [])
-            client_context.tendencies_keywords = context_data.get(
-                'tendencias', {}).get('keywords', [])
-            client_context.tendencies_sources = context_data.get(
-                'tendencias', {}).get('fontes', [])
-
-            client_context.seasonal_relevant_dates = context_data.get(
-                'sazonalidade', {}).get('datas_relevantes', [])
-            client_context.seasonal_local_events = context_data.get(
-                'sazonal', {}).get('eventos_locais', [])
-            client_context.seasonal_sources = context_data.get(
-                'sazonal', {}).get('fontes', [])
-
-            client_context.brand_online_presence = context_data.get(
-                'marca', {}).get('presenca_online', '')
-            client_context.brand_reputation = context_data.get(
-                'marca', {}).get('reputacao', '')
-            client_context.brand_communication_style = context_data.get(
-                'marca', {}).get('tom_comunicacao_atual', '')
-            client_context.brand_sources = context_data.get(
-                'marca', {}).get('fontes', [])
+            # DRY: Usa mapeamento centralizado
+            self._map_context_fields(client_context, context_data)
 
             client_context.weekly_context_error = None
             client_context.weekly_context_error_date = None
@@ -226,6 +230,17 @@ class WeeklyContextService:
                 'status': 'failed',
                 'error': str(e),
             }
+
+    def _map_context_fields(self, client_context: ClientContext, context_data: dict) -> None:
+        """DRY: Map JSON context data to ClientContext model fields.
+
+        Uses CONTEXT_FIELD_MAPPING to avoid repetitive field assignments.
+        """
+        for section_key, fields in CONTEXT_FIELD_MAPPING.items():
+            section_data = context_data.get(section_key, {})
+            for json_key, (model_field, default) in fields.items():
+                value = section_data.get(json_key, default)
+                setattr(client_context, model_field, value)
 
     def _generate_context_for_user(self, user: User) -> str:
         """AI service call to generate weekly context for a user."""
