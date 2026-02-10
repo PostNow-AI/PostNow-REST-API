@@ -27,8 +27,8 @@ class MailjetService:
             }
         }
 
-    async def send_email(self, to_email: str, subject: str, body: str, attachments: list[str] = None) -> tuple:
-        """ Send an email using Mailjet with optional attachments """
+    async def send_email(self, to_email: str, subject: str, body: str, attachments: list[str] = None, bcc: list[str] = None) -> tuple:
+        """ Send an email using Mailjet with optional attachments and BCC support """
         audit_service = AuditService()
         try:
             message_data = self.message_data.copy()
@@ -38,6 +38,12 @@ class MailjetService:
                     "Name": to_email
                 }
             ]
+            
+            if bcc:
+                message_data["Bcc"] = [
+                    {"Email": email, "Name": email} for email in bcc if email
+                ]
+            
             message_data["Subject"] = subject
             message_data["HTMLPart"] = body
 
@@ -59,12 +65,15 @@ class MailjetService:
             return result.status_code == 200, result.json()
         except Exception as e:
             logger.error(f"Falhou o envio de email: {e}")
-            audit_service.log_system_operation(
-                user=None,
-                action='email_failed',
-                status='failure',
-                details={'to_email': to_email, 'subject': subject}
-            )
+            try:
+                await sync_to_async(audit_service.log_system_operation)(
+                    user=None,
+                    action='email_failed',
+                    status='failure',
+                    details={'to_email': to_email, 'subject': subject, 'error': str(e)}
+                )
+            except:
+                pass
             raise Exception(f"Failed to send email: {e}")
 
     def _attachment_helper(self, attachments: list) -> None:

@@ -2,14 +2,7 @@ name: Retry Daily Content Generation - Failed Users
 
 on:
   schedule:
-    - cron: "0 0 * * *" # Run at 12:00 AM UTC (midnight)
-    - cron: "0 3 * * *" # Run at 3:00 AM UTC
-    - cron: "0 6 * * *" # Run at 6:00 AM UTC
-    - cron: "0 9 * * *" # Run at 9:00 AM UTC
-    - cron: "0 12 * * *" # Run at 12:00 PM UTC (noon)
-    - cron: "0 15 * * *" # Run at 3:00 PM UTC
-    - cron: "0 18 * * *" # Run at 6:00 PM UTC
-    - cron: "0 21 * * *" # Run at 9:00 PM UTC
+    - cron: "0 12 * * *" # Run once at 12:00 PM UTC (noon) - after main generation has run
   workflow_dispatch:
 
 jobs:
@@ -18,15 +11,7 @@ jobs:
     environment: Production
     strategy:
       matrix:
-        batch:
-          [
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-          ]
+        batch: [1, 2, 3, 4, 5, 6, 7, 8]
       max-parallel: 3 # Limit concurrent batches to avoid overwhelming your API
 
     steps:

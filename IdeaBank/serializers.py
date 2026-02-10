@@ -8,6 +8,13 @@ from .models import (
     PostType,
 )
 
+try:
+    from Analytics.models import Decision
+    ANALYTICS_AVAILABLE = True
+except Exception:
+    Decision = None
+    ANALYTICS_AVAILABLE = False
+
 
 # New Post-based serializers
 class PostSerializer(serializers.ModelSerializer):
@@ -50,13 +57,46 @@ class PostIdeaSerializer(serializers.ModelSerializer):
         source='post.name', read_only=True, allow_blank=True, required=False)
     post_type = serializers.CharField(
         source='post.get_type_display', read_only=True)
+    image_generation_decision_id = serializers.SerializerMethodField()
+    image_generation_policy_id = serializers.SerializerMethodField()
 
     class Meta:
         model = PostIdea
         fields = [
-            'id', 'content', 'content_preview', 'image_url', 'post_name', 'post_type', 'created_at', 'updated_at'
+            'id',
+            'content',
+            'content_preview',
+            'image_url',
+            'post_name',
+            'post_type',
+            'image_generation_decision_id',
+            'image_generation_policy_id',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def _get_latest_image_decision(self, obj: PostIdea):
+        if not ANALYTICS_AVAILABLE or not Decision:
+            return None
+
+        return (
+            Decision.objects.filter(
+                decision_type="image_pregen",
+                resource_type="PostIdea",
+                resource_id=str(obj.id),
+            )
+            .order_by("-occurred_at")
+            .first()
+        )
+
+    def get_image_generation_decision_id(self, obj: PostIdea):
+        decision = self._get_latest_image_decision(obj)
+        return str(decision.id) if decision else None
+
+    def get_image_generation_policy_id(self, obj: PostIdea):
+        decision = self._get_latest_image_decision(obj)
+        return decision.policy_id if decision else None
 
 
 class PostIdeaCreateSerializer(serializers.ModelSerializer):
