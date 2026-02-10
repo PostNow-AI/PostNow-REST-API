@@ -219,6 +219,77 @@ class SubscriptionUpgradeTestCase(TestCase):
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         self.assertTrue(response.json().get("upgrade_available"))
 
+    def test_lifetime_subscription_cannot_be_changed(self):
+        """Teste: assinatura lifetime não pode ser alterada"""
+        # Limpar assinaturas existentes
+        UserSubscription.objects.filter(user=self.user).delete()
+
+        # Criar plano lifetime
+        lifetime_plan = get_or_create_plan(
+            "lifetime",
+            name="Vitalício",
+            price=Decimal("999.00"),
+        )
+
+        UserSubscription.objects.create(
+            user=self.user,
+            plan=lifetime_plan,
+            status="active"
+        )
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            self.checkout_url,
+            {"plan_id": self.plan_monthly.id},
+            format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(response.json().get("lifetime_active"))
+
+    @patch("CreditSystem.services.subscription_checkout_service.stripe.Subscription.retrieve")
+    @patch("CreditSystem.services.subscription_checkout_service.stripe.Subscription.modify")
+    @patch("AuditSystem.services.AuditService.log_subscription_operation")
+    def test_upgrade_with_flag_succeeds(self, mock_audit, mock_modify, mock_retrieve):
+        """Teste: upgrade com flag upgrade=true funciona"""
+        # Limpar assinaturas existentes
+        UserSubscription.objects.filter(user=self.user).delete()
+
+        # Criar assinatura com stripe_subscription_id
+        subscription = UserSubscription.objects.create(
+            user=self.user,
+            plan=self.plan_monthly,
+            status="active",
+            stripe_subscription_id="sub_test_123"
+        )
+
+        # Mock do Stripe
+        mock_retrieve.return_value = {
+            "items": {
+                "data": [{
+                    "id": "si_test_item",
+                    "price": {"id": self.plan_monthly.stripe_price_id}
+                }]
+            }
+        }
+        mock_modify.return_value = {"latest_invoice": "inv_123"}
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            self.checkout_url,
+            {"plan_id": self.plan_yearly.id, "upgrade": True},
+            format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.json().get("success"))
+        self.assertTrue(response.json().get("upgraded"))
+        self.assertEqual(response.json().get("new_plan"), self.plan_yearly.name)
+
+        # Verificar que assinatura foi atualizada
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.plan_id, self.plan_yearly.id)
+
 
 class SubscriptionCurrentTestCase(TestCase):
     """Testes para endpoint de assinatura atual"""

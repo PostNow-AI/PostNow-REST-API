@@ -11,7 +11,7 @@ from typing import Optional
 
 import stripe
 from django.conf import settings
-from dotenv import load_dotenv
+from django.db import transaction
 
 from AuditSystem.services import AuditService
 from CreditSystem.models import SubscriptionPlan, UserSubscription
@@ -78,11 +78,12 @@ class SubscriptionCheckoutService:
         return CheckoutResult(success=True, message="Plano válido")
 
     def check_existing_subscription(self) -> Optional[CheckoutResult]:
-        """Verifica se usuário já tem assinatura ativa"""
-        self.existing_subscription = UserSubscription.objects.filter(
-            user=self.user,
-            status="active"
-        ).select_related("plan").first()
+        """Verifica se usuário já tem assinatura ativa (com lock para evitar race condition)"""
+        with transaction.atomic():
+            self.existing_subscription = UserSubscription.objects.select_for_update().filter(
+                user=self.user,
+                status="active"
+            ).select_related("plan").first()
 
         if not self.existing_subscription:
             return None  # Pode prosseguir com checkout normal
@@ -108,8 +109,7 @@ class SubscriptionCheckoutService:
 
     def create_checkout_session(self) -> CheckoutResult:
         """Cria sessão de checkout no Stripe"""
-        load_dotenv()
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        frontend_url = getattr(settings, 'FRONTEND_URL', os.getenv("FRONTEND_URL", "http://localhost:3000"))
 
         try:
             # Configurar dados da assinatura
@@ -265,12 +265,21 @@ class SubscriptionCheckoutService:
             )
 
     def _find_subscription_item(self, items: list) -> Optional[str]:
-        """Encontra o item da assinatura atual"""
+        """Encontra o item da assinatura atual.
+
+        Retorna None se não encontrar - não usa fallback cego para evitar
+        modificar item incorreto em assinaturas com múltiplos itens.
+        """
         for item in items:
             if item.get("price", {}).get("id") == self.existing_subscription.plan.stripe_price_id:
                 return item.get("id")
-        # Fallback para primeiro item
-        return items[0].get("id") if items else None
+
+        # Se só há um item, é seguro usá-lo
+        if len(items) == 1:
+            return items[0].get("id")
+
+        # Múltiplos itens e nenhum match - não arriscar
+        return None
 
     def _log_error(self, error_type: str, message: str):
         """Log de erro via AuditService"""

@@ -281,23 +281,6 @@ class StripeSubscriptionWebhookView(APIView):
 
     def post(self, request):
         """Processa webhook do Stripe para assinaturas"""
-        # Simple logging to file for debugging
-        from datetime import datetime
-
-        # Create a simple log file to track webhook attempts
-        log_file = '/tmp/stripe_subscription_webhook_debug.log'
-        try:
-            with open(log_file, 'a') as f:
-                timestamp = datetime.now().isoformat()
-                f.write(
-                    f"\n=== SUBSCRIPTION WEBHOOK RECEIVED {timestamp} ===\n")
-                f.write(f"Headers: {dict(request.META)}\n")
-                f.write(f"Body length: {len(request.body)}\n")
-                f.write(
-                    f"Stripe signature present: {'HTTP_STRIPE_SIGNATURE' in request.META}\n")
-        except Exception as e:
-            print(f"Logging error: {e}")
-
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
 
@@ -838,22 +821,6 @@ class StripeWebhookView(APIView):
 
     def post(self, request):
         """Processa webhook do Stripe"""
-        # Simple logging to file for debugging
-        from datetime import datetime
-
-        # Create a simple log file to track webhook attempts
-        log_file = '/tmp/stripe_webhook_debug.log'
-        try:
-            with open(log_file, 'a') as f:
-                timestamp = datetime.now().isoformat()
-                f.write(f"\n=== WEBHOOK RECEIVED {timestamp} ===\n")
-                f.write(f"Headers: {dict(request.META)}\n")
-                f.write(f"Body length: {len(request.body)}\n")
-                f.write(
-                    f"Stripe signature present: {'HTTP_STRIPE_SIGNATURE' in request.META}\n")
-        except Exception as e:
-            print(f"Logging error: {e}")
-
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
 
