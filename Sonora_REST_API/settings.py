@@ -224,7 +224,7 @@ REST_AUTH = {
 ACCOUNT_AUTHENTICATION_METHOD = "email"  # Use Email / Password authentication
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = "mandatory"  # Require email confirmation
+ACCOUNT_EMAIL_VERIFICATION = "optional"  # Allow login without email verification for onboarding flow
 # Automatically log in after email verification
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "[PostNow] "  # Email subject prefix
@@ -329,6 +329,9 @@ STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 # Credit System Configuration
 CREDIT_SYSTEM_ENABLED = True
 DEFAULT_CREDIT_BALANCE = 0.00
+
+# Subscription Configuration
+SUBSCRIPTION_TRIAL_DAYS = 10  # Dias de teste grátis para novas assinaturas
 
 CRON_SECRET = os.environ.get('CRON_SECRET', 'dev-secret-change-in-production')
 
