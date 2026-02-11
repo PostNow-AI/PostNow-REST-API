@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
@@ -12,9 +12,18 @@ logger = logging.getLogger(__name__)
 
 
 class RetryClientContext:
-    def __init__(self):
-        self.semaphore_service = SemaphoreService()
-        self.weekly_context_service = WeeklyContextService()
+    """Service for retrying failed weekly context generation.
+
+    Supports dependency injection for testing and flexibility (DIP).
+    """
+
+    def __init__(
+        self,
+        semaphore_service: Optional[SemaphoreService] = None,
+        weekly_context_service: Optional[WeeklyContextService] = None,
+    ):
+        self.semaphore_service = semaphore_service or SemaphoreService()
+        self.weekly_context_service = weekly_context_service or WeeklyContextService()
 
     @sync_to_async
     def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
@@ -41,6 +50,10 @@ class RetryClientContext:
         start_time = timezone.now()
         offset = (batch_number - 1) * batch_size
         limit = batch_size
+
+        if batch_size == 0:
+            offset = 0
+            limit = None  # Process all users with errors
 
         eligible_users = await self._get_eligible_users(offset, limit)
         total = len(eligible_users)
