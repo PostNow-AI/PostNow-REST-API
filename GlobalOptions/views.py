@@ -71,24 +71,6 @@ def find_profession(profession_id):
         return None, None
 
 
-def check_name_exists(name, predefined_model, custom_model, extra_filter=None):
-    """DRY: Verifica se nome já existe em modelos predefinidos ou customizados.
-
-    Returns:
-        str or None: Mensagem de erro se existir, None se não existir
-    """
-    base_filter = {'name__iexact': name, 'is_active': True}
-    if extra_filter:
-        base_filter.update(extra_filter)
-
-    if predefined_model and predefined_model.objects.filter(**base_filter).exists():
-        return 'Já existe um item com este nome.'
-
-    if custom_model.objects.filter(**base_filter).exists():
-        return 'Já existe um item customizado com este nome.'
-
-    return None
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
