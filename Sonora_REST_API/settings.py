@@ -31,19 +31,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# Generate new key: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-only-change-in-production')
+SECRET_KEY = 'django-insecure-zh*enb0(sd*85_6guu-1$=#hf7no_no&81(6!m*050n7g_eedt'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
+DEBUG = True
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles_build', 'static')
 MEDIA_URLS = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# ALLOWED_HOSTS: comma-separated list in production
-# Example: ALLOWED_HOSTS=api.postnow.com,localhost
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
@@ -228,7 +224,7 @@ REST_AUTH = {
 ACCOUNT_AUTHENTICATION_METHOD = "email"  # Use Email / Password authentication
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = "none"  # Disable email verification - users can login immediately after signup
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"  # Require email confirmation
 # Automatically log in after email verification
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "[PostNow] "  # Email subject prefix
@@ -333,9 +329,6 @@ STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 # Credit System Configuration
 CREDIT_SYSTEM_ENABLED = True
 DEFAULT_CREDIT_BALANCE = 0.00
-
-# Subscription Configuration
-SUBSCRIPTION_TRIAL_DAYS = 10  # Dias de teste grátis para novas assinaturas
 
 CRON_SECRET = os.environ.get('CRON_SECRET', 'dev-secret-change-in-production')
 
