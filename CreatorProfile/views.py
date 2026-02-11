@@ -1,10 +1,12 @@
 
+from django.utils import timezone
+
 from AuditSystem.services import AuditService
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .models import VisualStylePreference
+from .models import OnboardingStepTracking, VisualStylePreference
 from .serializers import (
     CreatorProfileSerializer,
     OnboardingStatusSerializer,
@@ -313,8 +315,13 @@ def test_structure(request):
 
 class VisualStylePreferenceView(generics.GenericAPIView):
     """View to handle Visual Style Preferences."""
-    permission_classes = [permissions.IsAuthenticated]
     serializer_class = VisualStylePreferenceSerializer
+
+    def get_permissions(self):
+        """GET é público (para onboarding), POST requer admin."""
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
 
     def get(self, request):
         """Retrieve all visual style preferences."""
@@ -328,3 +335,64 @@ class VisualStylePreferenceView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def track_onboarding_step(request):
+    """
+    Track when a user visits/completes an onboarding step.
+
+    Accepts:
+    - session_id: Unique identifier for the onboarding session
+    - step_number: Step number (1-20)
+    - completed: Whether the step was completed (default: False)
+    """
+    session_id = request.data.get('session_id')
+    step_number = request.data.get('step_number')
+    completed = request.data.get('completed', False)
+
+    # Validate required fields
+    if not session_id:
+        return Response(
+            {'error': 'session_id is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if step_number is None:
+        return Response(
+            {'error': 'step_number is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validate step number range
+    try:
+        step_number = int(step_number)
+        if step_number < 1 or step_number > 20:
+            raise ValueError("Step number must be between 1 and 20")
+    except (ValueError, TypeError):
+        return Response(
+            {'error': 'step_number must be an integer between 1 and 20'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Get user if authenticated
+    user = request.user if request.user.is_authenticated else None
+
+    # Update or create tracking record
+    tracking, created = OnboardingStepTracking.objects.update_or_create(
+        session_id=session_id,
+        step_number=step_number,
+        defaults={
+            'user': user,
+            'completed': completed,
+            'completed_at': timezone.now() if completed else None,
+        }
+    )
+
+    return Response({
+        'status': 'ok',
+        'created': created,
+        'step_number': step_number,
+        'completed': tracking.completed,
+    })
