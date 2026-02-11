@@ -228,7 +228,7 @@ REST_AUTH = {
 ACCOUNT_AUTHENTICATION_METHOD = "email"  # Use Email / Password authentication
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = "optional"  # Allow login without email verification for onboarding flow
+ACCOUNT_EMAIL_VERIFICATION = "none"  # Disable email verification - users can login immediately after signup
 # Automatically log in after email verification
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "[PostNow] "  # Email subject prefix
