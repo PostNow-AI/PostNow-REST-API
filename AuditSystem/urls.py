@@ -18,6 +18,7 @@ from .views import (
     onboarding_step_details_view,
     run_migrations,
     create_yearly_plan,
+    update_plan_stripe_price,
 )
 
 app_name = 'auditsystem'
@@ -67,4 +68,6 @@ urlpatterns = [
          name='admin_run_migrations'),
     path('admin/create-yearly-plan/', create_yearly_plan,
          name='admin_create_yearly_plan'),
+    path('admin/update-plan-stripe-price/', update_plan_stripe_price,
+         name='admin_update_plan_stripe_price'),
 ]

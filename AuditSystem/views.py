@@ -1490,3 +1490,99 @@ def create_yearly_plan(request):
             'success': False,
             'error': f'Failed to create yearly plan: {error_msg}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def update_plan_stripe_price(request):
+    """
+    Update the stripe_price_id of a subscription plan.
+    Protected by CRON_SECRET for security.
+
+    Headers required:
+    - X-Cron-Secret: must match CRON_SECRET environment variable
+
+    Body required:
+    - plan_id: ID of the plan to update
+    - stripe_price_id: New Stripe price ID
+    """
+    # Verify CRON_SECRET
+    cron_secret = request.headers.get('X-Cron-Secret')
+    expected_secret = os.environ.get('CRON_SECRET', 'dev-secret-change-in-production')
+
+    if cron_secret != expected_secret:
+        return Response({
+            'success': False,
+            'error': 'Unauthorized - Invalid or missing CRON_SECRET'
+        }, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        plan_id = request.data.get('plan_id')
+        new_stripe_price_id = request.data.get('stripe_price_id')
+
+        if not plan_id or not new_stripe_price_id:
+            return Response({
+                'success': False,
+                'error': 'plan_id and stripe_price_id are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Import here to avoid circular imports
+        from CreditSystem.models import SubscriptionPlan
+
+        # Find the plan
+        try:
+            plan = SubscriptionPlan.objects.get(id=plan_id)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': f'Plan with id {plan_id} not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Update the stripe_price_id
+        old_price_id = plan.stripe_price_id
+        plan.stripe_price_id = new_stripe_price_id
+        plan.save()
+
+        # Log the update
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='success',
+            details={
+                'operation': 'update_plan_stripe_price',
+                'plan_id': plan.id,
+                'plan_name': plan.name,
+                'old_stripe_price_id': old_price_id,
+                'new_stripe_price_id': new_stripe_price_id
+            }
+        )
+
+        return Response({
+            'success': True,
+            'message': 'Plan stripe_price_id updated successfully',
+            'plan': {
+                'id': plan.id,
+                'name': plan.name,
+                'interval': plan.interval,
+                'old_stripe_price_id': old_price_id,
+                'new_stripe_price_id': plan.stripe_price_id,
+            }
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        error_msg = str(e)
+
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='error',
+            error_message=f'Update plan stripe_price failed: {error_msg}',
+            details={'operation': 'update_plan_stripe_price'}
+        )
+
+        return Response({
+            'success': False,
+            'error': f'Failed to update plan: {error_msg}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
