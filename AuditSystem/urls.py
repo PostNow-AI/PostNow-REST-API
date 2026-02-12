@@ -16,6 +16,7 @@ from .views import (
     subscription_details_view,
     onboarding_funnel_view,
     onboarding_step_details_view,
+    run_migrations,
 )
 
 app_name = 'auditsystem'
@@ -59,4 +60,8 @@ urlpatterns = [
          name='dashboard_onboarding_funnel'),
     path('dashboard/onboarding/step/<int:step_number>/', onboarding_step_details_view,
          name='dashboard_onboarding_step_details'),
+
+    # Admin maintenance endpoints
+    path('admin/run-migrations/', run_migrations,
+         name='admin_run_migrations'),
 ]

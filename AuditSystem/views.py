@@ -1270,3 +1270,89 @@ def onboarding_step_details_view(request, step_number):
             {'error': f'Error fetching onboarding step details: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# ============================================================================
+# ADMIN MIGRATION ENDPOINT
+# ============================================================================
+
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def run_migrations(request):
+    """
+    Run pending database migrations.
+    Protected by CRON_SECRET for security.
+
+    Headers required:
+    - Authorization: Bearer <CRON_SECRET>
+
+    Returns:
+    - success: Whether migrations ran successfully
+    - output: Migration output or error message
+    """
+    from django.conf import settings
+    from django.core.management import call_command
+    from io import StringIO
+
+    # Verify CRON_SECRET
+    auth_header = request.headers.get('Authorization', '')
+    expected_secret = getattr(settings, 'CRON_SECRET', '')
+
+    if not auth_header.startswith('Bearer '):
+        return Response(
+            {'error': 'Authorization header must use Bearer token'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    provided_secret = auth_header[7:]  # Remove 'Bearer ' prefix
+
+    if not expected_secret or provided_secret != expected_secret:
+        return Response(
+            {'error': 'Invalid or missing CRON_SECRET'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        # Capture migration output
+        output = StringIO()
+
+        # Run migrations
+        call_command('migrate', '--noinput', stdout=output, stderr=output)
+
+        migration_output = output.getvalue()
+
+        # Log the operation
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='success',
+            details={
+                'operation': 'run_migrations',
+                'output': migration_output[:2000]  # Limit output size
+            }
+        )
+
+        return Response({
+            'success': True,
+            'message': 'Migrations executed successfully',
+            'output': migration_output
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        error_msg = str(e)
+
+        # Log the error
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='error',
+            error_message=f'Migration failed: {error_msg}',
+            details={'operation': 'run_migrations'}
+        )
+
+        return Response({
+            'success': False,
+            'error': f'Migration failed: {error_msg}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
