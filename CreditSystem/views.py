@@ -469,9 +469,13 @@ class CreateStripeCheckoutSessionView(APIView):
         plan_id = request.data.get('plan_id')
         upgrade_requested = str(request.data.get('upgrade', 'false')).lower() in [
             '1', 'true', 'yes']
+        success_url = request.data.get('success_url')
+        cancel_url = request.data.get('cancel_url')
 
         # Inicializar service
-        service = SubscriptionCheckoutService(request.user, plan_id)
+        service = SubscriptionCheckoutService(
+            request.user, plan_id, success_url=success_url, cancel_url=cancel_url
+        )
 
         # 1. Validar plano
         result = service.validate_plan()

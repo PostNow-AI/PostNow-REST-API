@@ -1047,3 +1047,226 @@ def posts_manual_stats_view(request):
             {'error': f'Error calculating posts manual stats: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def login_stats_view(request):
+    """
+    Get user login statistics for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of successful logins in the period
+    - timeline: Daily breakdown of logins
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_login_stats(
+            start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users. Counts successful login events.'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating login stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def login_details_view(request):
+    """
+    Get detailed login list for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - logins: List of login details with user info and timestamps
+    - count: Total number of logins in the period
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_login_details(
+            start_date, end_date)
+        result['period_days'] = days
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error fetching login details: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def subscription_details_view(request):
+    """
+    Get detailed subscription list for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - subscriptions: List of subscription details with user info, plan, and dates
+    - count: Total number of subscriptions in the period
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_subscription_details(
+            start_date, end_date)
+        result['period_days'] = days
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error fetching subscription details: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def onboarding_funnel_view(request):
+    """
+    Get onboarding funnel statistics for a specified date range.
+    Returns step-by-step counts and individual field counts for drill-down.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - started: Number of profiles created in the period
+    - step_1_completed: Number with step 1 completed
+    - step_2_completed: Number with step 2 completed
+    - completed: Number with full onboarding completed
+    - has_business_name, has_specialization, has_business_description: Step 1 field counts
+    - has_voice_tone, has_colors: Step 2 field counts
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_onboarding_funnel_stats(
+            start_date, end_date)
+        result['period_days'] = days
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error fetching onboarding funnel stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def onboarding_step_details_view(request, step_number):
+    """
+    Get detailed information about a specific onboarding step.
+    Returns session-level data for drill-down analysis.
+
+    Path Parameters:
+    - step_number: The step number (1-20) to get details for
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - step_number: The step number
+    - step_name: English name of the step
+    - step_name_pt: Portuguese name of the step
+    - statistics: Object with counts, rates, and timing info
+    - sessions: List of session details (limited to 50)
+    - sessions_total: Total number of sessions for this step
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    """
+    try:
+        # Validate step number
+        if step_number < 1 or step_number > 20:
+            return Response(
+                {'error': 'Step number must be between 1 and 20'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_onboarding_step_details(
+            start_date, end_date, step_number)
+        result['period_days'] = days
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error fetching onboarding step details: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
