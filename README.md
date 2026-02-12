@@ -209,11 +209,12 @@ python scripts/test_google_auth.py
 ├── POST /api/v1/credits/purchase/            # Comprar créditos
 └── GET  /api/v1/credits/packages/            # Pacotes disponíveis
 
-📊 Assinaturas
-├── GET  /api/v1/subscriptions/plans/         # Planos disponíveis
-├── POST /api/v1/subscriptions/subscribe/     # Assinar plano
-├── GET  /api/v1/subscriptions/status/        # Status da assinatura
-└── POST /api/v1/subscriptions/cancel/        # Cancelar assinatura
+📊 Assinaturas (CreditSystem)
+├── GET  /api/v1/credits/plans/                  # Planos disponíveis (público)
+├── POST /api/v1/credits/checkout/               # Criar Stripe checkout session
+├── GET  /api/v1/credits/subscription/current/   # Assinatura ativa do usuário
+├── POST /api/v1/credits/subscription/cancel/    # Cancelar assinatura
+└── POST /api/v1/credits/webhooks/subscription/  # Webhook do Stripe
 ```
 
 ## 📚 **Estrutura do Projeto**
@@ -326,8 +327,9 @@ ANTHROPIC_API_KEY=sk-ant-...
 - **[Geração de Texto](docs/ia/geracao-texto.md)** - Prompts e personalização
 - **[Geração de Imagem](docs/ia/geracao-imagem.md)** - Overlays e fontes
 
-### **💳 Sistema de Créditos**
+### **💳 Sistema de Créditos e Assinaturas**
 
+- **[Sistema de Assinaturas](docs/SUBSCRIPTION_SYSTEM.md)** - Documentação técnica completa
 - **[Integração Stripe](docs/creditos/stripe.md)** - Pagamentos e webhooks
 - **[Gestão de Créditos](docs/creditos/gestao.md)** - Transações e saldos
 - **[Planos de Assinatura](docs/creditos/assinaturas.md)** - Configuração de planos

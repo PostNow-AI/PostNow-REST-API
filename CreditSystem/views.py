@@ -35,6 +35,7 @@ from .serializers import (
 )
 from .services.credit_service import CreditService
 from .services.stripe_service import StripeService
+from .services.subscription_checkout_service import SubscriptionCheckoutService
 from .services.subscription_service import SubscriptionService
 
 stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
@@ -280,23 +281,6 @@ class StripeSubscriptionWebhookView(APIView):
 
     def post(self, request):
         """Processa webhook do Stripe para assinaturas"""
-        # Simple logging to file for debugging
-        from datetime import datetime
-
-        # Create a simple log file to track webhook attempts
-        log_file = '/tmp/stripe_subscription_webhook_debug.log'
-        try:
-            with open(log_file, 'a') as f:
-                timestamp = datetime.now().isoformat()
-                f.write(
-                    f"\n=== SUBSCRIPTION WEBHOOK RECEIVED {timestamp} ===\n")
-                f.write(f"Headers: {dict(request.META)}\n")
-                f.write(f"Body length: {len(request.body)}\n")
-                f.write(
-                    f"Stripe signature present: {'HTTP_STRIPE_SIGNATURE' in request.META}\n")
-        except Exception as e:
-            print(f"Logging error: {e}")
-
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
 
@@ -474,373 +458,59 @@ class SubscriptionPlanListView(generics.ListAPIView):
 
 
 class CreateStripeCheckoutSessionView(APIView):
+    """
+    View para criar sessão de checkout de assinatura.
+
+    Usa SubscriptionCheckoutService para encapsular lógica de negócios.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
         plan_id = request.data.get('plan_id')
+        upgrade_requested = str(request.data.get('upgrade', 'false')).lower() in [
+            '1', 'true', 'yes']
 
-        # Validate plan_id
-        if not plan_id:
-            # Log missing plan_id error
-            AuditService.log_subscription_operation(
-                user=request.user,
-                action='subscription_created',
-                status='failure',
-                error_message='Missing plan_id parameter',
-                details={
-                    'error_type': 'missing_plan_id',
-                    'request_data': request.data
-                }
+        # Inicializar service
+        service = SubscriptionCheckoutService(request.user, plan_id)
+
+        # 1. Validar plano
+        result = service.validate_plan()
+        if not result.success:
+            return Response(
+                {'success': False, 'message': result.message, **(result.data or {})},
+                status=result.status_code
             )
-            return Response({
-                'success': False,
-                'message': 'plan_id é obrigatório'
-            }, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
-        except SubscriptionPlan.DoesNotExist:
-            # Log plan not found error
-            AuditService.log_subscription_operation(
-                user=request.user,
-                action='subscription_created',
-                status='failure',
-                error_message='Plan not found or inactive',
-                details={
-                    'error_type': 'plan_not_found',
-                    'requested_plan_id': plan_id
-                }
-            )
-            return Response({
-                'success': False,
-                'message': 'Plano não encontrado ou inativo'
-            }, status=status.HTTP_404_NOT_FOUND)
-
-        user = request.user
-
-        # Check if plan has Stripe price ID
-        if not plan.stripe_price_id:
-            # Log plan unavailable error
-            AuditService.log_subscription_operation(
-                user=user,
-                action='subscription_created',
-                status='failure',
-                error_message='Plan unavailable - no Stripe price ID',
-                details={
-                    'error_type': 'plan_unavailable',
-                    'plan_name': plan.name,
-                    'plan_interval': plan.interval
-                }
-            )
-            return Response({
-                'success': False,
-                'message': 'Este plano está temporariamente indisponível. Entre em contato com o suporte.'
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        # Check for existing active subscription and support upgrade flow
-        existing_sub = UserSubscription.objects.filter(
-            user=user, status='active').select_related('plan').first()
-        if existing_sub:
-            # If same plan requested, just short‑circuit
-            if existing_sub.plan_id == plan.id:
-                # Log same plan request
-                AuditService.log_subscription_operation(
-                    user=user,
-                    action='subscription_updated',
-                    status='success',
-                    details={
-                        'action': 'same_plan_requested',
-                        'plan_name': existing_sub.plan.name
-                    }
+        # 2. Verificar assinatura existente
+        existing_result = service.check_existing_subscription()
+        if existing_result:
+            if existing_result.success:
+                # Já está no mesmo plano
+                return Response(
+                    {'success': True, 'message': existing_result.message, **(existing_result.data or {})},
+                    status=existing_result.status_code
                 )
-
-                return Response({
-                    'success': True,
-                    'message': 'Você já está neste plano',
-                    'already_on_plan': True,
-                    'plan': existing_sub.plan.name
-                }, status=status.HTTP_200_OK)
-
-            # If lifetime already, prevent upgrading/downgrading
-            if existing_sub.plan.interval == 'lifetime':
-                # Log lifetime upgrade attempt
-                AuditService.log_subscription_operation(
-                    user=user,
-                    action='subscription_updated',
-                    status='failure',
-                    details={
-                        'action': 'lifetime_upgrade_prevented',
-                        'current_plan': existing_sub.plan.name,
-                        'requested_plan': plan.name
-                    }
-                )
-
-                return Response({
-                    'success': False,
-                    'message': 'Você já possui um plano vitalício ativo. Não é possível mudar de plano.',
-                    'lifetime_active': True
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            # If target plan is lifetime but user has a recurring plan, instruct separate lifetime purchase flow
-            if plan.interval == 'lifetime':
-                return Response({
-                    'success': False,
-                    'message': 'Para migrar para o plano vitalício cancele a assinatura atual primeiro.',
-                    'requires_manual_action': True
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            upgrade_requested = str(request.data.get('upgrade', 'false')).lower() in [
-                '1', 'true', 'yes']
-            if not upgrade_requested:
-                return Response({
-                    'success': False,
-                    'message': 'Você já possui uma assinatura ativa. Envie "upgrade": true para alterar o plano.',
-                    'upgrade_available': True,
-                    'current_plan': existing_sub.plan.name,
-                    'requested_plan': plan.name
-                }, status=status.HTTP_409_CONFLICT)
-
-            # Perform in-place upgrade via Stripe if subscription has a Stripe ID
-            if existing_sub.stripe_subscription_id:
-                try:
-                    stripe_sub = stripe.Subscription.retrieve(
-                        existing_sub.stripe_subscription_id)
-                    # Locate the subscription item that matches current plan price (fallback to first item)
-                    items = stripe_sub.get('items', {}).get('data', [])
-                    sub_item_id = None
-                    for it in items:
-                        if it.get('price', {}).get('id') == existing_sub.plan.stripe_price_id:
-                            sub_item_id = it.get('id')
-                            break
-                    if not sub_item_id and items:
-                        sub_item_id = items[0].get('id')
-
-                    if not sub_item_id:
-                        return Response({
-                            'success': False,
-                            'message': 'Não foi possível localizar o item da assinatura para upgrade.'
-                        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-                    updated_sub = stripe.Subscription.modify(
-                        existing_sub.stripe_subscription_id,
-                        cancel_at_period_end=False,
-                        proration_behavior='create_prorations',
-                        items=[{
-                            'id': sub_item_id,
-                            'price': plan.stripe_price_id,
-                            'quantity': 1
-                        }],
-                        metadata={
-                            'user_id': str(user.id),
-                            'upgraded_from_plan': existing_sub.plan.interval,
-                            'upgraded_to_plan': plan.interval
-                        }
-                    )
-
-                    previous_plan = existing_sub.plan
-                    # Update local subscription to new plan
-                    existing_sub.plan = plan
-                    existing_sub.save(update_fields=['plan'])
-
-                    # Optionally trigger credit recalculation/reset immediately
-                    try:
-                        CreditService.check_and_reset_monthly_credits(user)
-                    except Exception:
-                        pass
-
-                    # Log successful subscription upgrade
-                    AuditService.log_subscription_operation(
-                        user=user,
-                        action='subscription_updated',
-                        status='success',
-                        details={
-                            'action': 'plan_upgraded',
-                            'previous_plan': previous_plan.name,
-                            'new_plan': plan.name,
-                            'upgrade_type': 'stripe_in_place'
-                        }
-                    )
-
-                    return Response({
-                        'success': True,
-                        'message': 'Upgrade de assinatura realizado com sucesso.',
-                        'upgraded': True,
-                        'previous_plan': previous_plan.name,
-                        'new_plan': plan.name,
-                        'proration_invoice_id': updated_sub.get('latest_invoice'),
-                        'subscription_id': existing_sub.id
-                    }, status=status.HTTP_200_OK)
-                except stripe.error.StripeError as e:
-                    # Log Stripe error during upgrade
-                    AuditService.log_subscription_operation(
-                        user=user,
-                        action='subscription_updated',
-                        status='failure',
-                        error_message=str(e),
-                        details={
-                            'error_type': 'stripe_upgrade_error',
-                            'action': 'plan_upgraded',
-                            'current_plan': existing_sub.plan.name,
-                            'target_plan': plan.name,
-                            'stripe_subscription_id': existing_sub.stripe_subscription_id,
-                            'stripe_error_type': type(e).__name__
-                        }
-                    )
-                    return Response({
-                        'success': False,
-                        'message': f'Erro no Stripe ao realizar upgrade: {str(e)}'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                except Exception as e:
-                    # Log general error during upgrade
-                    AuditService.log_subscription_operation(
-                        user=user,
-                        action='subscription_updated',
-                        status='failure',
-                        error_message=str(e),
-                        details={
-                            'error_type': 'upgrade_error',
-                            'action': 'plan_upgraded',
-                            'current_plan': existing_sub.plan.name,
-                            'target_plan': plan.name,
-                            'error_type_name': type(e).__name__
-                        }
-                    )
-                    return Response({
-                        'success': False,
-                        'message': f'Erro interno ao realizar upgrade: {str(e)}'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             else:
-                # Local-only subscription (edge case) – require manual cancellation then new checkout
-                return Response({
-                    'success': False,
-                    'message': 'Assinatura local ativa. Cancele antes de criar um novo checkout.',
-                    'requires_cancellation': True
-                }, status=status.HTTP_409_CONFLICT)
-
-        try:
-            # Check if this is a test price ID
-            if plan.stripe_price_id.startswith('price_test_'):
-                # Log test environment error
-                AuditService.log_subscription_operation(
-                    user=user,
-                    action='subscription_created',
-                    status='failure',
-                    error_message='Test environment - real payments not available',
-                    details={
-                        'error_type': 'test_environment',
-                        'plan_name': plan.name,
-                        'stripe_price_id': plan.stripe_price_id
-                    }
+                # Plano lifetime ativo
+                return Response(
+                    {'success': False, 'message': existing_result.message, **(existing_result.data or {})},
+                    status=existing_result.status_code
                 )
-                return Response({
-                    'success': False,
-                    'message': 'Este é um ambiente de desenvolvimento. Os pagamentos reais não estão disponíveis.',
-                    'is_test_environment': True
-                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-            # Load environment variables and get frontend URL
-            load_dotenv()
-            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-
-            # Configure discounts based on plan interval
-            discounts = []
-            if plan.interval == 'monthly':
-                # 50% off first month only
-                # Replace with actual Stripe coupon ID
-                discounts = [{'coupon': 'monthly_first_50_off'}]
-            elif plan.interval == 'semester':
-                # 25% off all months forever
-                # Replace with actual Stripe coupon ID
-                discounts = [{'coupon': 'semester_25_off'}]
-            elif plan.interval == 'yearly':
-                # 50% off all months forever
-                # Replace with actual Stripe coupon ID
-                discounts = [{'coupon': 'yearly_50_off'}]
-            # Lifetime plans have no discounts (one-time payment)
-
-            # Configure subscription data with trial period for non-lifetime plans
-            subscription_data = None
-            if plan.interval != 'lifetime':
-                subscription_data = {
-                    'metadata': {
-                        'user_id': str(user.id),
-                        'plan_id': str(plan.id),
-                    },
-                    'trial_period_days': 7  # 7-day free trial
-                }
-
-            checkout_session = stripe.checkout.Session.create(
-                customer_email=user.email,
-                payment_method_types=['card'],
-                line_items=[{
-                    'price': plan.stripe_price_id,
-                    'quantity': 1,
-                }],
-                allow_promotion_codes=True,  # Allow for coupons
-                mode='subscription' if plan.interval != 'lifetime' else 'payment',
-                success_url=f'{frontend_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}',
-                cancel_url=f'{frontend_url}/subscription/cancel',
-                metadata={
-                    'user_id': str(user.id),
-                    'plan_id': str(plan.id),
-                },
-                subscription_data=subscription_data
+        # 3. Se tem assinatura existente (diferente), processar upgrade
+        if service.existing_subscription:
+            upgrade_result = service.handle_upgrade(upgrade_requested)
+            return Response(
+                {'success': upgrade_result.success, 'message': upgrade_result.message, **(upgrade_result.data or {})},
+                status=upgrade_result.status_code
             )
 
-            # Log successful checkout session creation
-            AuditService.log_subscription_operation(
-                user=user,
-                action='subscription_created',
-                status='success',
-                details={
-                    'plan_name': plan.name,
-                    'plan_interval': plan.interval,
-                    'checkout_session_id': checkout_session.id,
-                    'mode': 'subscription' if plan.interval != 'lifetime' else 'payment'
-                }
-            )
-
-            return Response({
-                'success': True,
-                'checkout_url': checkout_session.url
-            }, status=status.HTTP_200_OK)
-        except stripe.error.StripeError as e:
-            # Log Stripe error during checkout creation
-            AuditService.log_subscription_operation(
-                user=user,
-                action='subscription_created',
-                status='failure',
-                error_message=str(e),
-                details={
-                    'error_type': 'stripe_error',
-                    'plan_name': plan.name,
-                    'plan_interval': plan.interval,
-                    'stripe_price_id': plan.stripe_price_id,
-                    'stripe_error_type': type(e).__name__
-                }
-            )
-            return Response({
-                'success': False,
-                'message': f'Erro no Stripe: {str(e)}'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            # Log general error during checkout creation
-            AuditService.log_subscription_operation(
-                user=user,
-                action='subscription_created',
-                status='failure',
-                error_message=str(e),
-                details={
-                    'error_type': 'unexpected_error',
-                    'plan_name': plan.name,
-                    'plan_interval': plan.interval,
-                    'error_type_name': type(e).__name__
-                }
-            )
-            return Response({
-                'success': False,
-                'message': f'Erro interno: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        # 4. Criar checkout session
+        checkout_result = service.create_checkout_session()
+        return Response(
+            {'success': checkout_result.success, 'message': checkout_result.message, **(checkout_result.data or {})},
+            status=checkout_result.status_code
+        )
 
 
 class CreditPackageListView(generics.ListAPIView):
@@ -1151,22 +821,6 @@ class StripeWebhookView(APIView):
 
     def post(self, request):
         """Processa webhook do Stripe"""
-        # Simple logging to file for debugging
-        from datetime import datetime
-
-        # Create a simple log file to track webhook attempts
-        log_file = '/tmp/stripe_webhook_debug.log'
-        try:
-            with open(log_file, 'a') as f:
-                timestamp = datetime.now().isoformat()
-                f.write(f"\n=== WEBHOOK RECEIVED {timestamp} ===\n")
-                f.write(f"Headers: {dict(request.META)}\n")
-                f.write(f"Body length: {len(request.body)}\n")
-                f.write(
-                    f"Stripe signature present: {'HTTP_STRIPE_SIGNATURE' in request.META}\n")
-        except Exception as e:
-            print(f"Logging error: {e}")
-
         payload = request.body
         sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
 
