@@ -1356,3 +1356,122 @@ def run_migrations(request):
             'success': False,
             'error': f'Migration failed: {error_msg}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================================================
+# ADMIN CREATE YEARLY PLAN ENDPOINT
+# ============================================================================
+
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def create_yearly_plan(request):
+    """
+    Create the yearly subscription plan.
+    Protected by CRON_SECRET for security.
+
+    Headers required:
+    - Authorization: Bearer <CRON_SECRET>
+
+    Returns:
+    - success: Whether the plan was created
+    - plan: The created plan data
+    """
+    from django.conf import settings
+    from CreditSystem.models import SubscriptionPlan
+
+    # Verify CRON_SECRET
+    auth_header = request.headers.get('Authorization', '')
+    expected_secret = getattr(settings, 'CRON_SECRET', '')
+
+    if not auth_header.startswith('Bearer '):
+        return Response(
+            {'error': 'Authorization header must use Bearer token'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    provided_secret = auth_header[7:]  # Remove 'Bearer ' prefix
+
+    if not expected_secret or provided_secret != expected_secret:
+        return Response(
+            {'error': 'Invalid or missing CRON_SECRET'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        # Check if yearly plan already exists
+        existing_plan = SubscriptionPlan.objects.filter(interval='yearly').first()
+        if existing_plan:
+            return Response({
+                'success': True,
+                'message': 'Yearly plan already exists',
+                'plan': {
+                    'id': existing_plan.id,
+                    'name': existing_plan.name,
+                    'price': str(existing_plan.price),
+                    'interval': existing_plan.interval,
+                    'stripe_price_id': existing_plan.stripe_price_id,
+                    'is_active': existing_plan.is_active,
+                }
+            }, status=status.HTTP_200_OK)
+
+        # Create the yearly plan
+        yearly_plan = SubscriptionPlan.objects.create(
+            name='Plano Anual - BETA',
+            description='Preço Beta, desconto 50%. Economia de 40% comparado ao mensal.',
+            price=359.00,
+            interval='yearly',
+            stripe_price_id='price_1SzIQ0AuLJkGhmCui6BDvReN',
+            is_active=True,
+            monthly_credits=30,
+            allow_credit_purchase=False,
+            benefits=[
+                '30 posts, por mês',
+                '30 ideias no email, por mês',
+                '10 dias de teste gratuito',
+                'Economia de 40%',
+            ]
+        )
+
+        # Log the operation
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='success',
+            details={
+                'operation': 'create_yearly_plan',
+                'plan_id': yearly_plan.id,
+                'plan_name': yearly_plan.name
+            }
+        )
+
+        return Response({
+            'success': True,
+            'message': 'Yearly plan created successfully',
+            'plan': {
+                'id': yearly_plan.id,
+                'name': yearly_plan.name,
+                'price': str(yearly_plan.price),
+                'interval': yearly_plan.interval,
+                'stripe_price_id': yearly_plan.stripe_price_id,
+                'is_active': yearly_plan.is_active,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        error_msg = str(e)
+
+        # Log the error
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='error',
+            error_message=f'Create yearly plan failed: {error_msg}',
+            details={'operation': 'create_yearly_plan'}
+        )
+
+        return Response({
+            'success': False,
+            'error': f'Failed to create yearly plan: {error_msg}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
