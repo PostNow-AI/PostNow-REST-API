@@ -301,7 +301,13 @@ CORS_ALLOWED_ORIGINS = [
     "https://sonoria-posts.vercel.app",  # Production domain
     "https://postnow.com.br",  # Production domain
     "https://www.postnow.com.br",
-    "https://post-now-ui-devel.vercel.app"
+    "https://post-now-ui-devel.vercel.app",
+]
+
+# Allow all Vercel preview URLs (they change on each deploy)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://post-now-ui.*\.vercel\.app$",  # All Vercel preview URLs
+    r"^https://.*-matheusblancos-projects\.vercel\.app$",  # All preview URLs for this account
 ]
 
 # Add additional CORS origins from environment variable
