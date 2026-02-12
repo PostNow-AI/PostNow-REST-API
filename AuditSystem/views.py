@@ -1403,9 +1403,24 @@ def create_yearly_plan(request):
         # Check if yearly plan already exists
         existing_plan = SubscriptionPlan.objects.filter(interval='yearly').first()
         if existing_plan:
+            # Update existing plan with correct values
+            existing_plan.name = 'Plano Anual - BETA'
+            existing_plan.description = 'Preço Beta, desconto 50%. Economia de 40% comparado ao mensal.'
+            existing_plan.price = 359.00
+            existing_plan.stripe_price_id = 'price_1SzIQ0AuLJkGhmCui6BDvReN'
+            existing_plan.is_active = True
+            existing_plan.monthly_credits = 30
+            existing_plan.benefits = [
+                '30 posts, por mês',
+                '30 ideias no email, por mês',
+                '10 dias de teste gratuito',
+                'Economia de 40%',
+            ]
+            existing_plan.save()
+
             return Response({
                 'success': True,
-                'message': 'Yearly plan already exists',
+                'message': 'Yearly plan updated successfully',
                 'plan': {
                     'id': existing_plan.id,
                     'name': existing_plan.name,
