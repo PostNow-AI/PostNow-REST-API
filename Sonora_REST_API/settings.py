@@ -43,7 +43,17 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # ALLOWED_HOSTS: comma-separated list in production
 # Example: ALLOWED_HOSTS=api.postnow.com,localhost
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+# Include Vercel domains by default for seamless deployment
+_allowed_hosts_env = os.getenv('ALLOWED_HOSTS', '')
+_default_hosts = [
+    'localhost',
+    '127.0.0.1',
+    '.vercel.app',  # All Vercel preview/production domains
+    'post-now-rest-api.vercel.app',
+    'post-now-rest-api-devel.vercel.app',
+    'api.postnow.com.br',
+]
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()] + _default_hosts
 
 # Application definition
 
