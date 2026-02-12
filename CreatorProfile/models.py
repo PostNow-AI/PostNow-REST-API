@@ -301,3 +301,83 @@ class VisualStylePreference(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.description}"
+
+
+class OnboardingStepTracking(models.Model):
+    """
+    Track each step/screen visited during onboarding.
+    20 steps grouped into 5 phases:
+    - Phase 1 (Welcome): 1-3
+    - Phase 2 (Business): 4-8
+    - Phase 3 (Audience): 9-12
+    - Phase 4 (Visual): 13-17
+    - Phase 5 (Auth): 18-20
+    """
+
+    STEP_CHOICES = [
+        (1, 'Welcome'),
+        (2, 'Business Name'),
+        (3, 'Contact Info'),
+        (4, 'Niche'),
+        (5, 'Description'),
+        (6, 'Purpose'),
+        (7, 'Personality'),
+        (8, 'Products'),
+        (9, 'Target Audience'),
+        (10, 'Interests'),
+        (11, 'Location'),
+        (12, 'Competitors'),
+        (13, 'Voice Tone'),
+        (14, 'Visual Style'),
+        (15, 'Logo'),
+        (16, 'Colors'),
+        (17, 'Preview'),
+        (18, 'Profile Ready'),
+        (19, 'Signup'),
+        (20, 'Paywall'),
+    ]
+
+    session_id = models.CharField(
+        max_length=100,
+        db_index=True,
+        verbose_name="ID da Sessão",
+        help_text="Identificador único da sessão de onboarding"
+    )
+    user = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='onboarding_step_tracking',
+        verbose_name="Usuário"
+    )
+    step_number = models.IntegerField(
+        choices=STEP_CHOICES,
+        verbose_name="Número da Etapa"
+    )
+    visited_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Visitado em"
+    )
+    completed = models.BooleanField(
+        default=False,
+        verbose_name="Completada"
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Completado em"
+    )
+
+    class Meta:
+        verbose_name = "Tracking de Etapa do Onboarding"
+        verbose_name_plural = "Tracking de Etapas do Onboarding"
+        unique_together = ['session_id', 'step_number']
+        indexes = [
+            models.Index(fields=['visited_at']),
+            models.Index(fields=['step_number', 'completed']),
+        ]
+
+    def __str__(self):
+        step_name = dict(self.STEP_CHOICES).get(self.step_number, 'Unknown')
+        return f"Session {self.session_id} - Step {self.step_number} ({step_name})"
