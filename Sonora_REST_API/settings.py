@@ -51,6 +51,10 @@ _default_hosts = [
     '.vercel.app',  # All Vercel preview/production domains
     'post-now-rest-api.vercel.app',
     'post-now-rest-api-devel.vercel.app',
+    # Production domains
+    'api.postnow.com.br',
+    'postnow.com.br',
+    '.postnow.com.br',  # All subdomains
 ]
 ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()] + _default_hosts
 
