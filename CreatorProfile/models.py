@@ -36,6 +36,8 @@ class CreatorProfile(models.Model):
     business_phone = models.CharField(
         max_length=20,
         default='',
+        blank=True,
+        null=True,
         verbose_name="WhatsApp",
         help_text="Número do WhatsApp com DDD"
     )
@@ -246,8 +248,8 @@ class CreatorProfile(models.Model):
         # Update overall onboarding status
         was_completed = self.onboarding_completed
         self.onboarding_completed = (
-            self.step_1_completed and
-            self.step_2_completed
+                self.step_1_completed and
+                self.step_2_completed
         )
 
         # Set completion timestamp if just completed
