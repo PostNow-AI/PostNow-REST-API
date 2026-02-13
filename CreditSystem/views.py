@@ -263,10 +263,8 @@ class UserSubscriptionView(generics.RetrieveAPIView):
         """Override to handle case when user has no subscription"""
         instance = self.get_object()
         if instance is None:
-            return Response(
-                {'detail': 'No active subscription found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            # Return 200 with null to avoid console errors on frontend
+            return Response(None, status=status.HTTP_200_OK)
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
