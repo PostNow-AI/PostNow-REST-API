@@ -34,4 +34,8 @@ urlpatterns = [
     # Visual Style Preferences endpoints
     path('visual-style-preferences/', views.VisualStylePreferenceView.as_view(),
          name='visual_style_preferences_list'),
+
+    # Onboarding step tracking
+    path('onboarding/track/', views.track_onboarding_step,
+         name='track_onboarding_step'),
 ]

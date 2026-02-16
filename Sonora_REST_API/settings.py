@@ -51,7 +51,10 @@ _default_hosts = [
     '.vercel.app',  # All Vercel preview/production domains
     'post-now-rest-api.vercel.app',
     'post-now-rest-api-devel.vercel.app',
+    # Production domains
     'api.postnow.com.br',
+    'postnow.com.br',
+    '.postnow.com.br',  # All subdomains
 ]
 ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()] + _default_hosts
 
@@ -238,7 +241,7 @@ REST_AUTH = {
 ACCOUNT_AUTHENTICATION_METHOD = "email"  # Use Email / Password authentication
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = "none"  # Disable email verification - users can login immediately after signup
+ACCOUNT_EMAIL_VERIFICATION = "optional"  # Allow login without email verification for onboarding flow
 # Automatically log in after email verification
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "[PostNow] "  # Email subject prefix
@@ -298,7 +301,13 @@ CORS_ALLOWED_ORIGINS = [
     "https://sonoria-posts.vercel.app",  # Production domain
     "https://postnow.com.br",  # Production domain
     "https://www.postnow.com.br",
-    "https://post-now-ui-devel.vercel.app"
+    "https://post-now-ui-devel.vercel.app",
+]
+
+# Allow all Vercel preview URLs (they change on each deploy)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://post-now-ui.*\.vercel\.app$",  # All Vercel preview URLs
+    r"^https://.*-matheusblancos-projects\.vercel\.app$",  # All preview URLs for this account
 ]
 
 # Add additional CORS origins from environment variable

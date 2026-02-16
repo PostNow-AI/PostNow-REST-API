@@ -263,10 +263,8 @@ class UserSubscriptionView(generics.RetrieveAPIView):
         """Override to handle case when user has no subscription"""
         instance = self.get_object()
         if instance is None:
-            return Response(
-                {'detail': 'No active subscription found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            # Return 200 with null to avoid console errors on frontend
+            return Response(None, status=status.HTTP_200_OK)
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
@@ -469,9 +467,13 @@ class CreateStripeCheckoutSessionView(APIView):
         plan_id = request.data.get('plan_id')
         upgrade_requested = str(request.data.get('upgrade', 'false')).lower() in [
             '1', 'true', 'yes']
+        success_url = request.data.get('success_url')
+        cancel_url = request.data.get('cancel_url')
 
         # Inicializar service
-        service = SubscriptionCheckoutService(request.user, plan_id)
+        service = SubscriptionCheckoutService(
+            request.user, plan_id, success_url=success_url, cancel_url=cancel_url
+        )
 
         # 1. Validar plano
         result = service.validate_plan()
@@ -1194,3 +1196,86 @@ def select_optimal_model_view(request):
             'message': 'Erro interno do servidor',
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AdminCreateSubscriptionView(APIView):
+    """
+    Endpoint de admin para criar assinaturas de teste.
+    Protegido por chave de admin.
+    """
+    permission_classes = []  # Public but protected by admin key
+
+    def post(self, request):
+        # Verify admin key
+        admin_key = request.headers.get('X-Admin-Key')
+        expected_key = os.environ.get('ADMIN_SECRET_KEY', 'postnow-admin-2024')
+
+        if admin_key != expected_key:
+            return Response({
+                'success': False,
+                'message': 'Unauthorized'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+        email = request.data.get('email')
+        plan_interval = request.data.get('plan_interval', 'yearly')
+
+        if not email:
+            return Response({
+                'success': False,
+                'message': 'Email é obrigatório'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from django.contrib.auth import get_user_model
+            from django.utils import timezone
+            from dateutil.relativedelta import relativedelta
+
+            User = get_user_model()
+            user = User.objects.filter(email=email).first()
+
+            if not user:
+                return Response({
+                    'success': False,
+                    'message': f'Usuário com email {email} não encontrado'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Find plan
+            plan = SubscriptionPlan.objects.filter(
+                interval=plan_interval,
+                is_active=True
+            ).first()
+
+            if not plan:
+                return Response({
+                    'success': False,
+                    'message': f'Plano {plan_interval} não encontrado'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Create subscription
+            end_date = timezone.now() + relativedelta(years=1) if plan_interval == 'yearly' else timezone.now() + relativedelta(months=1)
+
+            subscription = UserSubscription.objects.create(
+                user=user,
+                plan=plan,
+                status='active',
+                end_date=end_date,
+                stripe_subscription_id=f'test_sub_{user.id}_{timezone.now().timestamp()}'
+            )
+
+            return Response({
+                'success': True,
+                'message': f'Assinatura criada com sucesso para {email}',
+                'data': {
+                    'subscription_id': subscription.id,
+                    'plan': plan.name,
+                    'status': subscription.status,
+                    'end_date': subscription.end_date.isoformat()
+                }
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': 'Erro ao criar assinatura',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -36,6 +36,8 @@ class CreatorProfile(models.Model):
     business_phone = models.CharField(
         max_length=20,
         default='',
+        blank=True,
+        null=True,
         verbose_name="WhatsApp",
         help_text="Número do WhatsApp com DDD"
     )
@@ -246,8 +248,8 @@ class CreatorProfile(models.Model):
         # Update overall onboarding status
         was_completed = self.onboarding_completed
         self.onboarding_completed = (
-            self.step_1_completed and
-            self.step_2_completed
+                self.step_1_completed and
+                self.step_2_completed
         )
 
         # Set completion timestamp if just completed
@@ -379,5 +381,19 @@ class OnboardingStepTracking(models.Model):
         ]
 
     def __str__(self):
-        step_name = dict(self.STEP_CHOICES).get(self.step_number, 'Unknown')
-        return f"Session {self.session_id} - Step {self.step_number} ({step_name})"
+        step_name = dict(self.STEP_CHOICES).get(self.step_number, f"Step {self.step_number}")
+        return f"{self.session_id} - {step_name} {'✓' if self.completed else '○'}"
+
+    @classmethod
+    def get_phase_for_step(cls, step_number: int) -> int:
+        """Return the phase number (1-5) for a given step number."""
+        if step_number <= 3:
+            return 1  # Welcome
+        elif step_number <= 8:
+            return 2  # Business
+        elif step_number <= 12:
+            return 3  # Audience
+        elif step_number <= 17:
+            return 4  # Visual
+        else:
+            return 5  # Auth

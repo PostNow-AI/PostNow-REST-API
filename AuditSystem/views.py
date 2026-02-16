@@ -1047,3 +1047,542 @@ def posts_manual_stats_view(request):
             {'error': f'Error calculating posts manual stats: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def login_stats_view(request):
+    """
+    Get user login statistics for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - metric: Name of the metric
+    - count: Number of successful logins in the period
+    - timeline: Daily breakdown of logins
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    - note: Information about data exclusions
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_login_stats(
+            start_date, end_date)
+        result['period_days'] = days
+        result['note'] = 'Excludes admin users. Counts successful login events.'
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error calculating login stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def login_details_view(request):
+    """
+    Get detailed login list for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - logins: List of login details with user info and timestamps
+    - count: Total number of logins in the period
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_login_details(
+            start_date, end_date)
+        result['period_days'] = days
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error fetching login details: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def subscription_details_view(request):
+    """
+    Get detailed subscription list for a specified date range.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - subscriptions: List of subscription details with user info, plan, and dates
+    - count: Total number of subscriptions in the period
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_subscription_details(
+            start_date, end_date)
+        result['period_days'] = days
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error fetching subscription details: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def onboarding_funnel_view(request):
+    """
+    Get onboarding funnel statistics for a specified date range.
+    Returns step-by-step counts and individual field counts for drill-down.
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - started: Number of profiles created in the period
+    - step_1_completed: Number with step 1 completed
+    - step_2_completed: Number with step 2 completed
+    - completed: Number with full onboarding completed
+    - has_business_name, has_specialization, has_business_description: Step 1 field counts
+    - has_voice_tone, has_colors: Step 2 field counts
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    """
+    try:
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_onboarding_funnel_stats(
+            start_date, end_date)
+        result['period_days'] = days
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error fetching onboarding funnel stats: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def onboarding_step_details_view(request, step_number):
+    """
+    Get detailed information about a specific onboarding step.
+    Returns session-level data for drill-down analysis.
+
+    Path Parameters:
+    - step_number: The step number (1-20) to get details for
+
+    Query Parameters:
+    - days (optional): Number of days to look back (1, 7, 30, 90, 180). Default: 30
+
+    Returns:
+    - step_number: The step number
+    - step_name: English name of the step
+    - step_name_pt: Portuguese name of the step
+    - statistics: Object with counts, rates, and timing info
+    - sessions: List of session details (limited to 50)
+    - sessions_total: Total number of sessions for this step
+    - period_days: Number of days in the period
+    - start_date: ISO formatted start date
+    - end_date: ISO formatted end date
+    """
+    try:
+        # Validate step number
+        if step_number < 1 or step_number > 20:
+            return Response(
+                {'error': 'Step number must be between 1 and 20'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        days = int(request.GET.get('days', 30))
+        if days not in [1, 7, 30, 90, 180]:
+            return Response(
+                {'error': 'Days parameter must be one of: 1, 7, 30, 90, 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+
+        result = BehaviorDashboardService.get_onboarding_step_details(
+            start_date, end_date, step_number)
+        result['period_days'] = days
+
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': f'Error fetching onboarding step details: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+# ============================================================================
+# ADMIN MIGRATION ENDPOINT
+# ============================================================================
+
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def run_migrations(request):
+    """
+    Run pending database migrations.
+    Protected by CRON_SECRET for security.
+
+    Headers required:
+    - Authorization: Bearer <CRON_SECRET>
+
+    Returns:
+    - success: Whether migrations ran successfully
+    - output: Migration output or error message
+    """
+    from django.conf import settings
+    from django.core.management import call_command
+    from io import StringIO
+
+    # Verify CRON_SECRET
+    auth_header = request.headers.get('Authorization', '')
+    expected_secret = getattr(settings, 'CRON_SECRET', '')
+
+    if not auth_header.startswith('Bearer '):
+        return Response(
+            {'error': 'Authorization header must use Bearer token'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    provided_secret = auth_header[7:]  # Remove 'Bearer ' prefix
+
+    if not expected_secret or provided_secret != expected_secret:
+        return Response(
+            {'error': 'Invalid or missing CRON_SECRET'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        # Capture migration output
+        output = StringIO()
+
+        # Run migrations
+        call_command('migrate', '--noinput', stdout=output, stderr=output)
+
+        migration_output = output.getvalue()
+
+        # Log the operation
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='success',
+            details={
+                'operation': 'run_migrations',
+                'output': migration_output[:2000]  # Limit output size
+            }
+        )
+
+        return Response({
+            'success': True,
+            'message': 'Migrations executed successfully',
+            'output': migration_output
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        error_msg = str(e)
+
+        # Log the error
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='error',
+            error_message=f'Migration failed: {error_msg}',
+            details={'operation': 'run_migrations'}
+        )
+
+        return Response({
+            'success': False,
+            'error': f'Migration failed: {error_msg}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================================================
+# ADMIN CREATE YEARLY PLAN ENDPOINT
+# ============================================================================
+
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def create_yearly_plan(request):
+    """
+    Create the yearly subscription plan.
+    Protected by CRON_SECRET for security.
+
+    Headers required:
+    - Authorization: Bearer <CRON_SECRET>
+
+    Returns:
+    - success: Whether the plan was created
+    - plan: The created plan data
+    """
+    from django.conf import settings
+    from CreditSystem.models import SubscriptionPlan
+
+    # Verify CRON_SECRET
+    auth_header = request.headers.get('Authorization', '')
+    expected_secret = getattr(settings, 'CRON_SECRET', '')
+
+    if not auth_header.startswith('Bearer '):
+        return Response(
+            {'error': 'Authorization header must use Bearer token'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    provided_secret = auth_header[7:]  # Remove 'Bearer ' prefix
+
+    if not expected_secret or provided_secret != expected_secret:
+        return Response(
+            {'error': 'Invalid or missing CRON_SECRET'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        # Check if yearly plan already exists
+        existing_plan = SubscriptionPlan.objects.filter(interval='yearly').first()
+        if existing_plan:
+            # Update existing plan with correct values
+            existing_plan.name = 'Plano Anual - BETA'
+            existing_plan.description = 'Preço Beta, desconto 50%. Economia de 40% comparado ao mensal.'
+            existing_plan.price = 359.00
+            existing_plan.stripe_price_id = 'price_1SzIQ0AuLJkGhmCui6BDvReN'
+            existing_plan.is_active = True
+            existing_plan.monthly_credits = 30
+            existing_plan.benefits = [
+                '30 posts, por mês',
+                '30 ideias no email, por mês',
+                '10 dias de teste gratuito',
+                'Economia de 40%',
+            ]
+            existing_plan.save()
+
+            return Response({
+                'success': True,
+                'message': 'Yearly plan updated successfully',
+                'plan': {
+                    'id': existing_plan.id,
+                    'name': existing_plan.name,
+                    'price': str(existing_plan.price),
+                    'interval': existing_plan.interval,
+                    'stripe_price_id': existing_plan.stripe_price_id,
+                    'is_active': existing_plan.is_active,
+                }
+            }, status=status.HTTP_200_OK)
+
+        # Create the yearly plan
+        yearly_plan = SubscriptionPlan.objects.create(
+            name='Plano Anual - BETA',
+            description='Preço Beta, desconto 50%. Economia de 40% comparado ao mensal.',
+            price=359.00,
+            interval='yearly',
+            stripe_price_id='price_1SzIQ0AuLJkGhmCui6BDvReN',
+            is_active=True,
+            monthly_credits=30,
+            allow_credit_purchase=False,
+            benefits=[
+                '30 posts, por mês',
+                '30 ideias no email, por mês',
+                '10 dias de teste gratuito',
+                'Economia de 40%',
+            ]
+        )
+
+        # Log the operation
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='success',
+            details={
+                'operation': 'create_yearly_plan',
+                'plan_id': yearly_plan.id,
+                'plan_name': yearly_plan.name
+            }
+        )
+
+        return Response({
+            'success': True,
+            'message': 'Yearly plan created successfully',
+            'plan': {
+                'id': yearly_plan.id,
+                'name': yearly_plan.name,
+                'price': str(yearly_plan.price),
+                'interval': yearly_plan.interval,
+                'stripe_price_id': yearly_plan.stripe_price_id,
+                'is_active': yearly_plan.is_active,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        error_msg = str(e)
+
+        # Log the error
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='error',
+            error_message=f'Create yearly plan failed: {error_msg}',
+            details={'operation': 'create_yearly_plan'}
+        )
+
+        return Response({
+            'success': False,
+            'error': f'Failed to create yearly plan: {error_msg}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def update_plan_stripe_price(request):
+    """
+    Update the stripe_price_id of a subscription plan.
+    Protected by CRON_SECRET for security.
+
+    Headers required:
+    - X-Cron-Secret: must match CRON_SECRET environment variable
+
+    Body required:
+    - plan_id: ID of the plan to update
+    - stripe_price_id: New Stripe price ID
+    """
+    # Verify CRON_SECRET
+    cron_secret = request.headers.get('X-Cron-Secret')
+    expected_secret = os.environ.get('CRON_SECRET', 'dev-secret-change-in-production')
+
+    if cron_secret != expected_secret:
+        return Response({
+            'success': False,
+            'error': 'Unauthorized - Invalid or missing CRON_SECRET'
+        }, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        plan_id = request.data.get('plan_id')
+        new_stripe_price_id = request.data.get('stripe_price_id')
+
+        if not plan_id or not new_stripe_price_id:
+            return Response({
+                'success': False,
+                'error': 'plan_id and stripe_price_id are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Import here to avoid circular imports
+        from CreditSystem.models import SubscriptionPlan
+
+        # Find the plan
+        try:
+            plan = SubscriptionPlan.objects.get(id=plan_id)
+        except SubscriptionPlan.DoesNotExist:
+            return Response({
+                'success': False,
+                'error': f'Plan with id {plan_id} not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Update the stripe_price_id
+        old_price_id = plan.stripe_price_id
+        plan.stripe_price_id = new_stripe_price_id
+        plan.save()
+
+        # Log the update
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='success',
+            details={
+                'operation': 'update_plan_stripe_price',
+                'plan_id': plan.id,
+                'plan_name': plan.name,
+                'old_stripe_price_id': old_price_id,
+                'new_stripe_price_id': new_stripe_price_id
+            }
+        )
+
+        return Response({
+            'success': True,
+            'message': 'Plan stripe_price_id updated successfully',
+            'plan': {
+                'id': plan.id,
+                'name': plan.name,
+                'interval': plan.interval,
+                'old_stripe_price_id': old_price_id,
+                'new_stripe_price_id': plan.stripe_price_id,
+            }
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        error_msg = str(e)
+
+        AuditService.log_system_operation(
+            user=None,
+            action='maintenance',
+            status='error',
+            error_message=f'Update plan stripe_price failed: {error_msg}',
+            details={'operation': 'update_plan_stripe_price'}
+        )
+
+        return Response({
+            'success': False,
+            'error': f'Failed to update plan: {error_msg}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

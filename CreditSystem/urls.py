@@ -52,4 +52,8 @@ urlpatterns = [
          name='subscription-cancel'),
     path('payment-status/', views.PaymentStatusView.as_view(),
          name='payment-status'),
+
+    # Admin endpoints
+    path('admin/create-subscription/', views.AdminCreateSubscriptionView.as_view(),
+         name='admin-create-subscription'),
 ]

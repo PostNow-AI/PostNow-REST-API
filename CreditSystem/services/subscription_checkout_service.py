@@ -38,11 +38,13 @@ class SubscriptionCheckoutService:
     - Gerenciar upgrades
     """
 
-    def __init__(self, user, plan_id: int):
+    def __init__(self, user, plan_id: int, success_url: str = None, cancel_url: str = None):
         self.user = user
         self.plan_id = plan_id
         self.plan: Optional[SubscriptionPlan] = None
         self.existing_subscription: Optional[UserSubscription] = None
+        self.success_url = success_url
+        self.cancel_url = cancel_url
 
         # Configurar Stripe
         stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -111,6 +113,10 @@ class SubscriptionCheckoutService:
         """Cria sessão de checkout no Stripe"""
         frontend_url = getattr(settings, 'FRONTEND_URL', os.getenv("FRONTEND_URL", "http://localhost:3000"))
 
+        # Usar URLs do frontend se fornecidas, senão usar padrão
+        success_url = self.success_url or f"{frontend_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = self.cancel_url or f"{frontend_url}/subscription/cancel"
+
         try:
             # Configurar dados da assinatura
             subscription_data = None
@@ -132,8 +138,8 @@ class SubscriptionCheckoutService:
                 }],
                 allow_promotion_codes=True,
                 mode="subscription" if self.plan.interval != "lifetime" else "payment",
-                success_url=f"{frontend_url}/subscription/success?session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"{frontend_url}/subscription/cancel",
+                success_url=success_url,
+                cancel_url=cancel_url,
                 metadata={
                     "user_id": str(self.user.id),
                     "plan_id": str(self.plan.id),
