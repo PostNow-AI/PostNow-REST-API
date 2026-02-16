@@ -296,6 +296,12 @@ class VisualStylePreference(models.Model):
         verbose_name="Descrição da Preferência",
         help_text="Descrição detalhada da preferência de estilo visual"
     )
+    preview_image_url = models.URLField(
+        blank=True,
+        null=True,
+        verbose_name="URL da Imagem de Pré-Visualização",
+        help_text="URL de uma imagem que representa visualmente essa preferência"
+    )
 
     class Meta:
         verbose_name = "Preferência de Estilo Visual"
