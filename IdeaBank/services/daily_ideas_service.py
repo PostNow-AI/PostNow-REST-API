@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
@@ -23,14 +23,28 @@ logger = logging.getLogger(__name__)
 
 
 class DailyIdeasService:
-    def __init__(self):
-        self.user_validation_service = UserValidationService()
-        self.semaphore_service = SemaphoreService()
-        self.weekly_feed_creation_service = WeeklyFeedCreationService()
-        self.ai_service = AiService()
-        self.prompt_service = AIPromptService()
-        self.audit_service = AuditService()
-        self.s3_service = S3Service()
+    """Service for generating daily content ideas for users.
+
+    Supports dependency injection for testing and flexibility (DIP).
+    """
+
+    def __init__(
+        self,
+        user_validation_service: Optional[UserValidationService] = None,
+        semaphore_service: Optional[SemaphoreService] = None,
+        weekly_feed_creation_service: Optional[WeeklyFeedCreationService] = None,
+        ai_service: Optional[AiService] = None,
+        prompt_service: Optional[AIPromptService] = None,
+        audit_service: Optional[AuditService] = None,
+        s3_service: Optional[S3Service] = None,
+    ):
+        self.user_validation_service = user_validation_service or UserValidationService()
+        self.semaphore_service = semaphore_service or SemaphoreService()
+        self.weekly_feed_creation_service = weekly_feed_creation_service or WeeklyFeedCreationService()
+        self.ai_service = ai_service or AiService()
+        self.prompt_service = prompt_service or AIPromptService()
+        self.audit_service = audit_service or AuditService()
+        self.s3_service = s3_service or S3Service()
 
     @sync_to_async
     def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
