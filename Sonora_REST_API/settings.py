@@ -53,6 +53,7 @@ _default_hosts = [
     'post-now-rest-api-devel.vercel.app',
     # Production domains
     'api.postnow.com.br',
+    'app.postnow.com.br',
     'postnow.com.br',
     '.postnow.com.br',  # All subdomains
 ]
@@ -302,6 +303,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://postnow.com.br",  # Production domain
     "https://www.postnow.com.br",
     "https://post-now-ui-devel.vercel.app",
+    "https://app.postnow.com.br",
 ]
 
 # Allow all Vercel preview URLs (they change on each deploy)
