@@ -1,0 +1,150 @@
+[
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 1,
+  "fields": {
+    "name": "Minimalista Moderno",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign minimalista profissional com foco em simplicidade e elegância.\n\n### ELEMENTOS VISUAIS ###\n- Fundo branco puro ou off-white\n- Espaço negativo generoso (60% da composição)\n- Uma única cor de acento usada com moderação\n- Formas geométricas simples e sutis\n- Alto contraste entre elementos\n\n### PALETA DE CORES ###\n- Primária: Branco (#FFFFFF) ou off-white (#F8F9FA)\n- Secundária: Cinza claro (#E9ECEF)\n- Acento: Usar cor da marca do cliente\n\n### TIPOGRAFIA ###\n- Família: Sans-serif moderna (Inter, Helvetica Neue, SF Pro)\n- Peso: Bold para títulos, Regular para corpo\n- Estilo: Clean, legível, espaçamento generoso\n\n### COMPOSIÇÃO ###\n- Layout respirável e equilibrado\n- Hierarquia visual clara\n- Foco em um elemento principal\n- Alinhamento preciso\n\n### ILUMINAÇÃO ###\n- Luz natural, suave e uniforme\n- Sem sombras pesadas\n- Atmosfera clean e arejada\n\n### EVITAR ###\n- Gradientes e sombras dramáticas\n- Múltiplas cores vibrantes\n- Texturas pesadas ou patterns complexos\n- Excesso de elementos decorativos\n\n### QUALIDADE ###\n- Renderização ultra-detalhada e nítida\n- Acabamento premium de revista\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 2,
+  "fields": {
+    "name": "Bold Vibrante",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign energético e impactante com cores saturadas e tipografia bold.\n\n### ELEMENTOS VISUAIS ###\n- Cores saturadas e complementares\n- Blocos de cor com alto contraste\n- Formas geométricas dinâmicas\n- Movimento e energia na composição\n- Estética pop art contemporânea\n\n### PALETA DE CORES ###\n- Azul elétrico (#0066FF)\n- Rosa choque (#FF1493)\n- Amarelo vibrante (#FFD700)\n- Laranja vivo (#FF6B35)\n- Usar combinações complementares\n\n### TIPOGRAFIA ###\n- Família: Display bold (Bebas Neue, Anton, Montserrat Black)\n- Peso: Extra Bold / Black\n- Estilo: Impactante, condensada ou expandida\n\n### COMPOSIÇÃO ###\n- Layout dinâmico com movimento\n- Overlapping de elementos\n- Hierarquia visual forte\n- Assimetria controlada\n\n### ILUMINAÇÃO ###\n- Luz brilhante e uniforme\n- Sem sombras (flat lighting)\n- Cores puras e vibrantes\n\n### EVITAR ###\n- Tons pastéis ou dessaturados\n- Layouts estáticos e simétricos\n- Tipografia fina ou delicada\n- Atmosfera séria ou corporativa\n\n### QUALIDADE ###\n- Cores nítidas sem banding\n- Alto contraste e saturação\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 3,
+  "fields": {
+    "name": "Elegante Editorial",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign premium de luxo com estética de revista de alto padrão.\n\n### ELEMENTOS VISUAIS ###\n- Paleta escura e sofisticada\n- Acentos em dourado ou metálico\n- Texturas premium sutis\n- Composição simétrica e equilibrada\n- Estética de editorial de moda\n\n### PALETA DE CORES ###\n- Primária: Azul marinho profundo (#1A1A2E)\n- Secundária: Cinza carvão (#2D2D2D)\n- Acento: Dourado (#D4AF37) ou champagne (#F7E7CE)\n- Neutro: Creme (#FAF3E0)\n\n### TIPOGRAFIA ###\n- Família: Serif elegante (Playfair Display, Cormorant, Didot)\n- Peso: Regular para corpo, Bold para títulos\n- Estilo: Clássico, refinado, com tracking generoso\n\n### COMPOSIÇÃO ###\n- Simetria e equilíbrio\n- Uso de molduras ou bordas sutis\n- Hierarquia clara com espaço de respiro\n- Layout de revista premium\n\n### ILUMINAÇÃO ###\n- Luz dramática suave\n- Sombras delicadas e controladas\n- Atmosfera cinematográfica\n\n### EVITAR ###\n- Cores vibrantes ou neon\n- Tipografia casual ou divertida\n- Layouts desordenados\n- Elementos que pareçam baratos\n\n### QUALIDADE ###\n- Acabamento de luxo\n- Texturas sutis de alta resolução\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 4,
+  "fields": {
+    "name": "Divertido Ilustrado",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign artesanal com ilustrações hand-drawn e personalidade única.\n\n### ELEMENTOS VISUAIS ###\n- Ilustrações desenhadas à mão\n- Traços visíveis de lápis/caneta\n- Formas orgânicas e imperfeitas\n- Doodles e elementos decorativos\n- Texturas de papel ou craft\n\n### PALETA DE CORES ###\n- Terracota quente (#E07A5F)\n- Verde sálvia (#81B29A)\n- Creme (#F4F1DE)\n- Coral suave (#F2CC8F)\n- Tons terrosos e acolhedores\n\n### TIPOGRAFIA ###\n- Família: Handwritten ou marker-style (Caveat, Permanent Marker)\n- Alternativa: Sans-serif arredondada (Nunito, Quicksand)\n- Estilo: Casual, amigável, imperfeito\n\n### COMPOSIÇÃO ###\n- Layout orgânico e fluido\n- Elementos sobrepostos naturalmente\n- Bordas irregulares\n- Espaço para \"respirar\"\n\n### ILUMINAÇÃO ###\n- Luz natural e quente\n- Atmosfera acolhedora e caseira\n- Sem iluminação artificial óbvia\n\n### EVITAR ###\n- Perfeição digital\n- Linhas retas demais\n- Cores frias ou corporativas\n- Estética high-tech\n\n### QUALIDADE ###\n- Texturas de papel visíveis\n- Traços autênticos e humanos\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 5,
+  "fields": {
+    "name": "Profissional Corporativo",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign empresarial que transmite confiança, autoridade e profissionalismo.\n\n### ELEMENTOS VISUAIS ###\n- Esquema de cores baseado em azul (confiança)\n- Layout estruturado em grid\n- Linhas limpas e organizadas\n- Padrões geométricos sutis\n- Ícones profissionais se necessário\n\n### PALETA DE CORES ###\n- Primária: Azul corporativo (#0052CC ou #2563EB)\n- Secundária: Cinza profissional (#64748B)\n- Neutro: Branco (#FFFFFF)\n- Acento: Azul escuro (#1E3A5F)\n\n### TIPOGRAFIA ###\n- Família: Sans-serif profissional (Inter, Roboto, Open Sans)\n- Peso: Medium para corpo, Semibold para títulos\n- Estilo: Limpo, moderno, altamente legível\n\n### COMPOSIÇÃO ###\n- Grid-based layout organizado\n- Alinhamento preciso\n- Hierarquia clara de informação\n- Espaço branco estratégico\n\n### ILUMINAÇÃO ###\n- Luz profissional de estúdio\n- Sombras limpas e controladas\n- Atmosfera confiável e séria\n\n### EVITAR ###\n- Cores vibrantes ou divertidas\n- Layouts criativos demais\n- Tipografia decorativa\n- Elementos que reduzam credibilidade\n\n### QUALIDADE ###\n- Acabamento corporativo premium\n- Linhas nítidas e precisas\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 6,
+  "fields": {
+    "name": "Criativo Experimental",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign artístico de colagem com mix de mídias e expressão criativa ousada.\n\n### ELEMENTOS VISUAIS ###\n- Colagem de elementos variados\n- Recortes de fotos e texturas\n- Formas geométricas sobrepostas\n- Bordas rasgadas e irregulares\n- Layering criativo com profundidade\n\n### PALETA DE CORES ###\n- Eclética mas harmônica\n- Acentos vibrantes inesperados\n- Mix de tons quentes e frios\n- Pode usar cores da marca + complementares\n\n### TIPOGRAFIA ###\n- Mix de estilos: serif + sans-serif + handwritten\n- Tamanhos variados\n- Rotações e posicionamentos criativos\n- Estilo de colagem editorial\n\n### COMPOSIÇÃO ###\n- Assimétrica e dinâmica\n- Layers sobrepostos\n- Tensão visual controlada\n- Estética de revista independente\n\n### ILUMINAÇÃO ###\n- Variada conforme elementos\n- Pode misturar estilos\n- Sombras dramáticas se apropriado\n\n### EVITAR ###\n- Layouts previsíveis\n- Simetria excessiva\n- Paletas monótonas\n- Estética corporativa tradicional\n\n### QUALIDADE ###\n- Texturas de alta resolução\n- Bordas e recortes bem definidos\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 7,
+  "fields": {
+    "name": "Tech Futurista",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign de startup tech com estética dark mode e elementos futuristas.\n\n### ELEMENTOS VISUAIS ###\n- Fundo escuro (dark mode)\n- Cores neon como acento\n- Formas geométricas clean\n- Elementos de glass morphism\n- Grids e linhas sutis\n\n### PALETA DE CORES ###\n- Base: Cinza carvão escuro (#1A1A1A ou #0F0F0F)\n- Acento 1: Roxo elétrico (#8B5CF6)\n- Acento 2: Ciano (#06B6D4)\n- Acento 3: Azul neon (#3B82F6)\n- Brilhos e glows sutis\n\n### TIPOGRAFIA ###\n- Família: Sans-serif geométrica (SF Pro, Inter, Manrope)\n- Peso: Medium a Bold\n- Estilo: Futurista, clean, tech-forward\n\n### COMPOSIÇÃO ###\n- Layout moderno e limpo\n- Uso de cards com blur (glass morphism)\n- Hierarquia clara\n- Elementos floating\n\n### ILUMINAÇÃO ###\n- Glows neon sutis\n- Luz ambiente escura\n- Highlights em elementos chave\n- Atmosfera digital\n\n### EVITAR ###\n- Fundos claros\n- Cores quentes como primária\n- Estética vintage ou retrô\n- Elementos orgânicos demais\n\n### QUALIDADE ###\n- Renderização crisp e moderna\n- Efeitos de blur de alta qualidade\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 8,
+  "fields": {
+    "name": "Natural Orgânico",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign artístico com texturas aquarela e sensação natural e orgânica.\n\n### ELEMENTOS VISUAIS ###\n- Texturas de aquarela\n- Bordas suaves e bleeding\n- Camadas transparentes\n- Formas orgânicas fluidas\n- Elementos botânicos se apropriado\n\n### PALETA DE CORES ###\n- Rosa dusty (#D4A5A5)\n- Verde sálvia (#9DC08B)\n- Lavanda suave (#E6E6FA)\n- Creme (#FFF8E7)\n- Terracota (#C4A484)\n\n### TIPOGRAFIA ###\n- Família: Script elegante (Playfair, Cormorant) ou serif delicada\n- Alternativa: Sans-serif leve (Lato Light)\n- Estilo: Feminino, delicado, artístico\n\n### COMPOSIÇÃO ###\n- Layout fluido e orgânico\n- Elementos que \"respiram\"\n- Assimetria natural\n- Espaço negativo como elemento\n\n### ILUMINAÇÃO ###\n- Luz natural suave\n- Atmosfera sonhadora\n- Sem sombras duras\n- Feeling de galeria de arte\n\n### EVITAR ###\n- Linhas duras e geométricas\n- Cores saturadas demais\n- Layouts rígidos\n- Estética digital ou tech\n\n### QUALIDADE ###\n- Texturas de aquarela autênticas\n- Transições suaves de cor\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 9,
+  "fields": {
+    "name": "Escandinavo Clean",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign hygge-inspired com tons neutros e atmosfera acolhedora e serena.\n\n### ELEMENTOS VISUAIS ###\n- Paleta neutra e quente\n- Texturas de madeira natural\n- Linhas geométricas suaves\n- Formas arredondadas\n- Elementos de natureza minimalistas\n\n### PALETA DE CORES ###\n- Branco creme quente (#FAF9F6)\n- Cinza quente claro (#D4D4D4)\n- Bege natural (#E8DFD0)\n- Madeira clara (#DEB887)\n- Cinza escuro para texto (#4A4A4A)\n\n### TIPOGRAFIA ###\n- Família: Sans-serif elegante (Montserrat, Nunito, Poppins)\n- Peso: Light a Regular\n- Estilo: Minimalista, legível, acolhedor\n\n### COMPOSIÇÃO ###\n- Muito espaço de respiro\n- Equilíbrio e harmonia\n- Simplicidade intencional\n- Layout clean e organizado\n\n### ILUMINAÇÃO ###\n- Luz natural difusa\n- Atmosfera de dia nublado nórdico\n- Suave e acolhedora\n- Sem contrastes dramáticos\n\n### EVITAR ###\n- Cores vibrantes ou frias\n- Elementos decorativos excessivos\n- Texturas pesadas\n- Layouts cluttered\n\n### QUALIDADE ###\n- Acabamento premium e sereno\n- Texturas naturais de alta qualidade\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 10,
+  "fields": {
+    "name": "Zen Japonês",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nEstética japonesa minimalista seguindo o conceito 'ma' de vazio intencional.\n\n### ELEMENTOS VISUAIS ###\n- Equilíbrio assimétrico\n- Muito espaço vazio (ma)\n- Um elemento focal único\n- Texturas de washi paper sutis\n- Simplicidade extrema\n\n### PALETA DE CORES ###\n- Cinza quente (#808080)\n- Verde natural (#7C9070)\n- Bege areia (#C2B280)\n- Preto carvão (#333333)\n- Branco suave (#F5F5F5)\n\n### TIPOGRAFIA ###\n- Família: Sans-serif minimalista ou serif delicada\n- Peso: Light a Regular\n- Estilo: Refinado, com muito tracking\n- Hierarquia sutil\n\n### COMPOSIÇÃO ###\n- Assimetria balanceada (regra dos terços japonesa)\n- Espaço vazio como elemento principal\n- Foco em um único ponto\n- Menos é mais, elevado ao máximo\n\n### ILUMINAÇÃO ###\n- Luz natural suave\n- Atmosfera meditativa\n- Sem iluminação artificial óbvia\n- Serenidade e calma\n\n### EVITAR ###\n- Múltiplos elementos competindo\n- Cores vibrantes\n- Layouts cheios\n- Decorações desnecessárias\n\n### QUALIDADE ###\n- Texturas sutis de papel washi\n- Acabamento refinado e contemplativo\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 11,
+  "fields": {
+    "name": "Jurídico Profissional",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign para serviços jurídicos que transmite autoridade, tradição e confiança.\n\n### ELEMENTOS VISUAIS ###\n- Paleta autoritária e tradicional\n- Elementos clássicos sutis\n- Layout formal e estruturado\n- Padrões de pinstripe discretos\n- Detalhes em dourado se apropriado\n\n### PALETA DE CORES ###\n- Azul marinho profundo (#1B365D)\n- Vinho/burgundy (#722F37)\n- Creme clássico (#FFFDD0)\n- Dourado sutil (#CFB53B)\n- Branco (#FFFFFF)\n\n### TIPOGRAFIA ###\n- Família: Serif clássica (Times New Roman, Garamond, Baskerville)\n- Peso: Regular para corpo, Bold para títulos\n- Estilo: Tradicional, respeitável, legível\n\n### COMPOSIÇÃO ###\n- Layout formal com grid clássico\n- Simetria e ordem\n- Hierarquia clara e tradicional\n- Margens generosas\n\n### ILUMINAÇÃO ###\n- Luz de estúdio profissional\n- Atmosfera séria e respeitável\n- Sombras controladas e sutis\n\n### EVITAR ###\n- Cores vibrantes ou modernas\n- Layouts criativos ou assimétricos\n- Tipografia casual\n- Qualquer elemento que reduza credibilidade\n\n### QUALIDADE ###\n- Acabamento premium tradicional\n- Aparência estabelecida e confiável\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 12,
+  "fields": {
+    "name": "Financeiro Clean",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign para serviços financeiros focado em transmitir confiança e precisão.\n\n### ELEMENTOS VISUAIS ###\n- Paleta que transmite confiança\n- Layout inspirado em data visualization\n- Grids limpos e precisos\n- Elementos geométricos de gráficos\n- Linhas e formas matemáticas\n\n### PALETA DE CORES ###\n- Azul marinho (#003366)\n- Verde floresta (#228B22)\n- Branco (#FFFFFF)\n- Dourado (#CFB53B)\n- Cinza neutro (#6B7280)\n\n### TIPOGRAFIA ###\n- Família: Sans-serif moderna (IBM Plex, Roboto, Inter)\n- Peso: Regular a Semibold\n- Estilo: Preciso, profissional, números bem desenhados\n\n### COMPOSIÇÃO ###\n- Layout baseado em grid preciso\n- Organização clara de informação\n- Hierarquia que guia o olho\n- Espaço branco estratégico\n\n### ILUMINAÇÃO ###\n- Luz profissional e limpa\n- Atmosfera confiável\n- Sem dramaticidade\n\n### EVITAR ###\n- Cores que pareçam arriscadas\n- Layouts desorganizados\n- Tipografia decorativa\n- Elementos que reduzam confiança\n\n### QUALIDADE ###\n- Linhas nítidas e precisas\n- Acabamento corporate premium\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 13,
+  "fields": {
+    "name": "Neon Pop",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nEstética retrô anos 80 com neon brilhante e vibe synthwave/vaporwave.\n\n### ELEMENTOS VISUAIS ###\n- Fundo escuro (preto/roxo profundo)\n- Cores neon brilhantes\n- Efeitos de glow visíveis\n- Grid lines estilo retro\n- Elementos chrome/metálicos\n\n### PALETA DE CORES ###\n- Base: Preto (#000000) ou roxo escuro (#1A0033)\n- Rosa neon (#FF1493)\n- Ciano elétrico (#00FFFF)\n- Verde limão (#00FF00)\n- Roxo neon (#BF00FF)\n\n### TIPOGRAFIA ###\n- Família: Display retro-futurista (Orbitron, Audiowide)\n- Peso: Bold a Black\n- Estilo: Com glow neon, futurista retrô\n\n### COMPOSIÇÃO ###\n- Contraste dramático claro/escuro\n- Grid lines perspectiva 80s\n- Elementos centralizados ou com simetria\n- Camadas de glow\n\n### ILUMINAÇÃO ###\n- Neon brilhante contra fundo escuro\n- Bloom e glow effects\n- Atmosfera de night club\n- Luz artificial dramática\n\n### EVITAR ###\n- Fundos claros\n- Cores pastéis ou suaves\n- Estética minimalista\n- Looks corporativos\n\n### QUALIDADE ###\n- Glows suaves sem pixelização\n- Alto contraste bem executado\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 14,
+  "fields": {
+    "name": "Gradiente Explosivo",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign vibrante com gradientes bold multi-color e estética Instagram-native.\n\n### ELEMENTOS VISUAIS ###\n- Gradientes multi-cor suaves\n- Formas abstratas fluidas\n- Transições de cor smooth\n- Elementos floating\n- Estética digital moderna\n\n### PALETA DE CORES ###\n- Roxo profundo (#6B21A8)\n- Rosa vibrante (#EC4899)\n- Laranja quente (#F97316)\n- Azul elétrico (#3B82F6)\n- Gradientes smooth entre eles\n\n### TIPOGRAFIA ###\n- Família: Sans-serif moderna (Poppins, Montserrat)\n- Peso: Bold a Black\n- Cor: Branco puro com sombra sutil\n- Estilo: Clean contra gradiente\n\n### COMPOSIÇÃO ###\n- Gradiente como hero element\n- Formas orgânicas fluidas\n- Tipografia em destaque\n- Layout dinâmico\n\n### ILUMINAÇÃO ###\n- Glow ambiente suave\n- Cores que parecem emitir luz\n- Atmosfera digital vibrante\n\n### EVITAR ###\n- Banding no gradiente\n- Cores que não combinam\n- Layouts estáticos\n- Tipografia que se perde no fundo\n\n### QUALIDADE ###\n- Gradientes smooth sem banding\n- Transições de cor perfeitas\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 15,
+  "fields": {
+    "name": "Retro Anos 80",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nEstética Miami Vice / Outrun com sunset vibes e nostalgia dos anos 80.\n\n### ELEMENTOS VISUAIS ###\n- Gradientes de sunset\n- Padrões geométricos (triângulos, grids)\n- Linhas horizontais\n- Sol/sunset como motivo\n- Elementos chrome metálico\n\n### PALETA DE CORES ###\n- Teal (#008080)\n- Magenta (#FF00FF)\n- Roxo (#800080)\n- Coral (#FF7F7F)\n- Laranja sunset (#FF6347)\n\n### TIPOGRAFIA ###\n- Família: Display retro (Outrun, Streamster, Miami)\n- Peso: Bold\n- Estilo: Chrome, outline, ou solid bold\n\n### COMPOSIÇÃO ###\n- Horizonte com sunset\n- Grid de perspectiva\n- Simetria central\n- Layers de elementos geométricos\n\n### ILUMINAÇÃO ###\n- Luz de sunset quente\n- Atmosfera nostálgica\n- Glows em cores quentes\n- Reflexos metálicos\n\n### EVITAR ###\n- Cores frias isoladas\n- Estética moderna minimalista\n- Layouts assimétricos demais\n- Perder a vibe retrô\n\n### QUALIDADE ###\n- VHS scan lines sutis opcionais\n- Acabamento nostálgico mas HD\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 16,
+  "fields": {
+    "name": "Gradiente Moderno",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign sofisticado com gradientes sutis e elegantes, estética Apple/tech premium.\n\n### ELEMENTOS VISUAIS ###\n- Gradientes suaves e elegantes\n- Transições de cor delicadas\n- Composição minimalista\n- Sombras sutis para profundidade\n- Estética de empresa de tecnologia premium\n\n### PALETA DE CORES ###\n- Roxo suave para azul céu (#A855F7 → #38BDF8)\n- Pêssego para rosa blush (#FBBF24 → #F472B6)\n- Verde menta para azul (#34D399 → #60A5FA)\n- Sempre tons pastéis sofisticados\n\n### TIPOGRAFIA ###\n- Família: Sans-serif premium (SF Pro, Inter, Söhne)\n- Peso: Medium a Semibold\n- Cor: Preto ou branco dependendo do fundo\n- Estilo: Clean, Apple-like\n\n### COMPOSIÇÃO ###\n- Gradiente como background principal\n- Tipografia em destaque central\n- Layout minimalista\n- Muito espaço de respiro\n\n### ILUMINAÇÃO ###\n- Suave e difusa\n- Sombras delicadas\n- Atmosfera premium e calma\n\n### EVITAR ###\n- Gradientes muito vibrantes\n- Transições bruscas\n- Elementos que distraiam\n- Layouts complexos\n\n### QUALIDADE ###\n- Gradientes ultra-smooth\n- Acabamento premium Apple-quality\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 17,
+  "fields": {
+    "name": "Flat Design",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nDesign flat moderno com cores sólidas bold e sem efeitos 3D.\n\n### ELEMENTOS VISUAIS ###\n- Cores sólidas sem gradientes\n- Formas geométricas sharp\n- Ícones estilo flat\n- Sem sombras ou profundidade\n- Estética 2D pura\n\n### PALETA DE CORES ###\n- Azul bright (#0EA5E9)\n- Coral (#F97316)\n- Amarelo (#FACC15)\n- Teal (#14B8A6)\n- Combinações harmônicas mas bold\n\n### TIPOGRAFIA ###\n- Família: Sans-serif geométrica (Roboto, Open Sans, Lato)\n- Peso: Regular a Bold\n- Estilo: Limpo, sem efeitos\n\n### COMPOSIÇÃO ###\n- Layout baseado em formas\n- Hierarquia clara com cor\n- Alinhamento preciso\n- Simplicidade funcional\n\n### ILUMINAÇÃO ###\n- Sem iluminação (flat)\n- Cores que falam por si\n- Sem sombras ou highlights\n\n### EVITAR ###\n- Qualquer efeito 3D\n- Sombras ou gradientes\n- Texturas\n- Complexidade desnecessária\n\n### QUALIDADE ###\n- Cores puras e precisas\n- Bordas sharp e definidas\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+},
+{
+  "model": "CreatorProfile.visualstylepreference",
+  "pk": 18,
+  "fields": {
+    "name": "Material Design",
+    "description": "### CARACTERÍSTICAS DO ESTILO ###\nEstética Google Material Design com cards, elevação e sombras realistas.\n\n### ELEMENTOS VISUAIS ###\n- Cards com elevação\n- Sombras realistas (elevation)\n- Camadas sobrepostas\n- Botões floating style\n- Hierarquia através de profundidade\n\n### PALETA DE CORES ###\n- Uma cor primária bold (ex: #6200EE)\n- Cor de acento complementar\n- Superfícies: Branco (#FFFFFF)\n- Backgrounds: Cinza claro (#F5F5F5)\n- Seguir Material color system\n\n### TIPOGRAFIA ###\n- Família: Roboto (oficial) ou similar\n- Peso: Regular, Medium, Bold\n- Hierarquia clara (H1, H2, body)\n- Estilo: Funcional e legível\n\n### COMPOSIÇÃO ###\n- Cards como containers\n- Hierarquia por elevação (z-index)\n- Grid de 8dp\n- Espaço intencional\n\n### ILUMINAÇÃO ###\n- Sombras seguindo princípios de elevação\n- Luz vindo de cima\n- Sombras soft e realistas\n- Depth através de shadow\n\n### EVITAR ###\n- Sombras irrealistas\n- Cores que quebrem o sistema\n- Layouts sem hierarquia\n- Elementos sem propósito\n\n### QUALIDADE ###\n- Sombras precisas por nível de elevação\n- Sistema consistente\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+  }
+}
+]
+shadow\n\n### EVITAR ###\n- Sombras irrealistas\n- Cores que quebrem o sistema\n- Layouts sem hierarquia\n- Elementos sem propósito\n\n### QUALIDADE ###\n- Sombras precisas por nível de elevação\n- Sistema consistente\n- Aspecto ratio: 4:5 (Feed) ou 9:16 (Stories/Reels)"
+    }
+  }
+]
