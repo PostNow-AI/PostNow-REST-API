@@ -1,48 +1,47 @@
-import logging
-from typing import Any, Dict
+"""Servico para retry de geracao de contexto semanal com falha."""
 
-from asgiref.sync import sync_to_async
-from django.contrib.auth.models import User
+import logging
+from typing import Any, Dict, Optional
+
 from django.utils import timezone
 
 from services.semaphore_service import SemaphoreService
+from .context_error_service import ContextErrorService
+from .context_stats_service import ContextStatsService
 from .weekly_context_service import WeeklyContextService
 
 logger = logging.getLogger(__name__)
 
 
 class RetryClientContext:
-    def __init__(self):
-        self.semaphore_service = SemaphoreService()
-        self.weekly_context_service = WeeklyContextService()
+    """Service for retrying failed weekly context generation.
 
-    @sync_to_async
-    def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
-        """Get a batch of users with weekly context errors"""
-        if limit is None:
-            return list(
-                User.objects.filter(
-                    usersubscription__status='active',
-                    is_active=True,
-                    client_context__weekly_context_error__isnull=False
-                ).distinct().values('id', 'email', 'username')[offset:]
-            )
+    Supports dependency injection for testing and flexibility (DIP).
+    """
 
-        return list(
-            User.objects.filter(
-                usersubscription__status='active',
-                is_active=True,
-                client_context__weekly_context_error__isnull=False
-            ).distinct().values('id', 'email', 'username')[offset:offset + limit]
-        )
+    def __init__(
+        self,
+        semaphore_service: Optional[SemaphoreService] = None,
+        weekly_context_service: Optional[WeeklyContextService] = None,
+        error_service: Optional[ContextErrorService] = None,
+        stats_service: Optional[ContextStatsService] = None,
+    ):
+        self.semaphore_service = semaphore_service or SemaphoreService()
+        self.weekly_context_service = weekly_context_service or WeeklyContextService()
+        self.error_service = error_service or ContextErrorService()
+        self.stats_service = stats_service or ContextStatsService()
 
     async def process_all_users_context(self, batch_number: int = 1, batch_size: int = 0) -> Dict[str, Any]:
-        """Process weekly context gen for all eligible users."""
+        """Process weekly context gen for all users with errors."""
         start_time = timezone.now()
         offset = (batch_number - 1) * batch_size
         limit = batch_size
 
-        eligible_users = await self._get_eligible_users(offset, limit)
+        if batch_size == 0:
+            offset = 0
+            limit = None
+
+        eligible_users = await self.error_service.get_users_with_errors(offset, limit)
         total = len(eligible_users)
 
         if total == 0:
@@ -59,27 +58,10 @@ class RetryClientContext:
                 function=self.weekly_context_service.process_single_user
             )
 
-            processed_count = sum(
-                1 for r in results if r.get('status') == 'success')
-            failed_count = sum(
-                1 for r in results if r.get('status') == 'failed')
-            skipped_count = sum(
-                1 for r in results if r.get('status') == 'skipped')
-
             end_time = timezone.now()
-            duration = (end_time - start_time).total_seconds()
+            stats = self.stats_service.calculate_batch_results(results, start_time, end_time)
 
-            result = {
-                'status': 'completed',
-                'processed': processed_count,
-                'failed': failed_count,
-                'skipped': skipped_count,
-                'total_users': total,
-                'duration_seconds': duration,
-                'details': results,
-            }
-
-            return result
+            return self.stats_service.build_completion_result(stats, total, details=results)
 
         except Exception as e:
             return {

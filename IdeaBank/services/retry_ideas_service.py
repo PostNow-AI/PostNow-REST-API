@@ -1,50 +1,45 @@
-import logging
-from typing import Any, Dict
+"""Servico para retry de geracao diaria de ideias com falha."""
 
-from asgiref.sync import sync_to_async
-from django.contrib.auth.models import User
+import logging
+from typing import Any, Dict, Optional
+
 from django.utils import timezone
 
+from ClientContext.services.context_stats_service import ContextStatsService
 from services.semaphore_service import SemaphoreService
+from .daily_error_service import DailyErrorService
 from .daily_ideas_service import DailyIdeasService
 
 logger = logging.getLogger(__name__)
 
 
 class RetryIdeasService:
-    def __init__(self):
-        self.semaphore_service = SemaphoreService()
-        self.daily_ideas_service = DailyIdeasService()
+    """Service for retrying failed daily ideas generation.
 
-    @sync_to_async
-    def _get_users_with_errors(self, offset: int, limit: int) -> list[dict[str, Any]]:
-        """Get all users who have daily generation errors."""
-        if limit is None:
-            return list(
-                User.objects.extra(
-                    where=["daily_generation_error IS NOT NULL"]
-                ).filter(
-                    usersubscription__status='active',
-                    is_active=True
-                ).distinct().values('id', 'email', 'username', 'first_name')[offset:]
-            )
+    Supports dependency injection for testing and flexibility (DIP).
+    """
 
-        return list(
-            User.objects.extra(
-                where=["daily_generation_error IS NOT NULL"]
-            ).filter(
-                usersubscription__status='active',
-                is_active=True
-            ).distinct().values('id', 'email', 'username', 'first_name')[offset:offset + limit]
-        )
+    def __init__(
+        self,
+        semaphore_service: Optional[SemaphoreService] = None,
+        daily_ideas_service: Optional[DailyIdeasService] = None,
+        error_service: Optional[DailyErrorService] = None,
+        stats_service: Optional[ContextStatsService] = None,
+    ):
+        self.semaphore_service = semaphore_service or SemaphoreService()
+        self.daily_ideas_service = daily_ideas_service or DailyIdeasService()
+        self.error_service = error_service or DailyErrorService()
+        self.stats_service = stats_service or ContextStatsService()
 
     async def process_daily_ideas_for_failed_users(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
-        """Process daily ideas generation for a batch of users"""
+        """Process daily ideas generation for users with errors."""
         start_time = timezone.now()
         offset = (batch_number - 1) * batch_size
-        limit = batch_size
+        limit = batch_size if batch_size > 0 else None
+        if batch_size == 0:
+            offset = 0
 
-        eligible_users = await self._get_users_with_errors(offset=offset, limit=limit)
+        eligible_users = await self.error_service.get_users_with_errors(offset=offset, limit=limit)
         total = len(eligible_users)
 
         if total == 0:
@@ -52,7 +47,7 @@ class RetryIdeasService:
                 'status': 'completed',
                 'processed': 0,
                 'total_users': 0,
-                'message': 'No eligible users found',
+                'message': 'No users with errors found',
             }
 
         try:
@@ -61,31 +56,19 @@ class RetryIdeasService:
                 function=self.daily_ideas_service.process_single_user
             )
 
-            processed_count = sum(
-                1 for r in results if r.get('status') == 'success')
-            failed_count = sum(
-                1 for r in results if r.get('status') == 'failed')
-            skipped_count = sum(
-                1 for r in results if r.get('status') == 'skipped')
+            end_time = timezone.now()
+            stats = self.stats_service.calculate_batch_results(results, start_time, end_time)
+
+            # Adiciona contagem de posts criados (especifico para daily ideas)
             created_posts_count = sum(
                 len(r.get('created_posts', [])) for r in results if r.get('status') == 'success'
             )
 
-            end_time = timezone.now()
-            duration = (end_time - start_time).total_seconds()
-
-            result = {
-                'status': 'completed',
-                'processed': processed_count,
-                'created_posts': created_posts_count,
-                'failed': failed_count,
-                'skipped': skipped_count,
-                'total_users': total,
-                'duration_seconds': duration,
-                'details': results,
-            }
+            result = self.stats_service.build_completion_result(stats, total, details=results)
+            result['created_posts'] = created_posts_count
 
             return result
+
         except Exception as e:
             return {
                 'status': 'error',
