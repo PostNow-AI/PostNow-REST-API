@@ -1,0 +1,38 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 10 * * 1'  # Segundas às 10h
+
+jobs:
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install safety
+        run: pip install safety bandit
+
+      - name: Check dependencies for vulnerabilities
+        run: |
+          pip freeze > requirements-frozen.txt
+          safety check -r requirements-frozen.txt --full-report || true
+
+      - name: Run Bandit security linter
+        run: bandit -r . -x ./venv,./tests --format json --output bandit-report.json || true
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: bandit-report.json
