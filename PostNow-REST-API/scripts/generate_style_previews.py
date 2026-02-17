@@ -51,6 +51,7 @@ except ImportError:
     print("AVISO: google-genai não instalado. Execute: pip install google-genai")
 
 from CreatorProfile.models import VisualStylePreference
+from IdeaBank.services.prompt_service import _build_logo_prompt_section, _format_colors_for_logo
 
 logger = logging.getLogger(__name__)
 
@@ -267,122 +268,54 @@ def build_style_preview_prompt(style: VisualStylePreference) -> str:
 
     IMPORTANTE: Todas as imagens usam o MESMO TEMA para facilitar
     a comparação entre estilos pelo usuário no onboarding.
-    """
-    color_palette = ', '.join(POSTNOW_DATA['color_palette'])
 
+    VERSÃO V4 (Sistema Reutilizável):
+    - Usa _build_logo_prompt_section() centralizada do prompt_service
+    - Garante consistência com prompts de produção
+    - Cores em formato narrativo (evita swatches)
+    """
     # Tema ÚNICO para todas as imagens de preview
-    # Isso permite que o usuário compare apenas o ESTILO VISUAL
     TEMA_PRINCIPAL = "CONQUISTE MAIS CLIENTES"
     SUBTEMA = "Com conteúdo que gera autoridade"
 
+    # Usar função centralizada para seção de logo
+    logo_section = _build_logo_prompt_section(
+        business_name=POSTNOW_DATA['business_name'],
+        color_palette=POSTNOW_DATA['color_palette'],
+        position="canto inferior direito"
+    )
+
+    # Cores em formato narrativo
+    cores_narrativas = _format_colors_for_logo(POSTNOW_DATA['color_palette'])
+
     prompt = f"""
-### PERSONA ###
-Você é um diretor de arte premiado internacionalmente, com 15 anos de experiência criando campanhas visuais para marcas como Apple, Nike e Airbnb. Especialista em design para redes sociais, você domina composição, teoria das cores e tendências visuais contemporâneas.
+Crie uma imagem de Instagram no estilo "{style.name}" para a marca {POSTNOW_DATA['business_name']}.
+
+**Conteúdo:**
+- Título principal: "{TEMA_PRINCIPAL}"
+- Subtítulo: "{SUBTEMA}"
 
 ---
 
-### CONTEXTO ###
-Você está criando uma imagem de PREVIEW/DEMONSTRAÇÃO do estilo visual "{style.name}" para o Instagram de "{POSTNOW_DATA['business_name']}".
-
-Esta imagem será exibida no onboarding para que usuários escolham seus estilos visuais preferidos. O usuário verá várias imagens lado a lado, cada uma em um estilo diferente, mas TODAS com o mesmo tema/conteúdo para facilitar a comparação.
-
-**Dados do Negócio:**
-- Nicho/Setor: {POSTNOW_DATA['specialization']}
-- Descrição: {POSTNOW_DATA['business_description']}
-- Tom de voz da marca: {POSTNOW_DATA['voice_tone']}
-
-**Público-Alvo:**
-- Perfil: {POSTNOW_DATA['target_audience']}
-- Interesses: {POSTNOW_DATA['target_interests']}
-
-**Identidade Visual da Marca:**
-- Paleta de cores: {color_palette}
+{logo_section}
 
 ---
 
-### CONTEÚDO OBRIGATÓRIO DA IMAGEM ###
-A imagem DEVE conter os seguintes textos renderizados:
+**Esquema de Cores da Marca (usar em TODOS os elementos):**
+{cores_narrativas}
 
-1. **Título Principal (DESTAQUE):** "{TEMA_PRINCIPAL}"
-   - Este é o texto mais importante da imagem
-   - Deve estar em posição de destaque
-   - Tipografia impactante conforme o estilo
-
-2. **Subtítulo (opcional):** "{SUBTEMA}"
-   - Complementa o título principal
-   - Menor que o título, mas legível
-
-3. **Logo/Marca:** Use a LOGO ANEXADA (imagem PostNow)
-   - A logo foi anexada a esta requisição - USE-A na composição
-   - Posição discreta mas visível (canto inferior ou superior)
-   - Integre a logo anexada elegantemente ao design
-   - NÃO escreva "POSTNOW" como texto - use a logo gráfica anexada
+**Sobre cores:** As cores devem ser APLICADAS aos elementos do design, não exibidas como blocos ou swatches separados.
 
 ---
 
-### TAREFA ###
-Crie uma imagem que demonstre perfeitamente o estilo visual "{style.name}" aplicado ao tema "{TEMA_PRINCIPAL}".
-
-A imagem deve:
-1. Demonstrar CLARAMENTE as características visuais do estilo "{style.name}"
-2. Renderizar o texto "{TEMA_PRINCIPAL}" de forma impactante e legível
-3. Parecer um post real de Instagram pronto para publicação
-4. Usar obrigatoriamente a paleta de cores: {color_palette}
-5. Ter qualidade profissional de agência de alto nível
-
----
-
-### ESTILO VISUAL OBRIGATÓRIO: {style.name} ###
+**Estilo Visual: {style.name}**
 {style.description}
 
 ---
 
-### DIRETRIZES TÉCNICAS ###
-- **Formato:** 1080 x 1350 px (proporção 4:5 vertical para Feed)
-- **Qualidade:** Ultra-detalhada, renderização profissional 4K
-- **Iluminação:** Conforme especificado no estilo visual acima
-- **Composição:** Conforme especificado no estilo visual acima
-- **Cores:** Usar OBRIGATORIAMENTE a paleta da marca: {color_palette}
-- **Tipografia:** Conforme especificado no estilo visual, mas garantir legibilidade
+**Formato:** 1080 x 1350 px (4:5 vertical), qualidade profissional.
 
----
-
-### REGRAS DE RENDERIZAÇÃO DE TEXTO E LOGO ###
-- O texto "{TEMA_PRINCIPAL}" DEVE estar claramente legível na imagem
-- USE A LOGO GRÁFICA ANEXADA (não escreva "POSTNOW" como texto)
-- A logo anexada deve ser integrada na composição visual
-- Textos devem ser escritos em português do Brasil
-- NÃO renderize hashtags na imagem
-- NÃO renderize códigos HEX das cores na imagem
-- NÃO renderize o termo "(PT-BR)" na imagem
-- NÃO substitua a logo por texto - use a imagem da logo anexada
-
----
-
-### RESTRIÇÕES (O QUE EVITAR) ###
-- NÃO incluir rostos humanos realistas
-- NÃO incluir logos de outras marcas
-- NÃO incluir marcas d'água
-- NÃO incluir textos além dos especificados acima
-- NÃO incluir elementos de interface ou frames de celular
-- NÃO usar cores fora da paleta da marca
-- NÃO criar imagens genéricas de banco de imagens
-- NÃO escrever o texto com erros ortográficos
-
----
-
-### INSTRUÇÃO FINAL ###
-Crie uma arte profissional que seja uma demonstração perfeita do estilo "{style.name}".
-
-IMPORTANTE: Uma imagem de LOGO foi anexada a esta requisição. Use essa logo na composição da imagem final.
-
-O resultado deve mostrar claramente:
-- O texto "{TEMA_PRINCIPAL}" renderizado no estilo tipográfico característico
-- A paleta de cores {color_palette} aplicada conforme o estilo
-- A composição e elementos visuais típicos do estilo "{style.name}"
-- A LOGO ANEXADA integrada elegantemente ao design (não escreva texto, use a imagem da logo)
-
-A imagem deve fazer o usuário pensar: "Quero meus posts nesse estilo!"
+Crie uma arte que demonstre perfeitamente o estilo "{style.name}" e faça o usuário pensar: "Quero meus posts assim!"
 """
     return prompt.strip()
 

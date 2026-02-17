@@ -1,7 +1,96 @@
 import random
-from typing import Dict
+from typing import Dict, List
 
 from CreatorProfile.models import CreatorProfile, VisualStylePreference
+
+
+# Mapeamento de cores HEX para descrições narrativas
+HEX_TO_COLOR_NAME = {
+    '#8B5CF6': 'Roxo vibrante',
+    '#FFFFFF': 'Branco puro',
+    '#4B4646': 'Cinza carvão escuro',
+    '#A855F7': 'Violeta claro',
+    '#EC4899': 'Rosa magenta',
+    '#000000': 'Preto',
+    '#F5F5F5': 'Cinza claro',
+    '#333333': 'Cinza escuro',
+    '#FF6B6B': 'Vermelho coral',
+    '#4ECDC4': 'Verde água',
+    '#FFE66D': 'Amarelo dourado',
+    '#95E1D3': 'Verde menta',
+    '#F38181': 'Rosa salmão',
+    '#AA96DA': 'Lavanda',
+    '#FCBAD3': 'Rosa claro',
+    '#FFFFD2': 'Creme',
+}
+
+
+def _format_colors_for_logo(color_palette: List[str]) -> str:
+    """
+    Converte lista de cores HEX para descrição narrativa.
+
+    Usado nos prompts de logo para evitar que a IA renderize
+    os códigos HEX como swatches ou blocos de cor.
+
+    Args:
+        color_palette: Lista de cores HEX (ex: ['#8B5CF6', '#FFFFFF'])
+
+    Returns:
+        String com descrições narrativas das cores, uma por linha
+    """
+    if not color_palette:
+        return "- Cores não definidas"
+
+    descriptions = []
+    for hex_color in color_palette:
+        hex_upper = hex_color.upper() if hex_color else ''
+        name = HEX_TO_COLOR_NAME.get(hex_upper, f'Cor personalizada ({hex_color})')
+        descriptions.append(f"- {name}")
+
+    return "\n".join(descriptions)
+
+
+def _build_logo_prompt_section(
+    business_name: str,
+    color_palette: List[str],
+    position: str = "bottom-right corner"
+) -> str:
+    """
+    Gera a seção de prompt estruturado para a logo da marca.
+
+    Esta função centraliza todas as regras necessárias para preservar
+    a logo corretamente durante a geração de imagens, usando as cores
+    do onboarding para flexibilidade de adaptação.
+
+    Segue as melhores práticas de prompt engineering para image-to-image:
+    - Narrativa descritiva (não bullets)
+    - Reconhecimento explícito da imagem anexada
+    - Diretivas de preservação específicas
+    - Instrução "change only X, keep everything else"
+    - Sem instruções negativas
+
+    Args:
+        business_name: Nome da marca (ex: "Postnow")
+        color_palette: Lista de cores HEX do onboarding
+        position: Posição desejada na imagem (default: bottom-right corner)
+
+    Returns:
+        String formatada com instruções completas para a logo
+    """
+    cores_formatadas = _format_colors_for_logo(color_palette)
+
+    return f"""
+**LOGO (Preserved Element):**
+
+Using the attached logo image of "{business_name}", place it in the {position} at approximately 8% of the image width, ensuring it remains clearly visible but not dominant.
+
+PRESERVE EXACTLY: the icon shape and geometry, the text "{business_name}" spelling and arrangement, and the overall logo proportions. The logo must appear exactly as provided in the attachment.
+
+Change ONLY the logo colors if needed for contrast against the background. Choose from the brand palette colors that provide maximum readability:
+{cores_formatadas}
+
+Keep the logo unchanged in every other aspect: same icon geometry, same text content, same layout structure. Ensure all parts of the logo are fully visible and legible against any background color.
+""".strip()
 
 
 class PromptService:
@@ -548,6 +637,13 @@ Crie uma imagem de post para Feed do Instagram que:
 
 ---
 
+{_build_logo_prompt_section(
+    business_name=creator_profile_data.get('business_name', 'Marca'),
+    color_palette=creator_profile_data.get('color_palette', [])
+)}
+
+---
+
 ### FORMATO DE SAÍDA ###
 Gere uma descrição detalhada da imagem ideal (60-100 palavras) que será passada diretamente para o gerador de imagens. A descrição deve incluir:
 - Elementos visuais principais
@@ -634,6 +730,13 @@ Crie uma capa de Reel que:
 - Evitar cores fora da paleta da marca
 - Evitar imagens genéricas de banco
 - Evitar sensacionalismo ou clickbait exagerado
+
+---
+
+{_build_logo_prompt_section(
+    business_name=creator_profile_data.get('business_name', 'Marca'),
+    color_palette=creator_profile_data.get('color_palette', [])
+)}
 
 ---
 
@@ -727,7 +830,13 @@ Crie uma arte de Story que:
 1. **Título principal** - Elemento âncora, maior destaque
 2. **Espaço negativo** - Respiro visual, menos é mais
 3. **Elementos de apoio** - Sutis, reforçam o tema
-4. **Logo** - APENAS se fornecida, NUNCA criar fictícia
+
+---
+
+{_build_logo_prompt_section(
+    business_name=creator_profile_data.get('business_name', 'Marca'),
+    color_palette=creator_profile_data.get('color_palette', [])
+)}
 
 ---
 
