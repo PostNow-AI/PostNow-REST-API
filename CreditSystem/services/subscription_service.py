@@ -260,9 +260,9 @@ class SubscriptionService:
                 if isinstance(latest_invoice, str):
                     try:
                         latest_invoice = stripe.Invoice.retrieve(latest_invoice)
-                    except:
-                        pass
-                
+                    except stripe.error.StripeError:
+                        pass  # Fallback to checking subscription status only
+
                 if isinstance(latest_invoice, dict):
                     payment_intent = latest_invoice.get('payment_intent')
                     if payment_intent:
@@ -270,8 +270,8 @@ class SubscriptionService:
                         if isinstance(payment_intent, str):
                             try:
                                 payment_intent = stripe.PaymentIntent.retrieve(payment_intent)
-                            except:
-                                pass
+                            except stripe.error.StripeError:
+                                pass  # Fallback to checking subscription status only
                         
                         if isinstance(payment_intent, dict):
                             pi_status = payment_intent.get('status')
