@@ -56,11 +56,13 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
       DJANGO_SETTINGS_MODULE: Sonora_REST_API.settings
-      SECRET_KEY: test-secret-key-for-ci
       USE_SQLITE: "true"
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Generate test secret key
+        run: echo "SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(50))')" >> $GITHUB_ENV
 
       - name: Set up Python
         uses: actions/setup-python@v5
