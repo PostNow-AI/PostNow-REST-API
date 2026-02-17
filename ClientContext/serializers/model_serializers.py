@@ -1,6 +1,8 @@
+"""Serializers DRF para o model ClientContext."""
+
 from rest_framework import serializers
 
-from .models import ClientContext
+from ClientContext.models import ClientContext
 
 
 class ClientContextSerializer(serializers.ModelSerializer):
