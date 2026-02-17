@@ -1,6 +1,107 @@
 import os
 
 
+def _render_json_as_bullets(data, fallback="Dados indisponíveis."):
+    """Render a JSON list or string as bullet-point HTML."""
+    if not data:
+        return f'<p style="font-size: 14px; color: #6b7280; font-style: italic;">{fallback}</p>'
+    if isinstance(data, str):
+        return f'<p style="font-size: 14px; color: #374151; line-height: 1.6;">{data}</p>'
+    if isinstance(data, list):
+        items = ""
+        for item in data[:8]:
+            if isinstance(item, dict):
+                # Tentar extrair texto de varias chaves possiveis
+                text = (
+                    item.get('titulo') or
+                    item.get('titulo_original') or
+                    item.get('titulo_ideia') or
+                    item.get('name') or
+                    item.get('nome') or
+                    item.get('title') or
+                    item.get('texto') or
+                    item.get('descricao') or
+                    item.get('description') or
+                    item.get('text') or
+                    None
+                )
+                # Se nao encontrou texto valido, pular este item
+                if not text:
+                    continue
+            else:
+                text = str(item)
+            items += f'<li style="margin-bottom: 6px; font-size: 14px; color: #374151; line-height: 1.5;">{text}</li>'
+        if not items:
+            return f'<p style="font-size: 14px; color: #6b7280; font-style: italic;">{fallback}</p>'
+        return f'<ul style="margin: 0; padding-left: 20px;">{items}</ul>'
+    return f'<p style="font-size: 14px; color: #6b7280; font-style: italic;">{fallback}</p>'
+
+
+def _format_text_data(data, fallback="Dados não disponíveis."):
+    """Format data that may be string, dict, or list into readable text."""
+    if not data:
+        return fallback
+    if isinstance(data, str):
+        return data
+    if isinstance(data, dict):
+        # Tentar extrair texto de varias chaves possiveis
+        text = (
+            data.get('titulo') or
+            data.get('titulo_original') or
+            data.get('titulo_ideia') or
+            data.get('name') or
+            data.get('nome') or
+            data.get('title') or
+            data.get('texto') or
+            data.get('descricao') or
+            data.get('description') or
+            data.get('text') or
+            None
+        )
+        if text:
+            return text
+        # Se tem lista de oportunidades aninhada, extrair os itens
+        if 'oportunidades' in data and isinstance(data['oportunidades'], list):
+            items = []
+            for item in data['oportunidades'][:5]:
+                if isinstance(item, str):
+                    items.append(item)
+                elif isinstance(item, dict):
+                    item_text = (
+                        item.get('titulo') or
+                        item.get('titulo_original') or
+                        item.get('name') or
+                        item.get('texto') or
+                        item.get('descricao') or
+                        None
+                    )
+                    if item_text:
+                        items.append(item_text)
+            if items:
+                return "; ".join(items)
+        return fallback
+    if isinstance(data, list):
+        items = []
+        for item in data[:5]:
+            if isinstance(item, str):
+                items.append(item)
+            elif isinstance(item, dict):
+                item_text = (
+                    item.get('titulo') or
+                    item.get('titulo_original') or
+                    item.get('name') or
+                    item.get('texto') or
+                    item.get('descricao') or
+                    None
+                )
+                if item_text:
+                    items.append(item_text)
+        if items:
+            return "; ".join(items)
+        return fallback
+    return fallback
+
+
 def generate_weekly_context_email_template(context_data, user_data):
     """Generate HTML email template for weekly context report"""
 
@@ -52,6 +153,66 @@ def generate_weekly_context_email_template(context_data, user_data):
         'fontes': context_data.get('seasonal_sources', [])
     }
 
+    # Ranked opportunities data
+    ranked_opportunities = context_data.get('tendencies_data', {})
+    if not isinstance(ranked_opportunities, dict):
+        ranked_opportunities = {}
+
+    SECTION_STYLES = {
+        'polemica': {'emoji': '🔥', 'titulo': 'Polêmica & Debate', 'border': '#ef4444', 'bg': '#fef2f2'},
+        'educativo': {'emoji': '📚', 'titulo': 'Educativo & Utilidade', 'border': '#10b981', 'bg': '#ecfdf5'},
+        'newsjacking': {'emoji': '📰', 'titulo': 'Newsjacking (Urgente)', 'border': '#f59e0b', 'bg': '#fffbeb'},
+        'futuro': {'emoji': '🔮', 'titulo': 'Futuro & Tendências', 'border': '#8b5cf6', 'bg': '#f5f3ff'},
+        'estudo_caso': {'emoji': '📊', 'titulo': 'Estudo de Caso', 'border': '#06b6d4', 'bg': '#ecfeff'},
+        'entretenimento': {'emoji': '🎭', 'titulo': 'Entretenimento', 'border': '#ec4899', 'bg': '#fdf2f8'},
+        'outros': {'emoji': '💡', 'titulo': 'Outras Oportunidades', 'border': '#3b82f6', 'bg': '#eff6ff'},
+    }
+
+    frontend_url = os.getenv('FRONTEND_URL', 'https://app.postnow.com.br')
+
+    # Build ranked opportunities HTML
+    opportunities_html = ''
+    for section_key in ['polemica', 'newsjacking', 'educativo', 'futuro', 'estudo_caso', 'entretenimento', 'outros']:
+        section = ranked_opportunities.get(section_key, {})
+        if not section or not isinstance(section, dict):
+            continue
+        items = section.get('items', [])
+        if not items:
+            continue
+
+        style = SECTION_STYLES.get(section_key, SECTION_STYLES['outros'])
+        titulo = section.get('titulo', f"{style['emoji']} {style['titulo']}")
+
+        cards_html = ''
+        for item in items[:3]:  # Max 3 per section in email
+            score = item.get('score', 0)
+            titulo_ideia = item.get('titulo_ideia', '')
+            explicacao = item.get('explicacao_score', '')
+            gatilho = item.get('gatilho_criativo', '')
+            url_fonte = item.get('url_fonte', '')
+
+            cards_html += f"""
+                <div style="background-color: #ffffff; border-left: 4px solid {style['border']}; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
+                    <div style="margin-bottom: 8px;">
+                        <span style="font-size: 16px; font-weight: 600; color: #1e293b;">{titulo_ideia}</span>
+                        <span style="display: inline-block; background-color: {style['border']}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 700; margin-left: 8px; vertical-align: middle;">{score}</span>
+                    </div>
+                    <p style="margin: 0 0 8px 0; color: #64748b; font-size: 13px;">{explicacao}</p>
+                    <div style="background-color: {style['bg']}; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                        <p style="margin: 0; color: #334155; font-size: 13px;">💡 <strong>Sugestão:</strong> {gatilho}</p>
+                    </div>
+                    <div>
+                        <a href="{frontend_url}/weekly-context" style="display: inline-block; background-color: {style['border']}; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600;">Criar Post</a>
+                        {'<a href="' + url_fonte + '" style="display: inline-block; color: ' + style["border"] + '; padding: 8px 16px; font-size: 13px; text-decoration: none; font-weight: 500;">Ver Fonte →</a>' if url_fonte else ''}
+                    </div>
+                </div>"""
+
+        opportunities_html += f"""
+            <div style="margin-bottom: 24px;">
+                <h3 style="margin: 0 0 12px 0; color: {style['border']}; font-size: 18px; font-weight: 600;">{titulo} ({len(items)})</h3>
+                {cards_html}
+            </div>"""
+
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -96,6 +257,28 @@ def generate_weekly_context_email_template(context_data, user_data):
                                 </tr>
                             </table>
 
+                            <!-- Ranked Opportunities Section (Hero) -->
+                            {f"""
+                            <table role="presentation" style="width: 100%; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                                <tr>
+                                    <td style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 20px; color: white;">
+                                        <h2 style="margin: 0; font-size: 20px; font-weight: 600;">🎯 Oportunidades de Conteúdo da Semana</h2>
+                                        <p style="margin: 6px 0 0 0; color: #94a3b8; font-size: 14px;">Rankeadas por potencial de engajamento</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 24px; background-color: #f8fafc;">
+                                        {opportunities_html}
+                                        <div style="text-align: center; margin-top: 16px;">
+                                            <a href="{frontend_url}/weekly-context" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                                                🚀 Ver Todas as Oportunidades no App
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                            """ if opportunities_html else ''}
+
                             <!-- Market Overview Section -->
                             <table role="presentation" style="width: 100%; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
                                 <tr>
@@ -106,7 +289,7 @@ def generate_weekly_context_email_template(context_data, user_data):
                                 <tr>
                                     <td style="padding: 24px;">
                                         <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
-                                            {market_data.get('panorama', 'Dados do mercado não disponíveis nesta semana.')}
+                                            {_format_text_data(market_data.get('panorama'), 'Dados do mercado não disponíveis nesta semana.')}
                                         </p>
                                         
                                         {'''
@@ -162,13 +345,13 @@ def generate_weekly_context_email_template(context_data, user_data):
                                         
                                         <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
                                             <strong>Estratégias Observadas:</strong><br>
-                                            {competition_data.get('estrategias', 'Análise competitiva não disponível nesta semana.')}
+                                            {_format_text_data(competition_data.get('estrategias'), 'Análise competitiva não disponível nesta semana.')}
                                         </p>
                                         
                                         <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px; border-radius: 4px;">
                                             <h4 style="margin: 0 0 8px 0; color: #15803d; font-size: 14px; font-weight: 600;">💡 Oportunidades de Diferenciação:</h4>
                                             <p style="margin: 0; color: #166534; font-size: 14px; line-height: 1.5;">
-                                                {competition_data.get('oportunidades', 'Análise de oportunidades em desenvolvimento.')}
+                                                {_format_text_data(competition_data.get('oportunidades'), 'Análise de oportunidades em desenvolvimento.')}
                                             </p>
                                         </div>
                                     </td>
@@ -186,12 +369,12 @@ def generate_weekly_context_email_template(context_data, user_data):
                                     <td style="padding: 24px;">
                                         <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
                                             <strong>Perfil do Público:</strong><br>
-                                            {audience_data.get('perfil', 'Dados do público-alvo em análise.')}
+                                            {_format_text_data(audience_data.get('perfil'), 'Dados do público-alvo em análise.')}
                                         </p>
                                         
                                         <p style="margin: 0 0 20px 0; color: #374151; font-size: 16px; line-height: 1.6;">
                                             <strong>Comportamento Online:</strong><br>
-                                            {audience_data.get('comportamento_online', 'Análise comportamental em desenvolvimento.')}
+                                            {_format_text_data(audience_data.get('comportamento_online'), 'Análise comportamental em desenvolvimento.')}
                                         </p>
                                         
                                         {'''
@@ -272,18 +455,18 @@ def generate_weekly_context_email_template(context_data, user_data):
                                     <td style="padding: 24px;">
                                         <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
                                             <strong>Presença Online:</strong><br>
-                                            {brand_data.get('presenca_online', 'Análise de presença online não disponível.')}
+                                            {_format_text_data(brand_data.get('presenca_online'), 'Análise de presença online não disponível.')}
                                         </p>
-                                        
+
                                         <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
                                             <strong>Reputação:</strong><br>
-                                            {brand_data.get('reputacao', 'Análise de reputação não disponível.')}
+                                            {_format_text_data(brand_data.get('reputacao'), 'Análise de reputação não disponível.')}
                                         </p>
-                                        
+
                                         {f"""
                                         <p style="margin: 0 0 16px 0; color: #374151; font-size: 16px; line-height: 1.6;">
                                             <strong>Estilo de Comunicação:</strong><br>
-                                            {brand_data.get('estilo_comunicacao', 'Análise de comunicação não disponível.')}
+                                            {_format_text_data(brand_data.get('estilo_comunicacao'), 'Análise de comunicação não disponível.')}
                                         </p>
                                         """ if brand_data.get('estilo_comunicacao') else ''}
                                     </td>
@@ -421,8 +604,8 @@ def generate_weekly_context_email_template(context_data, user_data):
                                         <p style="margin: 0 0 20px 0; color: #e2e8f0; font-size: 16px; line-height: 1.5;">
                                             Use estes insights para criar posts que realmente conectam com seu público
                                         </p>
-                                        <a href="{os.getenv('FRONTEND_URL')}" style="display: inline-block; background-color: #ffffff; color: #667eea; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
-                                            Acessar Dashboard
+                                        <a href="{frontend_url}/weekly-context" style="display: inline-block; background-color: #ffffff; color: #667eea; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                                            Abrir Radar de Oportunidades
                                         </a>
                                     </td>
                                 </tr>
@@ -513,7 +696,7 @@ tendências, insights de mercado e oportunidades para impulsionar seu negócio.
 
 🏢 PANORAMA DO MERCADO
 ----------------------
-{market_data.get('panorama', 'Dados do mercado não disponíveis nesta semana.')}
+{_format_text_data(market_data.get('panorama'), 'Dados do mercado não disponíveis nesta semana.')}
 
 🔥 Principais Tendências:
 {chr(10).join([f"• {trend}" for trend in market_data.get('tendencias', [])]) if market_data.get('tendencias') else "• Não disponível"}
@@ -526,18 +709,18 @@ tendências, insights de mercado e oportunidades para impulsionar seu negócio.
 Principais Concorrentes: {', '.join(competition_data.get('principais', [])) if competition_data.get('principais') else 'Não disponível'}
 
 Estratégias Observadas:
-{competition_data.get('estrategias', 'Análise competitiva não disponível nesta semana.')}
+{_format_text_data(competition_data.get('estrategias'), 'Análise competitiva não disponível nesta semana.')}
 
 💡 Oportunidades de Diferenciação:
-{competition_data.get('oportunidades', 'Análise de oportunidades em desenvolvimento.')}
+{_format_text_data(competition_data.get('oportunidades'), 'Análise de oportunidades em desenvolvimento.')}
 
 👥 INSIGHTS DO PÚBLICO
 ----------------------
 Perfil do Público:
-{audience_data.get('perfil', 'Dados do público-alvo em análise.')}
+{_format_text_data(audience_data.get('perfil'), 'Dados do público-alvo em análise.')}
 
 Comportamento Online:
-{audience_data.get('comportamento_online', 'Análise comportamental em desenvolvimento.')}
+{_format_text_data(audience_data.get('comportamento_online'), 'Análise comportamental em desenvolvimento.')}
 
 ❤️ Principais Interesses:
 {', '.join(audience_data.get('interesses', [])) if audience_data.get('interesses') else 'Não disponível'}
@@ -553,14 +736,14 @@ Comportamento Online:
 🏢 ANÁLISE DA MARCA
 -------------------
 Presença Online:
-{brand_data.get('presenca_online', 'Análise de presença online não disponível.')}
+{_format_text_data(brand_data.get('presenca_online'), 'Análise de presença online não disponível.')}
 
 Reputação:
-{brand_data.get('reputacao', 'Análise de reputação não disponível.')}
+{_format_text_data(brand_data.get('reputacao'), 'Análise de reputação não disponível.')}
 
 {f"""
 Estilo de Comunicação:
-{brand_data.get('estilo_comunicacao', 'Análise de comunicação não disponível.')}""" if brand_data.get('estilo_comunicacao') else ''}
+{_format_text_data(brand_data.get('estilo_comunicacao'), 'Análise de comunicação não disponível.')}""" if brand_data.get('estilo_comunicacao') else ''}
 
 📅 CALENDÁRIO ESTRATÉGICO
 -------------------------
