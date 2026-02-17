@@ -5,9 +5,9 @@ from typing import Any, Dict, Optional
 
 from django.utils import timezone
 
-from ClientContext.services.context_error_service import ContextErrorService
-from ClientContext.services.context_stats_service import ContextStatsService
 from services.semaphore_service import SemaphoreService
+from .context_error_service import ContextErrorService
+from .context_stats_service import ContextStatsService
 from .weekly_context_service import WeeklyContextService
 
 logger = logging.getLogger(__name__)

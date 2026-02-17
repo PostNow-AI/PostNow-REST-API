@@ -7,7 +7,7 @@ from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.utils import timezone
 
-from ClientContext.models import ClientContext
+from ..models import ClientContext
 
 logger = logging.getLogger(__name__)
 

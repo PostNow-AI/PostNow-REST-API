@@ -1,16 +1,19 @@
+"""Servico para geracao diaria de ideias de conteudo."""
+
 import json
 import logging
 from typing import Any, Dict, Optional
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
-from django.db import connection
 from django.utils import timezone
 from google.genai import types
 
 from AuditSystem.services import AuditService
+from ClientContext.services.context_stats_service import ContextStatsService
 from CreatorProfile.models import CreatorProfile
 from IdeaBank.models import Post, PostIdea
+from IdeaBank.services.daily_error_service import DailyErrorService
 from IdeaBank.services.weekly_feed_creation import WeeklyFeedCreationService
 from IdeaBank.utils.current_week import get_current_week
 from services.ai_prompt_service import AIPromptService
@@ -37,6 +40,8 @@ class DailyIdeasService:
         prompt_service: Optional[AIPromptService] = None,
         audit_service: Optional[AuditService] = None,
         s3_service: Optional[S3Service] = None,
+        error_service: Optional[DailyErrorService] = None,
+        stats_service: Optional[ContextStatsService] = None,
     ):
         self.user_validation_service = user_validation_service or UserValidationService()
         self.semaphore_service = semaphore_service or SemaphoreService()
@@ -45,41 +50,19 @@ class DailyIdeasService:
         self.prompt_service = prompt_service or AIPromptService()
         self.audit_service = audit_service or AuditService()
         self.s3_service = s3_service or S3Service()
-
-    @sync_to_async
-    def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
-        """Get a batch of users eligible for weekly context generation"""
-        if limit is None:
-            return list(
-                User.objects.extra(
-                    where=["daily_generation_error IS NULL"]
-                ).filter(
-                    usersubscription__status='active',
-                    is_active=True
-                ).distinct().values('id', 'email', 'username')[offset:]
-            )
-
-        return list(
-            User.objects.extra(
-                where=["daily_generation_error IS NULL"]
-            ).filter(
-                usersubscription__status='active',
-                is_active=True
-            ).distinct().values('id', 'email', 'username')[offset:offset + limit]
-        )
+        self.error_service = error_service or DailyErrorService()
+        self.stats_service = stats_service or ContextStatsService()
 
     async def process_daily_ideas_for_users(self, batch_number: int, batch_size: int) -> Dict[str, Any]:
-        """Process daily ideas generation for a batch of users"""
+        """Process daily ideas generation for a batch of users."""
         start_time = timezone.now()
 
         offset = (batch_number - 1) * batch_size
-        limit = batch_size
-
+        limit = batch_size if batch_size > 0 else None
         if batch_size == 0:
             offset = 0
-            limit = None  # Process all users
 
-        eligible_users = await self._get_eligible_users(offset=offset, limit=limit)
+        eligible_users = await self.error_service.get_users_without_errors(offset=offset, limit=limit)
         total = len(eligible_users)
 
         if total == 0:
@@ -96,31 +79,19 @@ class DailyIdeasService:
                 function=self.process_single_user
             )
 
-            processed_count = sum(
-                1 for r in results if r.get('status') == 'success')
-            failed_count = sum(
-                1 for r in results if r.get('status') == 'failed')
-            skipped_count = sum(
-                1 for r in results if r.get('status') == 'skipped')
+            end_time = timezone.now()
+            stats = self.stats_service.calculate_batch_results(results, start_time, end_time)
+
+            # Adiciona contagem de posts criados (especifico para daily ideas)
             created_posts_count = sum(
                 len(r.get('created_posts', [])) for r in results if r.get('status') == 'success'
             )
 
-            end_time = timezone.now()
-            duration = (end_time - start_time).total_seconds()
-
-            result = {
-                'status': 'completed',
-                'processed': processed_count,
-                'created_posts': created_posts_count,
-                'failed': failed_count,
-                'skipped': skipped_count,
-                'total_users': total,
-                'duration_seconds': duration,
-                'details': results,
-            }
+            result = self.stats_service.build_completion_result(stats, total, details=results)
+            result['created_posts'] = created_posts_count
 
             return result
+
         except Exception as e:
             return {
                 'status': 'error',
@@ -130,7 +101,7 @@ class DailyIdeasService:
             }
 
     async def process_single_user(self, user_data: dict) -> Dict[str, Any]:
-        """Process daily ideas generation for a single user"""
+        """Process daily ideas generation for a single user."""
         user_id = user_data.get('id') or user_data.get('user_id')
         if not user_data:
             return {'status': 'failed', 'reason': 'no_user_data'}
@@ -140,7 +111,7 @@ class DailyIdeasService:
         return await self._process_user_daily_ideas(user_id)
 
     async def _process_user_daily_ideas(self, user_id: int) -> Dict[str, Any]:
-        """Generate daily ideas to the user"""
+        """Generate daily ideas to the user."""
         user = await sync_to_async(User.objects.get)(id=user_id)
         try:
             user_data = await self.user_validation_service.get_user_data(user_id)
@@ -206,11 +177,11 @@ class DailyIdeasService:
             await self._save_text_to_db(user, post_text_stories, post_content_stories, user_posts, week_id, 'story')
             await self._save_text_to_db(user, post_text_reels, post_content_reels, user_posts, week_id, 'reels')
 
-            await self._clear_user_error(user)
+            await self.error_service.clear_error(user)
 
             return {'status': 'success', 'user_id': user_id, 'created_posts': []}
         except Exception as e:
-            await self._store_user_error(user, str(e))
+            await self.error_service.store_error(user, str(e))
             await sync_to_async(self.audit_service.log_daily_content_generation)(
                 user=user,
                 action='daily_content_generation_failed',
@@ -232,7 +203,7 @@ class DailyIdeasService:
             post_type: str) -> None:
         post = await sync_to_async(Post.objects.create)(
             user=user,
-            name=post_data.get('titulo', 'Conteúdo Diário'),
+            name=post_data.get('titulo', 'Conteudo Diario'),
             type=post_type,
             further_details=week_id,
             include_image=True if post_type == 'feed' else False,
@@ -325,19 +296,3 @@ class DailyIdeasService:
         except Exception as e:
             raise Exception(
                 f"Failed to generate context for user {user.id}: {str(e)}")
-
-    @staticmethod
-    async def _store_user_error(user, error_message: str):
-        """Store error message in user model for retry processing."""
-        await sync_to_async(lambda: connection.cursor().execute(
-            "UPDATE auth_user SET daily_generation_error = %s, daily_generation_error_date = %s WHERE id = %s",
-            [error_message, timezone.now(), user.id]
-        ))()
-
-    @staticmethod
-    async def _clear_user_error(user):
-        """Clear error message from user model after successful generation."""
-        await sync_to_async(lambda: connection.cursor().execute(
-            "UPDATE auth_user SET daily_generation_error = NULL, daily_generation_error_date = NULL WHERE id = %s",
-            [user.id]
-        ))()

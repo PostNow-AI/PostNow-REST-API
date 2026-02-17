@@ -8,11 +8,11 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from AuditSystem.services import AuditService
-from ClientContext.models import ClientContext
-from ClientContext.serializers.context_serializer import WeeklyContextDataSerializer
-from ClientContext.services.context_error_service import ContextErrorService
-from ClientContext.services.context_stats_service import ContextStatsService
-from ClientContext.utils.json_parser import parse_ai_json_response
+from ..models import ClientContext
+from ..serializers.context_serializer import WeeklyContextDataSerializer
+from ..utils.json_parser import parse_ai_json_response
+from .context_error_service import ContextErrorService
+from .context_stats_service import ContextStatsService
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.semaphore_service import SemaphoreService

@@ -1,8 +1,11 @@
 """Utilitarios para parsing de respostas AI."""
 
 import json
+import logging
 import re
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def parse_ai_json_response(raw_response: str, key: str = 'contexto_pesquisado') -> Dict[str, Any]:
@@ -15,11 +18,20 @@ def parse_ai_json_response(raw_response: str, key: str = 'contexto_pesquisado') 
     Returns:
         Dicionario com os dados extraidos ou dicionario vazio se falhar
     """
-    cleaned = raw_response.replace('json', '', 1).strip('`').strip()
+    # Remove marcadores de codigo markdown de forma mais robusta
+    cleaned = raw_response.strip()
+    cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+    cleaned = re.sub(r'\s*```$', '', cleaned)
+    cleaned = cleaned.strip()
+
     try:
         parsed = json.loads(cleaned)
         return parsed.get(key, {})
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.warning(
+            f"Failed to parse AI JSON response: {e}. "
+            f"Raw response (first 200 chars): {raw_response[:200]}"
+        )
         return {}
 
 
@@ -39,6 +51,7 @@ def extract_json_block(text: str) -> Optional[str]:
     # Encontra o inicio do JSON
     start_idx = text.find('{')
     if start_idx == -1:
+        logger.debug("No JSON block found in text")
         return None
 
     brace_count = 0
@@ -54,6 +67,27 @@ def extract_json_block(text: str) -> Optional[str]:
                 break
 
     if brace_count != 0:
+        logger.warning(
+            f"Unbalanced braces in JSON block. "
+            f"Text (first 200 chars): {text[:200]}"
+        )
         return None
 
     return text[start_idx:end_idx + 1]
+
+
+def safe_json_loads(text: str, default: Any = None) -> Any:
+    """Carrega JSON de forma segura, retornando default em caso de erro.
+
+    Args:
+        text: String JSON para parsear
+        default: Valor a retornar em caso de erro (default: None)
+
+    Returns:
+        Objeto parseado ou default em caso de erro
+    """
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"Failed to parse JSON: {e}")
+        return default

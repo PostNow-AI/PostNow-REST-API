@@ -1,9 +1,11 @@
 """Serializer para mapeamento de dados de contexto JSON para Model."""
 
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Dict
 
-from ClientContext.models import ClientContext
-from ClientContext.utils.context_mapping import CONTEXT_FIELD_MAPPING
+from ..utils.context_mapping import CONTEXT_FIELD_MAPPING
+
+if TYPE_CHECKING:
+    from ..models import ClientContext
 
 
 class WeeklyContextDataSerializer:
@@ -17,7 +19,7 @@ class WeeklyContextDataSerializer:
         """
         self.context_data = context_data
 
-    def update_client_context(self, client_context: ClientContext) -> None:
+    def update_client_context(self, client_context: "ClientContext") -> None:
         """Mapeia dados JSON para campos do model.
 
         Args:
