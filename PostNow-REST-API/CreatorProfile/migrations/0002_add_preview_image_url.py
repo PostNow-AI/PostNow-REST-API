@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
             model_name='visualstylepreference',
             name='preview_image_url',
             field=models.URLField(
-                max_length=500,
+                max_length=2000,
                 blank=True,
                 null=True,
                 help_text='URL da imagem de preview do estilo visual no S3'

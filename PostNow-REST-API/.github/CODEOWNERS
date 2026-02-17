@@ -10,7 +10,6 @@
 
 # Infrastructure and CI
 /.github/ @rogeriofresende
-/Sonora_REST_API/settings.py @rogeriofresende
 
 # Security-sensitive files require additional review
 /Sonora_REST_API/settings.py @rogeriofresende

@@ -49,7 +49,7 @@ class VisualStylePreference(models.Model):
     """
     name = models.CharField(max_length=100)
     description = models.TextField()
-    preview_image_url = models.URLField(max_length=500, blank=True, null=True)
+    preview_image_url = models.URLField(max_length=2000, blank=True, null=True)
 
     class Meta:
         db_table = 'creatorprofile_visualstylepreference'
