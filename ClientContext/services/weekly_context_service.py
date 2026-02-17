@@ -156,8 +156,6 @@ class WeeklyContextService:
             # _generate_context_for_user is async now, so we await it directly
             # RETORNA UMA TUPLA: (json_str, search_results_dict)
             context_result = await self._generate_context_for_user(user)
-            logger.info(
-                f"Context Result Type: {type(context_result)}")  # DEBUG
 
             search_results_map = {}
             json_str = ""
