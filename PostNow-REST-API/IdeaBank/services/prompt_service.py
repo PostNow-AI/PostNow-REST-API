@@ -1,7 +1,11 @@
+import logging
 import random
 from typing import Dict, List
 
 from CreatorProfile.models import CreatorProfile, VisualStylePreference
+
+# Logger para o serviço de prompts
+logger = logging.getLogger(__name__)
 
 
 # Mapeamento de cores HEX para descrições narrativas
@@ -119,35 +123,99 @@ class PromptService:
         except VisualStylePreference.DoesNotExist:
             return {"name": "", "description": ""}
 
+    def _format_creator_profile_section(self, profile_data: Dict, include_phone: bool = False) -> str:
+        """
+        Formata a seção de dados do creator profile para uso em prompts.
+
+        Centraliza a formatação para evitar duplicação em múltiplos prompts.
+
+        Args:
+            profile_data: Dicionário com dados do perfil (de get_creator_profile_data)
+            include_phone: Se True, inclui o telefone do negócio
+
+        Returns:
+            String formatada com os dados do perfil
+        """
+        sections = [
+            f"Nome do negócio: {profile_data.get('business_name', 'Não informado')}",
+        ]
+
+        if include_phone:
+            sections.append(f"Telefone do negócio: {profile_data.get('business_phone', 'Não informado')}")
+
+        sections.extend([
+            f"Setor/Nicho: {profile_data.get('specialization', 'Não informado')}",
+            f"Descrição do negócio: {profile_data.get('business_description', 'Não informado')}",
+            f"Público-alvo: {profile_data.get('target_audience', 'Não informado')}",
+            f"Interesses do público-alvo: {profile_data.get('target_interests', 'Não informado')}",
+            f"Localização do negócio: {profile_data.get('business_location', 'Não informado')}",
+            f"Paleta de cores: {profile_data.get('color_palette', 'Não definida')}",
+            f"Tom de voz: {profile_data.get('voice_tone', 'Profissional')}",
+        ])
+
+        return "\n\n".join(sections)
+
+    def _format_post_data_section(self, post_data: Dict) -> str:
+        """
+        Formata a seção de dados do post para uso em prompts.
+
+        Args:
+            post_data: Dicionário com dados do post
+
+        Returns:
+            String formatada com os dados do post
+        """
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        details = post_data.get('further_details', '')
+
+        return f"""Assunto: {name}
+
+Objetivo: {objective}
+
+Mais detalhes: {details if details else 'Nenhum'}"""
+
     def build_content_prompt(self, post_data: Dict) -> str:
         """Build the prompt for content generation based on post type."""
         post_type = post_data.get('type', '').lower()
+        post_name = post_data.get('name', 'unnamed')
+
+        logger.info(f"Building content prompt: type={post_type}, name={post_name}")
 
         # Route to specific prompt based on post type
         if post_type == 'post':
             result = self._build_feed_post_prompt(post_data)
+            logger.debug(f"Built feed post prompt ({len(result)} chars)")
             return result
         elif post_type == 'reel':
             result = self._build_reel_prompt(post_data)
+            logger.debug(f"Built reel prompt ({len(result)} chars)")
             return result
         elif post_type == 'story':
             result = self._build_story_prompt(post_data)
+            logger.debug(f"Built story prompt ({len(result)} chars)")
             return result
         elif post_type == 'campaign':
             result = self.build_automatic_post_prompt(None)
+            logger.debug(f"Built campaign prompt ({len(result)} chars)")
             return result
 
+        logger.warning(f"Unknown post type: {post_type}")
         return ""
 
     def get_creator_profile_data(self) -> dict:
         """Fetch and return the creator profile data for the current user."""
         if not self.user:
+            logger.error("Attempted to get creator profile data without setting user")
             raise ValueError(
                 "User is not set for PromptService. Call set_user(user) first or pass user parameter when creating prompts.")
 
-        profile = CreatorProfile.objects.filter(user=self.user).first()
-        if not profile:
-            raise CreatorProfile.DoesNotExist(
+        try:
+            profile = CreatorProfile.objects.get(user=self.user)
+            logger.debug(f"Loaded CreatorProfile for user {self.user.id}: {profile.business_name}")
+        except CreatorProfile.DoesNotExist:
+            logger.warning(f"CreatorProfile not found for user {self.user.id if hasattr(self.user, 'id') else 'unknown'}")
+            raise ValueError(
                 f"CreatorProfile not found for user {self.user.id if hasattr(self.user, 'id') else 'unknown'}")
         profile_data = {
             "business_name": profile.business_name,
@@ -548,14 +616,26 @@ O resultado final deve parecer o planejamento de um estrategista de conteúdo pr
     def build_image_prompt(self, post_data: Dict, content: str) -> str:
         """Build the prompt for image generation based on post type."""
         post_type = post_data.get('type', '').lower()
+        post_name = post_data.get('name', 'unnamed')
+
+        logger.info(f"Building image prompt: type={post_type}, name={post_name}")
 
         # Route to specific image prompt based on post type
         if post_type == 'post':
-            return self._build_feed_image_prompt(post_data, content)
+            result = self._build_feed_image_prompt(post_data, content)
+            logger.debug(f"Built feed image prompt ({len(result)} chars)")
+            return result
         elif post_type == 'reel':
-            return self._build_reel_image_prompt(post_data, content)
+            result = self._build_reel_image_prompt(post_data, content)
+            logger.debug(f"Built reel image prompt ({len(result)} chars)")
+            return result
         elif post_type == 'story':
-            return self._build_story_image_prompt(post_data, content)
+            result = self._build_story_image_prompt(post_data, content)
+            logger.debug(f"Built story image prompt ({len(result)} chars)")
+            return result
+
+        logger.warning(f"Unknown post type for image prompt: {post_type}")
+        return ""
 
     def _format_color_palette(self, colors: list) -> str:
         """Format color palette for prompt display."""
