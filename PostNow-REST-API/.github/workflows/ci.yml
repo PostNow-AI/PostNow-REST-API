@@ -69,9 +69,7 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: |
-          pip install django djangorestframework django-cors-headers python-dotenv djangorestframework-simplejwt
-          pip install coverage
+        run: pip install -r requirements.txt
 
       - name: Run migrations
         run: python -m django migrate --settings=Sonora_REST_API.settings
