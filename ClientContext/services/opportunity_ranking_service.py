@@ -210,7 +210,7 @@ class OpportunityRankingService:
 
             try:
                 op['score'] = int(op.get('score', 0))
-            except:
+            except (ValueError, TypeError):
                 op['score'] = 0
 
             grouped_ops[key]['items'].append(op)
