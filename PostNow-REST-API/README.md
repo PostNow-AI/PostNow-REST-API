@@ -44,11 +44,15 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edite .env com suas credenciais
 
+# Configure o ambiente
+export DJANGO_SETTINGS_MODULE=Sonora_REST_API.settings
+export USE_SQLITE=True
+
 # Execute as migrations
-python manage.py migrate
+python -m django migrate
 
 # Inicie o servidor
-python manage.py runserver
+python -m django runserver
 ```
 
 ## Estrutura do Projeto
