@@ -4,11 +4,6 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-from Analytics.services.image_pregen_policy import (
-    ACTION_PRE_GENERATE,
-    make_image_pregen_decision,
-)
-from Analytics.services.text_variant_policy import make_text_variant_decision
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.utils import timezone

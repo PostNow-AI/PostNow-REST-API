@@ -61,7 +61,7 @@ jobs:
             "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/daily-content-generation/?batch=${{ matrix.batch }}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            --max-time 800 \
+            --max-time 300 \
             --retry 3 \
             --retry-delay 10 \
             -w "\nHTTP Status: %{http_code}" \
