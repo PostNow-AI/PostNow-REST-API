@@ -364,7 +364,6 @@ Entregar um resultado de alta qualidade, digno de uma marca profissional.
         details = post_data.get('further_details', '')
 
         creator_profile_data = self.get_creator_profile_data()
-        # TODO: Replace with your specific reel prompt
         prompt = f"""
 Você é um roteirista criativo e estrategista de conteúdo digital, especialista em roteiros curtos e envolventes para Reels.
 Sua missão é criar roteiros personalizados de 20 a 40 segundos, com base nas informações do onboarding do cliente e nos dados de entrada do post.
@@ -954,86 +953,63 @@ Utilize a imagem anexada como canvas base. Crie uma arte de Story premium no for
 """
         return prompt.strip()
 
-    def build_regeneration_prompt(self, current_content: str, user_prompt: str) -> str:
-        """Build the prompt for content regeneration with user feedback."""
+    def _build_content_edit_prompt(self, current_content: str, instructions: str = None) -> str:
+        """
+        Build base prompt for content editing/regeneration.
 
-        prompt = f"""
-Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.  
-Sua missão é editar o material já criado (copy) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.  
+        Args:
+            current_content: The original content to be edited
+            instructions: Specific edit instructions (None for automatic variation)
+
+        Returns:
+            Formatted prompt string for content editing
+        """
+        instructions_section = ""
+        if instructions:
+            instructions_section = f"\n- Alterações solicitadas: {instructions}"
+
+        return f"""
+Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.
+Sua missão é editar o material já criado (copy) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.
 
 ### DADOS DE ENTRADA:
-- Conteúdo original: {current_content}  
-- Alterações solicitadas: {user_prompt}
+- Conteúdo original: {current_content}{instructions_section}
 
 ---
 
 ### REGRAS PARA EDIÇÃO:
 
-1. **Mantenha toda a identidade visual e estilística do conteúdo original**:  
-    - Paleta de cores  
-    - Tipografia  
-    - Layout  
-    - Tom de voz e estilo da copy  
-    - Estrutura do design ou texto  
+1. **Mantenha toda a identidade visual e estilística do conteúdo original**:
+    - Paleta de cores
+    - Tipografia
+    - Layout
+    - Tom de voz e estilo da copy
+    - Estrutura do design ou texto
 
-2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.  
+2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.
 
-3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a mesma estrutura, tom e parágrafos curtos.  
+3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a mesma estrutura, tom e parágrafos curtos.
 
-4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.  
+4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.
 
-5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.  
+5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.
 
 ---
 
 ### SAÍDA ESPERADA:
-- Versão revisada do conteúdo (copy), com **as alterações solicitadas aplicadas**.  
-- Todo o restante deve permanecer idêntico ao original.  
-- Material final pronto para publicação.  
+- Versão revisada do conteúdo (copy), com **as alterações solicitadas aplicadas**.
+- Todo o restante deve permanecer idêntico ao original.
+- Material final pronto para publicação.
 
 """
 
-        return prompt
+    def build_regeneration_prompt(self, current_content: str, user_prompt: str) -> str:
+        """Build the prompt for content regeneration with user feedback."""
+        return self._build_content_edit_prompt(current_content, user_prompt)
 
     def build_variation_prompt(self, current_content: str) -> str:
         """Build the prompt for creating a variation of existing content."""
-        prompt = f"""
-Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.  
-Sua missão é editar o material já criado (copy) mantendo sua identidade visual, estilo e tom, alterando **apenas o que for solicitado**.  
-
-### DADOS DE ENTRADA:
-- Conteúdo original: {current_content}  
-
----
-
-### REGRAS PARA EDIÇÃO:
-
-1. **Mantenha toda a identidade visual e estilística do conteúdo original**:  
-    - Paleta de cores  
-    - Tipografia  
-    - Layout  
-    - Tom de voz e estilo da copy  
-    - Estrutura do design ou texto  
-
-2. **Modifique somente o que foi solicitado** pelo profissional, sem alterar nada além disso.  
-
-3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a mesma estrutura, tom e parágrafos curtos.  
-
-4. Nunca descaracterize o material já feito. A ideia é **refinar e ajustar**, não recriar.  
-
-5. O resultado deve estar pronto para uso imediato, atualizado conforme solicitado e sem perda da identidade visual/marca.  
-
----
-
-### SAÍDA ESPERADA:
-- Versão revisada do conteúdo (copy), com **as alterações solicitadas aplicadas**.  
-- Todo o restante deve permanecer idêntico ao original.  
-- Material final pronto para publicação.  
-
-
-"""
-
-        return prompt
+        return self._build_content_edit_prompt(current_content)
 
     def build_image_regeneration_prompt(self, user_prompt: str) -> str:
         """Build the prompt for image regeneration with user feedback."""

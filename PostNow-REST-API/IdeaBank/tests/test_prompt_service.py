@@ -386,3 +386,311 @@ class FormatColorPaletteTest(TestCase):
         result = service._format_color_palette(None)
 
         self.assertEqual(result, 'Não definida')
+
+
+class FormatCreatorProfileSectionTest(TestCase):
+    """Testes para _format_creator_profile_section."""
+
+    def setUp(self):
+        """Criar instância do serviço."""
+        self.service = PromptService()
+
+    def test_format_basic_profile(self):
+        """Deve formatar dados básicos do perfil."""
+        profile_data = {
+            'business_name': 'Minha Empresa',
+            'specialization': 'Marketing Digital',
+            'business_description': 'Agência de marketing',
+            'target_audience': 'PMEs',
+            'target_interests': 'Crescimento',
+            'business_location': 'São Paulo',
+            'color_palette': '#8B5CF6, #FFFFFF',
+            'voice_tone': 'Profissional',
+        }
+        result = self.service._format_creator_profile_section(profile_data)
+
+        self.assertIn('Minha Empresa', result)
+        self.assertIn('Marketing Digital', result)
+        self.assertIn('Profissional', result)
+
+    def test_format_with_phone(self):
+        """Deve incluir telefone quando solicitado."""
+        profile_data = {
+            'business_name': 'Empresa',
+            'business_phone': '11999999999',
+        }
+        result = self.service._format_creator_profile_section(profile_data, include_phone=True)
+
+        self.assertIn('11999999999', result)
+
+    def test_format_without_phone(self):
+        """Não deve incluir telefone por padrão."""
+        profile_data = {
+            'business_name': 'Empresa',
+            'business_phone': '11999999999',
+        }
+        result = self.service._format_creator_profile_section(profile_data, include_phone=False)
+
+        self.assertNotIn('11999999999', result)
+
+    def test_format_missing_fields(self):
+        """Deve usar 'Não informado' para campos ausentes."""
+        profile_data = {}
+        result = self.service._format_creator_profile_section(profile_data)
+
+        self.assertIn('Não informado', result)
+
+
+class FormatPostDataSectionTest(TestCase):
+    """Testes para _format_post_data_section."""
+
+    def setUp(self):
+        """Criar instância do serviço."""
+        self.service = PromptService()
+
+    def test_format_complete_post_data(self):
+        """Deve formatar dados completos do post."""
+        post_data = {
+            'name': 'Lançamento Produto',
+            'objective': 'Vendas',
+            'further_details': 'Desconto de 20%',
+        }
+        result = self.service._format_post_data_section(post_data)
+
+        self.assertIn('Lançamento Produto', result)
+        self.assertIn('Vendas', result)
+        self.assertIn('Desconto de 20%', result)
+
+    def test_format_without_details(self):
+        """Deve mostrar 'Nenhum' quando não há detalhes."""
+        post_data = {
+            'name': 'Post Simples',
+            'objective': 'Engajamento',
+        }
+        result = self.service._format_post_data_section(post_data)
+
+        self.assertIn('Nenhum', result)
+
+    def test_format_empty_post_data(self):
+        """Deve funcionar com dados vazios."""
+        post_data = {}
+        result = self.service._format_post_data_section(post_data)
+
+        self.assertIn('Assunto:', result)
+        self.assertIn('Objetivo:', result)
+
+
+class BuildContentEditPromptTest(TestCase):
+    """Testes para _build_content_edit_prompt (método base)."""
+
+    def setUp(self):
+        """Criar instância do serviço."""
+        self.service = PromptService()
+
+    def test_build_with_instructions(self):
+        """Deve incluir instruções quando fornecidas."""
+        result = self.service._build_content_edit_prompt(
+            current_content='Texto original',
+            instructions='Trocar título para X'
+        )
+
+        self.assertIn('Texto original', result)
+        self.assertIn('Trocar título para X', result)
+        self.assertIn('Alterações solicitadas', result)
+
+    def test_build_without_instructions(self):
+        """Não deve incluir seção de alterações quando não há instruções."""
+        result = self.service._build_content_edit_prompt(
+            current_content='Texto original',
+            instructions=None
+        )
+
+        self.assertIn('Texto original', result)
+        self.assertNotIn('Alterações solicitadas', result)
+
+    def test_contains_editing_rules(self):
+        """Deve conter regras de edição."""
+        result = self.service._build_content_edit_prompt('Conteúdo')
+
+        self.assertIn('REGRAS PARA EDIÇÃO', result)
+        self.assertIn('identidade visual', result)
+        self.assertIn('refinar e ajustar', result)
+
+
+class BuildRegenerationPromptTest(TestCase):
+    """Testes para build_regeneration_prompt."""
+
+    def setUp(self):
+        """Criar instância do serviço."""
+        self.service = PromptService()
+
+    def test_includes_user_prompt(self):
+        """Deve incluir o prompt do usuário."""
+        result = self.service.build_regeneration_prompt(
+            current_content='Copy original',
+            user_prompt='Mudar o CTA para algo mais direto'
+        )
+
+        self.assertIn('Copy original', result)
+        self.assertIn('Mudar o CTA para algo mais direto', result)
+
+    def test_returns_string(self):
+        """Deve retornar uma string."""
+        result = self.service.build_regeneration_prompt('conteúdo', 'instruções')
+
+        self.assertIsInstance(result, str)
+        self.assertTrue(len(result) > 0)
+
+
+class BuildVariationPromptTest(TestCase):
+    """Testes para build_variation_prompt."""
+
+    def setUp(self):
+        """Criar instância do serviço."""
+        self.service = PromptService()
+
+    def test_includes_content(self):
+        """Deve incluir o conteúdo original."""
+        result = self.service.build_variation_prompt('Copy para variar')
+
+        self.assertIn('Copy para variar', result)
+
+    def test_no_specific_instructions(self):
+        """Não deve ter instruções específicas (variação automática)."""
+        result = self.service.build_variation_prompt('Conteúdo')
+
+        self.assertNotIn('Alterações solicitadas', result)
+
+    def test_returns_string(self):
+        """Deve retornar uma string."""
+        result = self.service.build_variation_prompt('conteúdo')
+
+        self.assertIsInstance(result, str)
+
+
+class BuildImageRegenerationPromptTest(TestCase):
+    """Testes para build_image_regeneration_prompt."""
+
+    def setUp(self):
+        """Criar instância do serviço."""
+        self.service = PromptService()
+
+    def test_includes_user_prompt(self):
+        """Deve incluir instruções do usuário."""
+        result = self.service.build_image_regeneration_prompt('Mudar cor do fundo')
+
+        self.assertIn('Mudar cor do fundo', result)
+
+    def test_default_variation_request(self):
+        """Deve ter texto padrão quando prompt vazio."""
+        result = self.service.build_image_regeneration_prompt('')
+
+        self.assertIn('nova versão', result)
+
+    def test_contains_preservation_rules(self):
+        """Deve conter regras de preservação de identidade."""
+        result = self.service.build_image_regeneration_prompt('teste')
+
+        self.assertIn('identidade visual', result)
+        self.assertIn('layout', result)
+
+
+class BuildHistoricalAnalysisPromptTest(TestCase):
+    """Testes para build_historical_analysis_prompt."""
+
+    def setUp(self):
+        """Criar usuário e perfil de teste."""
+        self.user = User.objects.create_user(
+            username='testuser_historical',
+            email='historical@test.com',
+            password='testpass123'
+        )
+        self.profile = CreatorProfile.objects.create(
+            user=self.user,
+            business_name='Empresa Histórico',
+            specialization='Consultoria',
+            voice_tone='Inspirador',
+        )
+        self.service = PromptService()
+        self.service.set_user(self.user)
+
+    def test_includes_post_data(self):
+        """Deve incluir dados do post."""
+        post_data = {
+            'name': 'Análise de Mercado',
+            'objective': 'Educar',
+            'further_details': 'Foco em tendências'
+        }
+        result = self.service.build_historical_analysis_prompt(post_data)
+
+        self.assertIn('Análise de Mercado', result)
+        self.assertIn('Educar', result)
+
+    def test_includes_profile_data(self):
+        """Deve incluir dados do perfil."""
+        post_data = {'name': 'Teste', 'objective': 'Teste'}
+        result = self.service.build_historical_analysis_prompt(post_data)
+
+        self.assertIn('Empresa Histórico', result)
+        self.assertIn('Consultoria', result)
+
+    def test_json_output_format(self):
+        """Deve especificar formato JSON na saída."""
+        post_data = {'name': 'Teste', 'objective': 'Teste'}
+        result = self.service.build_historical_analysis_prompt(post_data)
+
+        self.assertIn('JSON', result)
+        self.assertIn('historical_analysis', result)
+        self.assertIn('avoid_list', result)
+
+
+class BuildAutomaticPostPromptTest(TestCase):
+    """Testes para build_automatic_post_prompt."""
+
+    def setUp(self):
+        """Criar usuário e perfil de teste."""
+        self.user = User.objects.create_user(
+            username='testuser_auto',
+            email='auto@test.com',
+            password='testpass123'
+        )
+        self.profile = CreatorProfile.objects.create(
+            user=self.user,
+            business_name='Empresa Auto',
+            specialization='E-commerce',
+            voice_tone='Dinâmico',
+            target_audience='Jovens adultos',
+        )
+        self.service = PromptService()
+        self.service.set_user(self.user)
+
+    def test_includes_profile_data(self):
+        """Deve incluir dados do perfil."""
+        result = self.service.build_automatic_post_prompt()
+
+        self.assertIn('Empresa Auto', result)
+        self.assertIn('E-commerce', result)
+        self.assertIn('Dinâmico', result)
+
+    def test_includes_analysis_data_when_provided(self):
+        """Deve incluir dados de análise quando fornecidos."""
+        analysis_data = {
+            'new_direction': 'Foco em sustentabilidade',
+            'new_headline': 'Eco-friendly é o futuro',
+        }
+        result = self.service.build_automatic_post_prompt(analysis_data)
+
+        self.assertIn('Foco em sustentabilidade', result)
+
+    def test_json_output_format(self):
+        """Deve especificar formato JSON na saída."""
+        result = self.service.build_automatic_post_prompt()
+
+        self.assertIn('JSON', result)
+        self.assertIn('feed_html', result)
+
+    def test_includes_content_structure(self):
+        """Deve incluir estrutura AIDA."""
+        result = self.service.build_automatic_post_prompt()
+
+        self.assertIn('AIDA', result)
