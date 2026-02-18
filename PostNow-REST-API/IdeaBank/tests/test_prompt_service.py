@@ -694,3 +694,327 @@ class BuildAutomaticPostPromptTest(TestCase):
         result = self.service.build_automatic_post_prompt()
 
         self.assertIn('AIDA', result)
+
+
+class GetVisualStyleTest(TestCase):
+    """Testes para o método _get_visual_style (substituiu _get_random_visual_style)."""
+
+    def setUp(self):
+        """Criar usuário, perfil e estilos de teste."""
+        self.user = User.objects.create_user(
+            username='testuser_style',
+            email='style@test.com',
+            password='testpass123'
+        )
+        # Criar estilos visuais
+        self.style1 = VisualStylePreference.objects.create(
+            name='Minimalista Moderno',
+            description='Design clean e moderno'
+        )
+        self.style2 = VisualStylePreference.objects.create(
+            name='Bold Vibrante',
+            description='Cores fortes e impactantes'
+        )
+        self.style3 = VisualStylePreference.objects.create(
+            name='Zen Japonês',
+            description='Estética zen e equilibrada'
+        )
+
+        self.profile = CreatorProfile.objects.create(
+            user=self.user,
+            business_name='Test Business Style',
+            specialization='Design',
+            voice_tone='Criativo',
+            visual_style_ids=[self.style1.id, self.style2.id, self.style3.id]
+        )
+
+        self.service = PromptService()
+        self.service.set_user(self.user)
+
+    def test_get_visual_style_returns_first_by_default(self):
+        """Sem style_id, deve retornar o primeiro estilo (preferencial)."""
+        style = self.service._get_visual_style(self.profile)
+
+        self.assertEqual(style['name'], 'Minimalista Moderno')
+        self.assertEqual(style['description'], 'Design clean e moderno')
+
+    def test_get_visual_style_with_specific_id(self):
+        """Com style_id específico, deve retornar esse estilo."""
+        style = self.service._get_visual_style(self.profile, style_id=self.style2.id)
+
+        self.assertEqual(style['name'], 'Bold Vibrante')
+        self.assertEqual(style['description'], 'Cores fortes e impactantes')
+
+    def test_get_visual_style_consistent_multiple_calls(self):
+        """Múltiplas chamadas devem retornar o mesmo estilo (não aleatório)."""
+        results = [self.service._get_visual_style(self.profile) for _ in range(10)]
+
+        # Todos devem ser iguais (não aleatório)
+        names = [r['name'] for r in results]
+        self.assertEqual(len(set(names)), 1)
+        self.assertEqual(names[0], 'Minimalista Moderno')
+
+    def test_get_visual_style_fallback_invalid_id(self):
+        """Com ID inválido, deve usar fallback para o primeiro."""
+        style = self.service._get_visual_style(self.profile, style_id=99999)
+
+        # Deve usar o primeiro como fallback
+        self.assertEqual(style['name'], 'Minimalista Moderno')
+
+    def test_get_visual_style_empty_list(self):
+        """Com lista vazia, deve retornar dict vazio."""
+        self.profile.visual_style_ids = []
+        self.profile.save()
+
+        style = self.service._get_visual_style(self.profile)
+
+        self.assertEqual(style['name'], '')
+        self.assertEqual(style['description'], '')
+
+
+class SemanticAnalysisPromptTest(TestCase):
+    """Testes para semantic_analysis_prompt."""
+
+    def setUp(self):
+        """Criar instância do serviço."""
+        self.service = PromptService()
+
+    def test_includes_post_data(self):
+        """Deve incluir dados do post no prompt."""
+        post_data = {
+            'name': 'Dicas de Produtividade',
+            'objective': 'Engajamento',
+            'further_details': 'Foco em home office'
+        }
+        content = 'Texto sobre produtividade no trabalho remoto...'
+
+        result = self.service.semantic_analysis_prompt(content, post_data)
+
+        self.assertIn('Dicas de Produtividade', result)
+        self.assertIn('Engajamento', result)
+        self.assertIn('Foco em home office', result)
+
+    def test_includes_content(self):
+        """Deve incluir o conteúdo textual."""
+        post_data = {'name': 'Teste', 'objective': 'Teste'}
+        content = 'Este é o conteúdo do post para análise semântica.'
+
+        result = self.service.semantic_analysis_prompt(content, post_data)
+
+        self.assertIn('Este é o conteúdo do post', result)
+
+    def test_specifies_json_output(self):
+        """Deve especificar formato JSON na saída."""
+        result = self.service.semantic_analysis_prompt('conteúdo', {'name': 'test'})
+
+        self.assertIn('JSON', result)
+        self.assertIn('tema_principal', result)
+        self.assertIn('conceitos_visuais', result)
+        self.assertIn('emocoes_associadas', result)
+
+    def test_includes_extraction_instructions(self):
+        """Deve ter instruções de extração semântica."""
+        result = self.service.semantic_analysis_prompt('conteúdo', {'name': 'test'})
+
+        self.assertIn('tema principal', result.lower())
+        self.assertIn('emoções', result.lower())
+        self.assertIn('elementos visuais', result.lower())
+
+
+class BuildImagePromptWithSemanticTest(TestCase):
+    """Testes para build_image_prompt_with_semantic."""
+
+    def setUp(self):
+        """Criar usuário e perfil de teste."""
+        self.user = User.objects.create_user(
+            username='testuser_semantic',
+            email='semantic@test.com',
+            password='testpass123'
+        )
+        self.visual_style = VisualStylePreference.objects.create(
+            name='Tech Futurista',
+            description='Linhas clean, tons azulados, estética high-tech'
+        )
+        self.profile = CreatorProfile.objects.create(
+            user=self.user,
+            business_name='Tech Company',
+            specialization='Tecnologia',
+            voice_tone='Inovador',
+            target_audience='Desenvolvedores',
+            color_1='#8B5CF6',
+            color_2='#FFFFFF',
+            visual_style_ids=[self.visual_style.id]
+        )
+
+        self.service = PromptService()
+        self.service.set_user(self.user)
+
+    def test_includes_semantic_analysis_data(self):
+        """Deve incluir dados da análise semântica no prompt."""
+        post_data = {
+            'name': 'Inteligência Artificial',
+            'objective': 'Educar',
+            'type': 'post'
+        }
+        content = 'Post sobre IA e machine learning...'
+        semantic = {
+            'tema_principal': 'Transformação digital através da IA',
+            'conceitos_visuais': ['redes neurais', 'dados', 'conexões'],
+            'emocoes_associadas': ['curiosidade', 'empolgação'],
+            'contexto_visual_sugerido': 'Ambiente tecnológico futurista',
+            'elementos_concretos': ['circuitos', 'interfaces', 'gráficos'],
+            'atmosfera': 'Inovadora e inspiradora'
+        }
+
+        result = self.service.build_image_prompt_with_semantic(post_data, content, semantic)
+
+        self.assertIn('Transformação digital através da IA', result)
+        self.assertIn('redes neurais', result)
+        self.assertIn('curiosidade', result)
+        self.assertIn('Ambiente tecnológico futurista', result)
+
+    def test_includes_profile_data(self):
+        """Deve incluir dados do perfil."""
+        semantic = {'tema_principal': 'Teste'}
+
+        result = self.service.build_image_prompt_with_semantic(
+            {'name': 'test'}, 'content', semantic
+        )
+
+        self.assertIn('Tech Company', result)
+        self.assertIn('Tecnologia', result)
+
+    def test_includes_visual_style(self):
+        """Deve incluir estilo visual."""
+        semantic = {'tema_principal': 'Teste'}
+
+        result = self.service.build_image_prompt_with_semantic(
+            {'name': 'test'}, 'content', semantic
+        )
+
+        self.assertIn('Tech Futurista', result)
+
+    def test_includes_color_narratives(self):
+        """Deve incluir cores narrativas (não apenas HEX)."""
+        semantic = {'tema_principal': 'Teste'}
+
+        result = self.service.build_image_prompt_with_semantic(
+            {'name': 'test'}, 'content', semantic
+        )
+
+        self.assertIn('Roxo vibrante', result)
+
+    def test_includes_logo_section(self):
+        """Deve incluir seção de logo."""
+        semantic = {'tema_principal': 'Teste'}
+
+        result = self.service.build_image_prompt_with_semantic(
+            {'name': 'test'}, 'content', semantic
+        )
+
+        self.assertIn('LOGO (Preserved Element)', result)
+        self.assertIn('Tech Company', result)
+
+    def test_respects_visual_style_id_override(self):
+        """Deve respeitar visual_style_id do post_data se fornecido."""
+        # Criar outro estilo
+        other_style = VisualStylePreference.objects.create(
+            name='Minimalista',
+            description='Design limpo e simples'
+        )
+        self.profile.visual_style_ids.append(other_style.id)
+        self.profile.save()
+
+        post_data = {
+            'name': 'test',
+            'visual_style_id': other_style.id
+        }
+        semantic = {'tema_principal': 'Teste'}
+
+        result = self.service.build_image_prompt_with_semantic(
+            post_data, 'content', semantic
+        )
+
+        self.assertIn('Minimalista', result)
+
+
+class VisualStyleIdInPostDataTest(TestCase):
+    """Testes para verificar que visual_style_id do post_data é usado corretamente."""
+
+    def setUp(self):
+        """Criar usuário e perfil com múltiplos estilos."""
+        self.user = User.objects.create_user(
+            username='testuser_vsid',
+            email='vsid@test.com',
+            password='testpass123'
+        )
+        self.style1 = VisualStylePreference.objects.create(
+            name='Estilo Um',
+            description='Descrição do estilo um'
+        )
+        self.style2 = VisualStylePreference.objects.create(
+            name='Estilo Dois',
+            description='Descrição do estilo dois'
+        )
+        self.profile = CreatorProfile.objects.create(
+            user=self.user,
+            business_name='Test Business',
+            specialization='Marketing',
+            voice_tone='Profissional',
+            visual_style_ids=[self.style1.id, self.style2.id],
+            color_1='#8B5CF6'
+        )
+
+        self.service = PromptService()
+        self.service.set_user(self.user)
+
+    def test_feed_image_uses_visual_style_id_from_post_data(self):
+        """Feed image prompt deve usar visual_style_id do post_data."""
+        post_data = {
+            'name': 'Teste',
+            'objective': 'Engajamento',
+            'type': 'post',
+            'visual_style_id': self.style2.id
+        }
+
+        result = self.service.build_image_prompt(post_data, 'conteúdo')
+
+        self.assertIn('Estilo Dois', result)
+
+    def test_reel_image_uses_visual_style_id_from_post_data(self):
+        """Reel image prompt deve usar visual_style_id do post_data."""
+        post_data = {
+            'name': 'Teste',
+            'objective': 'Viralizar',
+            'type': 'reel',
+            'visual_style_id': self.style2.id
+        }
+
+        result = self.service.build_image_prompt(post_data, 'conteúdo')
+
+        self.assertIn('Estilo Dois', result)
+
+    def test_story_image_uses_visual_style_id_from_post_data(self):
+        """Story image prompt deve usar visual_style_id do post_data."""
+        post_data = {
+            'name': 'Teste',
+            'objective': 'Engajamento',
+            'type': 'story',
+            'visual_style_id': self.style2.id
+        }
+
+        result = self.service.build_image_prompt(post_data, 'conteúdo')
+
+        self.assertIn('Estilo Dois', result)
+
+    def test_default_to_first_style_without_visual_style_id(self):
+        """Sem visual_style_id, deve usar o primeiro estilo."""
+        post_data = {
+            'name': 'Teste',
+            'objective': 'Engajamento',
+            'type': 'post'
+        }
+
+        result = self.service.build_image_prompt(post_data, 'conteúdo')
+
+        self.assertIn('Estilo Um', result)

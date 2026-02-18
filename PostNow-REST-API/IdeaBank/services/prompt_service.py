@@ -1,6 +1,5 @@
 import logging
-import random
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from CreatorProfile.models import CreatorProfile, VisualStylePreference
 
@@ -105,22 +104,44 @@ class PromptService:
         """Set the user for this PromptService instance."""
         self.user = user
 
-    def _get_random_visual_style(self, profile) -> dict:
-        """Randomly select a visual style from user's visual_style_ids.
+    def _get_visual_style(self, profile, style_id: Optional[int] = None) -> dict:
+        """
+        Obtém estilo visual específico ou o preferencial do usuário.
 
-        Returns a dict with 'name' and 'description' for structured prompt building.
+        Args:
+            profile: CreatorProfile do usuário
+            style_id: ID específico do estilo (opcional)
+
+        Returns:
+            Dict com 'name' e 'description' para construção de prompts estruturados.
+
+        Se style_id não for fornecido, usa o PRIMEIRO da lista (preferencial).
+        Isso garante consistência visual ao invés de seleção aleatória.
         """
         if not profile.visual_style_ids or len(profile.visual_style_ids) == 0:
             return {"name": "", "description": ""}
 
-        random_style_id = random.choice(profile.visual_style_ids)
+        # Usa estilo específico (se fornecido) ou o preferencial (primeiro da lista)
+        target_id = style_id if style_id else profile.visual_style_ids[0]
+
         try:
-            visual_style = VisualStylePreference.objects.get(id=random_style_id)
+            visual_style = VisualStylePreference.objects.get(id=target_id)
             return {
                 "name": visual_style.name,
                 "description": visual_style.description
             }
         except VisualStylePreference.DoesNotExist:
+            # Fallback: tenta o primeiro estilo se o ID específico não existir
+            if style_id and profile.visual_style_ids:
+                try:
+                    fallback_style = VisualStylePreference.objects.get(id=profile.visual_style_ids[0])
+                    logger.warning(f"Visual style {style_id} not found, using fallback {profile.visual_style_ids[0]}")
+                    return {
+                        "name": fallback_style.name,
+                        "description": fallback_style.description
+                    }
+                except VisualStylePreference.DoesNotExist:
+                    pass
             return {"name": "", "description": ""}
 
     def _format_creator_profile_section(self, profile_data: Dict, include_phone: bool = False) -> str:
@@ -175,6 +196,220 @@ Objetivo: {objective}
 
 Mais detalhes: {details if details else 'Nenhum'}"""
 
+    def semantic_analysis_prompt(self, content: str, post_data: Dict) -> str:
+        """
+        Gera prompt para análise semântica do conteúdo.
+
+        Esta análise extrai conceitos visuais do texto ANTES de gerar a imagem,
+        permitindo que o prompt de imagem seja mais direcionado e contextualizado.
+
+        Usado pelo fluxo de 2 passos:
+        1. semantic_analysis_prompt() → Extrai conceitos visuais (JSON)
+        2. image_generation_prompt() → Usa os conceitos para gerar imagem
+
+        Args:
+            content: Texto do post/conteúdo gerado
+            post_data: Dados do post (name, objective, further_details)
+
+        Returns:
+            String com prompt para análise semântica
+        """
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+
+        return f"""
+### TAREFA ###
+Analise o conteúdo textual abaixo e extraia informações relevantes para a criação de uma imagem visual impactante.
+
+### CONTEÚDO PARA ANÁLISE ###
+**Assunto do Post:** {name}
+**Objetivo:** {objective}
+**Detalhes Adicionais:** {further_details if further_details else 'Nenhum'}
+
+**Texto Completo:**
+{content}
+
+### INSTRUÇÕES ###
+Analise o texto e identifique:
+1. O tema principal e a mensagem central
+2. Conceitos visuais que podem representar o conteúdo
+3. Emoções e atmosfera que a imagem deve transmitir
+4. Elementos visuais concretos que podem ser incluídos
+5. Sugestões de tons/cores que combinam com o tema
+
+### FORMATO DE SAÍDA (JSON) ###
+Retorne APENAS um JSON válido no seguinte formato:
+{{
+    "tema_principal": "descrição do tema central em 1-2 frases",
+    "conceitos_visuais": ["conceito1", "conceito2", "conceito3"],
+    "emocoes_associadas": ["emoção1", "emoção2"],
+    "contexto_visual_sugerido": "descrição do ambiente/cenário ideal para a imagem",
+    "elementos_concretos": ["elemento1", "elemento2", "elemento3"],
+    "tons_de_cor_sugeridos": ["tom1", "tom2"],
+    "atmosfera": "descrição da atmosfera geral (ex: acolhedora, profissional, energética)"
+}}
+
+### REGRAS ###
+- Seja específico e visual nas descrições
+- Escolha elementos que podem ser representados visualmente
+- Evite conceitos abstratos demais
+- Priorize elementos que conectam com o público-alvo
+- O JSON deve ser válido e parseable
+""".strip()
+
+    def build_image_prompt_with_semantic(
+        self,
+        post_data: Dict,
+        content: str,
+        semantic_analysis: Dict
+    ) -> str:
+        """
+        Gera prompt de imagem enriquecido com análise semântica.
+
+        Este é o método principal para o fluxo de 2 passos (como o Contexto Semanal):
+        1. Primeiro, chamar semantic_analysis_prompt() e processar o resultado
+        2. Depois, chamar este método com o resultado da análise
+
+        Args:
+            post_data: Dados do post (name, objective, further_details, visual_style_id)
+            content: Texto do post/conteúdo gerado
+            semantic_analysis: Resultado do passo de análise semântica (JSON parseado)
+
+        Returns:
+            String com prompt estruturado para geração de imagem
+        """
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+        visual_style_id = post_data.get('visual_style_id')
+
+        creator_profile_data = self.get_creator_profile_data(visual_style_id=visual_style_id)
+        visual_style = creator_profile_data.get('visual_style', {})
+        visual_style_name = visual_style.get('name', '') if isinstance(visual_style, dict) else ''
+        visual_style_description = visual_style.get('description', '') if isinstance(visual_style, dict) else ''
+
+        color_palette_list = creator_profile_data.get('color_palette', [])
+        color_palette = self._format_color_palette(color_palette_list)
+        cores_narrativas = _format_colors_for_logo(color_palette_list)
+
+        # Extrair dados da análise semântica
+        tema_principal = semantic_analysis.get('tema_principal', name)
+        conceitos_visuais = semantic_analysis.get('conceitos_visuais', [])
+        emocoes = semantic_analysis.get('emocoes_associadas', [])
+        contexto_visual = semantic_analysis.get('contexto_visual_sugerido', '')
+        elementos = semantic_analysis.get('elementos_concretos', [])
+        atmosfera = semantic_analysis.get('atmosfera', '')
+
+        # Formatar listas para o prompt
+        conceitos_str = ', '.join(conceitos_visuais) if conceitos_visuais else 'elementos relacionados ao tema'
+        emocoes_str = ', '.join(emocoes) if emocoes else 'profissional e acolhedor'
+        elementos_str = ', '.join(elementos) if elementos else ''
+
+        prompt = f"""
+### PERSONA ###
+Você é um diretor de arte premiado internacionalmente, com 15 anos de experiência criando campanhas visuais para marcas como Apple, Nike e Airbnb. Especialista em design para redes sociais, você domina composição, teoria das cores e tendências visuais contemporâneas.
+
+---
+
+### CONTEXTO ###
+Você está criando uma imagem para o Instagram de "{creator_profile_data.get('business_name', 'Não informado')}".
+
+**Dados do Negócio:**
+- Nicho/Setor: {creator_profile_data.get('specialization', 'Não informado')}
+- Descrição: {creator_profile_data.get('business_description', 'Não informado')}
+- Localização: {creator_profile_data.get('business_location', 'Não informado')}
+- Tom de voz da marca: {creator_profile_data.get('voice_tone', 'Profissional')}
+
+**Público-Alvo:**
+- Perfil: {creator_profile_data.get('target_audience', 'Não informado')}
+- Interesses: {creator_profile_data.get('target_interests', 'Não informado')}
+
+**Dados do Post:**
+- Assunto: {name}
+- Objetivo: {objective}
+- Detalhes adicionais: {further_details if further_details else 'Nenhum'}
+
+---
+
+### ANÁLISE SEMÂNTICA DO CONTEÚDO ###
+A análise do texto gerado identificou:
+
+**Tema Central:** {tema_principal}
+
+**Conceitos Visuais a Explorar:** {conceitos_str}
+
+**Emoções a Transmitir:** {emocoes_str}
+
+**Contexto Visual Sugerido:** {contexto_visual if contexto_visual else 'Ambiente profissional e moderno'}
+
+**Elementos Concretos:** {elementos_str if elementos_str else 'Elementos sutis relacionados ao tema'}
+
+**Atmosfera Desejada:** {atmosfera if atmosfera else 'Profissional e envolvente'}
+
+---
+
+### TAREFA ###
+Crie uma imagem que traduza visualmente os conceitos identificados na análise semântica:
+1. Incorpore os elementos visuais sugeridos de forma natural
+2. Transmita as emoções identificadas ({emocoes_str})
+3. Crie a atmosfera desejada ({atmosfera if atmosfera else 'profissional'})
+4. Conecte emocionalmente com o público-alvo
+5. Reflita a identidade e valores da marca
+
+---
+
+### ESTILO VISUAL OBRIGATÓRIO: {visual_style_name if visual_style_name else 'Profissional Moderno'} ###
+{visual_style_description if visual_style_description else 'Design profissional, moderno e sofisticado. Composição equilibrada com foco visual claro. Cores harmônicas e iluminação natural. Estética contemporânea adequada para redes sociais.'}
+
+---
+
+### PALETA DE CORES DA MARCA ###
+As cores devem ser APLICADAS aos elementos do design, não exibidas como blocos ou swatches.
+
+**Cores disponíveis (use como referência visual):**
+{cores_narrativas}
+
+**Códigos HEX (para referência técnica):** {color_palette}
+
+**Diretrizes de aplicação:**
+- Use as cores nos elementos do design (fundos, destaques, textos)
+- Mantenha harmonia e contraste adequado
+- Priorize legibilidade do texto sobre qualquer fundo
+- As cores devem parecer naturais e integradas ao design
+
+---
+
+### DIRETRIZES TÉCNICAS ###
+- **Formato:** 1080 x 1350 px (proporção 4:5 vertical)
+- **Qualidade:** Ultra-detalhada, renderização profissional
+- **Iluminação:** Natural, suave e bem equilibrada
+- **Composição:** Equilibrada, com hierarquia visual clara
+
+---
+
+### RESTRIÇÕES (O QUE EVITAR) ###
+- Evitar marcas d'água ou elementos de interface
+- Evitar textos longos ou ilegíveis na imagem
+- Evitar clichês visuais genéricos
+- Evitar poluição visual ou excesso de elementos
+- Evitar cores fora da paleta da marca
+- Evitar imagens que pareçam de banco de imagens genérico
+
+---
+
+{_build_logo_prompt_section(
+    business_name=creator_profile_data.get('business_name', 'Marca'),
+    color_palette=creator_profile_data.get('color_palette', [])
+)}
+
+---
+
+### INSTRUÇÃO FINAL ###
+Utilize a imagem anexada como canvas base. Crie uma arte profissional no formato 1080 x 1350 px, pronta para publicação no Feed do Instagram. A imagem deve capturar a essência da análise semântica: "{tema_principal}".
+"""
+        return prompt.strip()
+
     def build_content_prompt(self, post_data: Dict) -> str:
         """Build the prompt for content generation based on post type."""
         post_type = post_data.get('type', '').lower()
@@ -203,8 +438,18 @@ Mais detalhes: {details if details else 'Nenhum'}"""
         logger.warning(f"Unknown post type: {post_type}")
         return ""
 
-    def get_creator_profile_data(self) -> dict:
-        """Fetch and return the creator profile data for the current user."""
+    def get_creator_profile_data(self, visual_style_id: Optional[int] = None) -> dict:
+        """
+        Fetch and return the creator profile data for the current user.
+
+        Args:
+            visual_style_id: ID específico do estilo visual (opcional).
+                            Se não fornecido, usa o primeiro estilo da lista do usuário.
+                            Isso permite que o frontend envie um estilo específico por post.
+
+        Returns:
+            Dict com todos os dados do perfil incluindo estilo visual.
+        """
         if not self.user:
             logger.error("Attempted to get creator profile data without setting user")
             raise ValueError(
@@ -217,6 +462,7 @@ Mais detalhes: {details if details else 'Nenhum'}"""
             logger.warning(f"CreatorProfile not found for user {self.user.id if hasattr(self.user, 'id') else 'unknown'}")
             raise ValueError(
                 f"CreatorProfile not found for user {self.user.id if hasattr(self.user, 'id') else 'unknown'}")
+
         profile_data = {
             "business_name": profile.business_name,
             "business_phone": profile.business_phone,
@@ -233,7 +479,8 @@ Mais detalhes: {details if details else 'Nenhum'}"""
             "main_competitors": profile.main_competitors,
             "reference_profiles": profile.reference_profiles,
             "voice_tone": profile.voice_tone,
-            "visual_style": self._get_random_visual_style(profile),
+            "visual_style": self._get_visual_style(profile, visual_style_id),
+            "visual_style_ids": profile.visual_style_ids,  # Lista completa para o frontend
             'color_palette': [color for color in [
                 profile.color_1, profile.color_2,
                 profile.color_3, profile.color_4, profile.color_5
@@ -648,11 +895,18 @@ O resultado final deve parecer o planejamento de um estrategista de conteúdo pr
         objective = post_data.get('objective', '')
         further_details = post_data.get('further_details', '')
 
-        creator_profile_data = self.get_creator_profile_data()
+        # Extrair visual_style_id do post_data se fornecido pelo frontend
+        visual_style_id = post_data.get('visual_style_id')
+
+        creator_profile_data = self.get_creator_profile_data(visual_style_id=visual_style_id)
         visual_style = creator_profile_data.get('visual_style', {})
         visual_style_name = visual_style.get('name', '') if isinstance(visual_style, dict) else ''
         visual_style_description = visual_style.get('description', '') if isinstance(visual_style, dict) else ''
-        color_palette = self._format_color_palette(creator_profile_data.get('color_palette', []))
+
+        # Usar cores narrativas ao invés de apenas HEX
+        color_palette_list = creator_profile_data.get('color_palette', [])
+        color_palette = self._format_color_palette(color_palette_list)
+        cores_narrativas = _format_colors_for_logo(color_palette_list)
 
         prompt = f"""
 ### PERSONA ###
@@ -672,9 +926,6 @@ Você está criando uma imagem para o Instagram de "{creator_profile_data.get('b
 **Público-Alvo:**
 - Perfil: {creator_profile_data.get('target_audience', 'Não informado')}
 - Interesses: {creator_profile_data.get('target_interests', 'Não informado')}
-
-**Identidade Visual da Marca:**
-- Paleta de cores: {color_palette}
 
 **Dados do Post:**
 - Assunto: {name}
@@ -697,12 +948,27 @@ Crie uma imagem de post para Feed do Instagram que:
 
 ---
 
+### PALETA DE CORES DA MARCA ###
+As cores devem ser APLICADAS aos elementos do design, não exibidas como blocos ou swatches.
+
+**Cores disponíveis (use como referência visual):**
+{cores_narrativas}
+
+**Códigos HEX (para referência técnica):** {color_palette}
+
+**Diretrizes de aplicação:**
+- Use as cores nos elementos do design (fundos, destaques, textos)
+- Mantenha harmonia e contraste adequado
+- Priorize legibilidade do texto sobre qualquer fundo
+- As cores devem parecer naturais e integradas ao design
+
+---
+
 ### DIRETRIZES TÉCNICAS ###
 - **Formato:** 1080 x 1350 px (proporção 4:5 vertical)
 - **Qualidade:** Ultra-detalhada, renderização profissional
 - **Iluminação:** Natural, suave e bem equilibrada
 - **Composição:** Equilibrada, com hierarquia visual clara
-- **Cores:** Usar OBRIGATORIAMENTE a paleta da marca: {color_palette}
 
 ---
 
@@ -727,12 +993,9 @@ Crie uma imagem de post para Feed do Instagram que:
 Gere uma descrição detalhada da imagem ideal (60-100 palavras) que será passada diretamente para o gerador de imagens. A descrição deve incluir:
 - Elementos visuais principais
 - Atmosfera e mood
-- Cores predominantes (da paleta da marca)
+- Cores predominantes (usando as cores narrativas da marca)
 - Estilo de iluminação
 - Composição e enquadramento
-
-**Exemplo de saída:**
-"Mulher sorrindo em ambiente minimalista com luz natural suave. Fundo em tons de {color_palette}. Composição vertical 4:5, estilo editorial premium. Elementos sutis relacionados a [nicho]. Atmosfera profissional e acolhedora. Qualidade de fotografia de revista."
 
 ---
 
@@ -747,11 +1010,18 @@ Utilize a imagem anexada como canvas base. Crie uma arte profissional no formato
         objective = post_data.get('objective', '')
         further_details = post_data.get('further_details', '')
 
-        creator_profile_data = self.get_creator_profile_data()
+        # Extrair visual_style_id do post_data se fornecido pelo frontend
+        visual_style_id = post_data.get('visual_style_id')
+
+        creator_profile_data = self.get_creator_profile_data(visual_style_id=visual_style_id)
         visual_style = creator_profile_data.get('visual_style', {})
         visual_style_name = visual_style.get('name', '') if isinstance(visual_style, dict) else ''
         visual_style_description = visual_style.get('description', '') if isinstance(visual_style, dict) else ''
-        color_palette = self._format_color_palette(creator_profile_data.get('color_palette', []))
+
+        # Usar cores narrativas ao invés de apenas HEX
+        color_palette_list = creator_profile_data.get('color_palette', [])
+        color_palette = self._format_color_palette(color_palette_list)
+        cores_narrativas = _format_colors_for_logo(color_palette_list)
 
         prompt = f"""
 ### PERSONA ###
@@ -768,9 +1038,6 @@ Você está criando uma capa de Reel para "{creator_profile_data.get('business_n
 
 **Público-Alvo:**
 - Perfil: {creator_profile_data.get('target_audience', 'Não informado')}
-
-**Identidade Visual:**
-- Paleta de cores: {color_palette}
 
 **Dados do Reel:**
 - Assunto: {name}
@@ -793,11 +1060,18 @@ Crie uma capa de Reel que:
 
 ---
 
+### PALETA DE CORES DA MARCA ###
+**Cores disponíveis:**
+{cores_narrativas}
+
+**Códigos HEX:** {color_palette}
+
+---
+
 ### DIRETRIZES TÉCNICAS ###
 - **Formato:** 1080 x 1920 px (proporção 9:16 vertical)
 - **Título:** Máximo 5-7 palavras, fonte bold e legível
 - **Composição:** Título em destaque (30% superior ou central)
-- **Cores:** OBRIGATÓRIO usar paleta da marca: {color_palette}
 - **Tipografia:** Bold, alto contraste, fácil leitura em mobile
 
 ---
@@ -847,11 +1121,18 @@ Utilize a imagem anexada como canvas base. Crie uma capa de Reel profissional no
         objective = post_data.get('objective', '')
         further_details = post_data.get('further_details', '')
 
-        creator_profile_data = self.get_creator_profile_data()
+        # Extrair visual_style_id do post_data se fornecido pelo frontend
+        visual_style_id = post_data.get('visual_style_id')
+
+        creator_profile_data = self.get_creator_profile_data(visual_style_id=visual_style_id)
         visual_style = creator_profile_data.get('visual_style', {})
         visual_style_name = visual_style.get('name', '') if isinstance(visual_style, dict) else ''
         visual_style_description = visual_style.get('description', '') if isinstance(visual_style, dict) else ''
-        color_palette = self._format_color_palette(creator_profile_data.get('color_palette', []))
+
+        # Usar cores narrativas ao invés de apenas HEX
+        color_palette_list = creator_profile_data.get('color_palette', [])
+        color_palette = self._format_color_palette(color_palette_list)
+        cores_narrativas = _format_colors_for_logo(color_palette_list)
 
         prompt = f"""
 ### PERSONA ###
@@ -870,9 +1151,6 @@ Você está criando um Story para "{creator_profile_data.get('business_name', 'N
 **Público-Alvo:**
 - Perfil: {creator_profile_data.get('target_audience', 'Não informado')}
 - Interesses: {creator_profile_data.get('target_interests', 'Não informado')}
-
-**Identidade Visual:**
-- Paleta de cores: {color_palette}
 
 **Dados do Story:**
 - Assunto: {name}
@@ -895,11 +1173,18 @@ Crie uma arte de Story que:
 
 ---
 
+### PALETA DE CORES DA MARCA ###
+**Cores disponíveis:**
+{cores_narrativas}
+
+**Códigos HEX:** {color_palette}
+
+---
+
 ### DIRETRIZES TÉCNICAS ###
 - **Formato:** 1080 x 1920 px (proporção 9:16 vertical)
 - **Título:** Máximo 5 palavras, bold, alto impacto
 - **Safe Zone:** 10% de margem nas bordas (evitar cortes)
-- **Cores:** OBRIGATÓRIO usar paleta da marca: {color_palette}
 - **Tipografia:** Inter, Montserrat, Poppins ou similar (suporte PT-BR)
 - **Qualidade:** Premium, nível de agência
 

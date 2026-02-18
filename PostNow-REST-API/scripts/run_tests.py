@@ -551,6 +551,321 @@ def test_creator_profile_onboarding_fields():
 
 
 # =============================================================================
+# TESTES: _get_visual_style (novo - substitui _get_random_visual_style)
+# =============================================================================
+def test_get_visual_style_returns_first_by_default():
+    """Sem style_id, deve retornar o primeiro estilo (preferencial, não aleatório)."""
+    import uuid
+    unique_username = f'test_vs_{uuid.uuid4().hex[:8]}'
+
+    user = User.objects.create_user(
+        username=unique_username,
+        email=f'{unique_username}@test.com',
+        password='testpass123'
+    )
+
+    # Criar estilos
+    style1 = VisualStylePreference.objects.create(
+        name=f'Estilo Um {unique_username}',
+        description='Primeiro estilo'
+    )
+    style2 = VisualStylePreference.objects.create(
+        name=f'Estilo Dois {unique_username}',
+        description='Segundo estilo'
+    )
+
+    profile = CreatorProfile.objects.create(
+        user=user,
+        business_name='Test VS',
+        visual_style_ids=[style1.id, style2.id]
+    )
+
+    service = PromptService()
+    result = service._get_visual_style(profile)
+
+    assert result['name'] == f'Estilo Um {unique_username}', f"Esperado primeiro estilo, obtido: {result['name']}"
+
+
+def test_get_visual_style_with_specific_id():
+    """Com style_id específico, deve retornar esse estilo."""
+    import uuid
+    unique_username = f'test_vs_spec_{uuid.uuid4().hex[:8]}'
+
+    user = User.objects.create_user(
+        username=unique_username,
+        email=f'{unique_username}@test.com',
+        password='testpass123'
+    )
+
+    style1 = VisualStylePreference.objects.create(
+        name=f'Primeiro {unique_username}',
+        description='Primeiro'
+    )
+    style2 = VisualStylePreference.objects.create(
+        name=f'Segundo {unique_username}',
+        description='Segundo'
+    )
+
+    profile = CreatorProfile.objects.create(
+        user=user,
+        business_name='Test',
+        visual_style_ids=[style1.id, style2.id]
+    )
+
+    service = PromptService()
+    result = service._get_visual_style(profile, style_id=style2.id)
+
+    assert result['name'] == f'Segundo {unique_username}', f"Esperado segundo estilo, obtido: {result['name']}"
+
+
+def test_get_visual_style_consistent_multiple_calls():
+    """Múltiplas chamadas devem retornar o mesmo estilo (não aleatório)."""
+    import uuid
+    unique_username = f'test_vs_cons_{uuid.uuid4().hex[:8]}'
+
+    user = User.objects.create_user(
+        username=unique_username,
+        email=f'{unique_username}@test.com',
+        password='testpass123'
+    )
+
+    style1 = VisualStylePreference.objects.create(
+        name=f'Style A {unique_username}',
+        description='Style A'
+    )
+    style2 = VisualStylePreference.objects.create(
+        name=f'Style B {unique_username}',
+        description='Style B'
+    )
+
+    profile = CreatorProfile.objects.create(
+        user=user,
+        business_name='Test',
+        visual_style_ids=[style1.id, style2.id]
+    )
+
+    service = PromptService()
+    results = [service._get_visual_style(profile)['name'] for _ in range(10)]
+
+    # Todos devem ser iguais (não aleatório)
+    unique_results = set(results)
+    assert len(unique_results) == 1, f"Deveria ter apenas 1 resultado único, obtido: {unique_results}"
+
+
+def test_get_visual_style_empty_list():
+    """Com lista vazia, deve retornar dict vazio."""
+    import uuid
+    unique_username = f'test_vs_empty_{uuid.uuid4().hex[:8]}'
+
+    user = User.objects.create_user(
+        username=unique_username,
+        email=f'{unique_username}@test.com',
+        password='testpass123'
+    )
+
+    profile = CreatorProfile.objects.create(
+        user=user,
+        business_name='Test',
+        visual_style_ids=[]
+    )
+
+    service = PromptService()
+    result = service._get_visual_style(profile)
+
+    assert result['name'] == '', f"Nome deveria ser vazio, obtido: {result['name']}"
+    assert result['description'] == '', f"Descrição deveria ser vazia, obtido: {result['description']}"
+
+
+# =============================================================================
+# TESTES: semantic_analysis_prompt (novo)
+# =============================================================================
+def test_semantic_analysis_prompt_includes_content():
+    """Deve incluir conteúdo textual no prompt."""
+    service = PromptService()
+    post_data = {'name': 'Dicas de Produtividade', 'objective': 'Engajamento'}
+    content = 'Texto sobre produtividade no trabalho remoto...'
+
+    result = service.semantic_analysis_prompt(content, post_data)
+
+    assert 'Dicas de Produtividade' in result, "Assunto não encontrado"
+    assert 'Engajamento' in result, "Objetivo não encontrado"
+    assert 'produtividade no trabalho remoto' in result, "Conteúdo não encontrado"
+
+
+def test_semantic_analysis_prompt_json_format():
+    """Deve especificar formato JSON na saída."""
+    service = PromptService()
+
+    result = service.semantic_analysis_prompt('conteúdo', {'name': 'test'})
+
+    assert 'JSON' in result, "Deveria mencionar JSON"
+    assert 'tema_principal' in result, "Deveria ter campo tema_principal"
+    assert 'conceitos_visuais' in result, "Deveria ter campo conceitos_visuais"
+    assert 'emocoes_associadas' in result, "Deveria ter campo emocoes_associadas"
+
+
+# =============================================================================
+# TESTES: build_image_prompt_with_semantic (novo)
+# =============================================================================
+def test_build_image_prompt_with_semantic_includes_analysis():
+    """Deve incluir dados da análise semântica no prompt."""
+    import uuid
+    unique_username = f'test_semantic_{uuid.uuid4().hex[:8]}'
+
+    user = User.objects.create_user(
+        username=unique_username,
+        email=f'{unique_username}@test.com',
+        password='testpass123'
+    )
+
+    style = VisualStylePreference.objects.create(
+        name=f'Tech Style {unique_username}',
+        description='High-tech aesthetic'
+    )
+
+    profile = CreatorProfile.objects.create(
+        user=user,
+        business_name='Tech Company',
+        specialization='Tecnologia',
+        voice_tone='Inovador',
+        color_1='#8B5CF6',
+        visual_style_ids=[style.id]
+    )
+
+    service = PromptService()
+    service.set_user(user)
+
+    post_data = {'name': 'IA', 'objective': 'Educar', 'type': 'post'}
+    content = 'Post sobre IA...'
+    semantic = {
+        'tema_principal': 'Inteligência Artificial transformando negócios',
+        'conceitos_visuais': ['redes neurais', 'dados'],
+        'emocoes_associadas': ['curiosidade'],
+        'contexto_visual_sugerido': 'Ambiente futurista',
+        'elementos_concretos': ['circuitos'],
+        'atmosfera': 'Inovadora'
+    }
+
+    result = service.build_image_prompt_with_semantic(post_data, content, semantic)
+
+    assert 'Inteligência Artificial transformando negócios' in result, "Tema principal não encontrado"
+    assert 'redes neurais' in result, "Conceitos visuais não encontrados"
+    assert 'curiosidade' in result, "Emoções não encontradas"
+
+
+def test_build_image_prompt_with_semantic_includes_logo():
+    """Deve incluir seção de logo."""
+    import uuid
+    unique_username = f'test_logo_sem_{uuid.uuid4().hex[:8]}'
+
+    user = User.objects.create_user(
+        username=unique_username,
+        email=f'{unique_username}@test.com',
+        password='testpass123'
+    )
+
+    profile = CreatorProfile.objects.create(
+        user=user,
+        business_name='Logo Test Company',
+        color_1='#8B5CF6'
+    )
+
+    service = PromptService()
+    service.set_user(user)
+
+    semantic = {'tema_principal': 'Teste'}
+    result = service.build_image_prompt_with_semantic({'name': 'test'}, 'content', semantic)
+
+    assert 'LOGO (Preserved Element)' in result, "Seção de logo não encontrada"
+    assert 'Logo Test Company' in result, "Nome da empresa não encontrado"
+
+
+# =============================================================================
+# TESTES: visual_style_id em post_data (novo)
+# =============================================================================
+def test_feed_image_respects_visual_style_id():
+    """Feed image prompt deve usar visual_style_id do post_data."""
+    import uuid
+    unique_username = f'test_vsid_{uuid.uuid4().hex[:8]}'
+
+    user = User.objects.create_user(
+        username=unique_username,
+        email=f'{unique_username}@test.com',
+        password='testpass123'
+    )
+
+    style1 = VisualStylePreference.objects.create(
+        name=f'Primeiro Estilo {unique_username}',
+        description='Primeiro'
+    )
+    style2 = VisualStylePreference.objects.create(
+        name=f'Segundo Estilo {unique_username}',
+        description='Segundo'
+    )
+
+    profile = CreatorProfile.objects.create(
+        user=user,
+        business_name='Test',
+        specialization='Marketing',
+        color_1='#8B5CF6',
+        visual_style_ids=[style1.id, style2.id]
+    )
+
+    service = PromptService()
+    service.set_user(user)
+
+    # Passar visual_style_id do SEGUNDO estilo
+    post_data = {
+        'name': 'Teste',
+        'objective': 'Engajamento',
+        'type': 'post',
+        'visual_style_id': style2.id
+    }
+
+    result = service.build_image_prompt(post_data, 'conteúdo')
+
+    assert f'Segundo Estilo {unique_username}' in result, f"Deveria usar segundo estilo, resultado: {result[:500]}"
+
+
+def test_get_creator_profile_data_with_style_id():
+    """get_creator_profile_data deve respeitar visual_style_id."""
+    import uuid
+    unique_username = f'test_gcpd_{uuid.uuid4().hex[:8]}'
+
+    user = User.objects.create_user(
+        username=unique_username,
+        email=f'{unique_username}@test.com',
+        password='testpass123'
+    )
+
+    style1 = VisualStylePreference.objects.create(
+        name=f'Style Alpha {unique_username}',
+        description='Alpha'
+    )
+    style2 = VisualStylePreference.objects.create(
+        name=f'Style Beta {unique_username}',
+        description='Beta'
+    )
+
+    profile = CreatorProfile.objects.create(
+        user=user,
+        business_name='Test GCPD',
+        visual_style_ids=[style1.id, style2.id]
+    )
+
+    service = PromptService()
+    service.set_user(user)
+
+    # Sem style_id - deve retornar primeiro
+    data1 = service.get_creator_profile_data()
+    assert data1['visual_style']['name'] == f'Style Alpha {unique_username}', "Sem style_id deveria usar primeiro"
+
+    # Com style_id - deve retornar específico
+    data2 = service.get_creator_profile_data(visual_style_id=style2.id)
+    assert data2['visual_style']['name'] == f'Style Beta {unique_username}', "Com style_id deveria usar o específico"
+
+
+# =============================================================================
 # TESTES: VisualStylePreference Model
 # =============================================================================
 def test_visual_style_create():
@@ -662,6 +977,32 @@ def main():
     print("📦 VisualStylePreference Model:")
     run_test(results, "criar estilo", test_visual_style_create)
     run_test(results, "representação string", test_visual_style_str)
+    print()
+
+    # _get_visual_style (novo - substitui _get_random_visual_style)
+    print("📦 _get_visual_style (consistência, não aleatório):")
+    run_test(results, "retorna primeiro por padrão", test_get_visual_style_returns_first_by_default)
+    run_test(results, "aceita style_id específico", test_get_visual_style_with_specific_id)
+    run_test(results, "múltiplas chamadas consistentes", test_get_visual_style_consistent_multiple_calls)
+    run_test(results, "lista vazia retorna dict vazio", test_get_visual_style_empty_list)
+    print()
+
+    # semantic_analysis_prompt (novo)
+    print("📦 semantic_analysis_prompt:")
+    run_test(results, "inclui conteúdo textual", test_semantic_analysis_prompt_includes_content)
+    run_test(results, "especifica formato JSON", test_semantic_analysis_prompt_json_format)
+    print()
+
+    # build_image_prompt_with_semantic (novo)
+    print("📦 build_image_prompt_with_semantic:")
+    run_test(results, "inclui dados da análise semântica", test_build_image_prompt_with_semantic_includes_analysis)
+    run_test(results, "inclui seção de logo", test_build_image_prompt_with_semantic_includes_logo)
+    print()
+
+    # visual_style_id em post_data (novo)
+    print("📦 visual_style_id em post_data:")
+    run_test(results, "feed image respeita visual_style_id", test_feed_image_respects_visual_style_id)
+    run_test(results, "get_creator_profile_data com style_id", test_get_creator_profile_data_with_style_id)
 
     success = results.summary()
     return 0 if success else 1
