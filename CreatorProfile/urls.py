@@ -38,4 +38,10 @@ urlpatterns = [
     # Onboarding step tracking
     path('onboarding/track/', views.track_onboarding_step,
          name='track_onboarding_step'),
+
+    # Temporary data endpoints (for anonymous users)
+    path('onboarding/temp-data/', views.save_onboarding_temp_data,
+         name='save_onboarding_temp_data'),
+    path('onboarding/link-data/', views.link_onboarding_data,
+         name='link_onboarding_data'),
 ]

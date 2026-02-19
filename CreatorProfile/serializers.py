@@ -3,7 +3,7 @@ import re
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from .models import CreatorProfile, VisualStylePreference
+from .models import CreatorProfile, OnboardingTempData, VisualStylePreference
 
 
 class UserBasicSerializer(serializers.ModelSerializer):
@@ -340,3 +340,55 @@ class VisualStylePreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = VisualStylePreference
         fields = '__all__'
+
+
+class OnboardingTempDataSerializer(serializers.Serializer):
+    """
+    Serializer for saving temporary onboarding data before signup.
+    Accepts all onboarding fields + session_id.
+    """
+
+    # Required
+    session_id = serializers.CharField(max_length=100, required=True)
+
+    # Step 1: Business Information (all optional for temp save)
+    business_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    business_phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    business_website = serializers.URLField(required=False, allow_blank=True, allow_null=True)
+    business_instagram_handle = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    specialization = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    business_description = serializers.CharField(required=False, allow_blank=True)
+    business_purpose = serializers.CharField(required=False, allow_blank=True)
+    brand_personality = serializers.CharField(required=False, allow_blank=True)
+    products_services = serializers.CharField(required=False, allow_blank=True)
+    business_location = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    target_audience = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    target_interests = serializers.CharField(required=False, allow_blank=True)
+    main_competitors = serializers.CharField(required=False, allow_blank=True)
+    reference_profiles = serializers.CharField(required=False, allow_blank=True)
+
+    # Step 2: Branding (all optional for temp save)
+    logo = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    voice_tone = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    color_1 = serializers.CharField(max_length=7, required=False, allow_blank=True, allow_null=True)
+    color_2 = serializers.CharField(max_length=7, required=False, allow_blank=True, allow_null=True)
+    color_3 = serializers.CharField(max_length=7, required=False, allow_blank=True, allow_null=True)
+    color_4 = serializers.CharField(max_length=7, required=False, allow_blank=True, allow_null=True)
+    color_5 = serializers.CharField(max_length=7, required=False, allow_blank=True, allow_null=True)
+    visual_style_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_null=True
+    )
+
+    def validate_session_id(self, value):
+        """Validate session_id is provided and not empty."""
+        if not value or not value.strip():
+            raise serializers.ValidationError("session_id é obrigatório.")
+        return value.strip()
+
+    def validate_business_instagram_handle(self, value):
+        """Clean Instagram handle."""
+        if value:
+            return value.strip().lstrip('@')
+        return value

@@ -397,3 +397,69 @@ class OnboardingStepTracking(models.Model):
             return 4  # Visual
         else:
             return 5  # Auth
+
+
+class OnboardingTempData(models.Model):
+    """
+    Temporary storage for onboarding data before user signup.
+    Data is linked by session_id and transferred to CreatorProfile after signup.
+    """
+
+    session_id = models.CharField(
+        max_length=100,
+        unique=True,
+        db_index=True,
+        verbose_name="ID da Sessão",
+        help_text="Identificador único da sessão de onboarding"
+    )
+
+    # Step 1: Business Information (JSON)
+    business_data = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Dados do Negócio",
+        help_text="business_name, specialization, business_description, etc."
+    )
+
+    # Step 2: Branding Information (JSON)
+    branding_data = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Dados de Marca",
+        help_text="voice_tone, colors, visual_style_ids, logo, etc."
+    )
+
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField(
+        verbose_name="Expira em",
+        help_text="Data de expiração dos dados temporários (7 dias após criação)"
+    )
+
+    class Meta:
+        verbose_name = "Dados Temporários de Onboarding"
+        verbose_name_plural = "Dados Temporários de Onboarding"
+        indexes = [
+            models.Index(fields=['expires_at']),
+        ]
+
+    def __str__(self):
+        return f"TempData: {self.session_id} (criado em {self.created_at})"
+
+    def save(self, *args, **kwargs):
+        """Set expiration date on first save."""
+        if not self.expires_at:
+            from django.utils import timezone
+            from datetime import timedelta
+            self.expires_at = timezone.now() + timedelta(days=7)
+        super().save(*args, **kwargs)
+
+    def get_all_data(self) -> dict:
+        """Return combined business and branding data."""
+        data = {}
+        if self.business_data:
+            data.update(self.business_data)
+        if self.branding_data:
+            data.update(self.branding_data)
+        return data
