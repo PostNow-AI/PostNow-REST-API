@@ -15,19 +15,19 @@ class AiService:
         self.models = [
             'gemini-3-pro-preview',
             'gemini-3-pro-preview',
-            'gemini-3-pro-preview',
-            'gemini-3-pro-preview',
-            'gemini-3-pro-preview',
-            'gemini-3-pro-preview',
+            'gemini-3-flash-preview',
+            'gemini-3-flash-preview',
+            'gemini-2.5-flash',
+            'gemini-2.5-flash',
             'gemini-3-pro-preview',
             'gemini-3-pro-preview', ]
         self.image_models = [
             'gemini-3-pro-image-preview',
             'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview',
+            'gemini-2.5-flash-image',
+            'gemini-2.5-flash-image',
+            'gemini-2.5-flash-image',
+            'gemini-2.5-flash-image',
             'gemini-3-pro-image-preview',
             'gemini-3-pro-image-preview', ]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
@@ -147,6 +147,7 @@ class AiService:
             for attempt in range(max_retries):
                 try:
                     # Pass the current model to the function
+                    print(f"Trying model {model}, attempt {attempt + 1} of {max_retries}")
                     result = generate_function(model)
                     print(f"Model {model} succeeded on attempt {attempt + 1}")
                     return model, result
@@ -234,6 +235,7 @@ class AiService:
                 contents=contents,
                 config=config
         ):
+            print(chunk)
             if not self._check_for_content_parts(chunk):
                 continue
 
