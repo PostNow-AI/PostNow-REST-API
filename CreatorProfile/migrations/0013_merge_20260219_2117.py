@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('CreatorProfile', '0010_creatorprofile_weekly_context_policy_override'),
+        ('CreatorProfile', '0011_alter_creatorprofile_business_phone'),
         ('CreatorProfile', '0012_add_onboarding_temp_data'),
     ]
 
