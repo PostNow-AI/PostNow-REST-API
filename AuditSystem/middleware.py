@@ -1,3 +1,5 @@
+import json
+import logging
 import time
 
 from allauth.account.signals import user_signed_up
@@ -12,6 +14,8 @@ from django.dispatch import receiver
 from django.utils.deprecation import MiddlewareMixin
 
 from .services import AuditService
+
+logger = logging.getLogger(__name__)
 
 
 class AuditMiddleware(MiddlewareMixin):
@@ -66,7 +70,7 @@ class AuditMiddleware(MiddlewareMixin):
         )
 
     def _handle_user_signed_up(self, sender, request, user, **kwargs):
-        """Handle user registration"""
+        """Handle user registration and link onboarding data"""
         AuditService.log_account_operation(
             user=user,
             action='account_created',
@@ -74,6 +78,54 @@ class AuditMiddleware(MiddlewareMixin):
             request=request,
             details={'signup_method': 'allauth'}
         )
+
+        # Try to link onboarding data from session_id
+        self._link_onboarding_data(request, user)
+
+    def _link_onboarding_data(self, request, user):
+        """
+        Attempt to link temporary onboarding data to newly registered user.
+
+        Looks for session_id in:
+        1. Request body (JSON)
+        2. Request headers (X-Onboarding-Session-Id)
+        3. Query parameters
+        """
+        session_id = None
+
+        try:
+            # Try to get session_id from request body
+            if hasattr(request, 'body') and request.body:
+                try:
+                    body = json.loads(request.body)
+                    session_id = body.get('session_id') or body.get('onboarding_session_id')
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+            # Try from headers
+            if not session_id:
+                session_id = request.headers.get('X-Onboarding-Session-Id')
+
+            # Try from query params
+            if not session_id and hasattr(request, 'GET'):
+                session_id = request.GET.get('session_id')
+
+            if session_id:
+                from CreatorProfile.services import OnboardingDataService
+                profile = OnboardingDataService.link_data_to_user(user, session_id)
+                if profile:
+                    logger.info(f"Linked onboarding data for user {user.email} from session {session_id}")
+                    AuditService.log_profile_operation(
+                        user=user,
+                        action='profile_created',
+                        status='success',
+                        details={
+                            'source': 'auto_link_on_signup',
+                            'session_id': session_id
+                        }
+                    )
+        except Exception as e:
+            logger.error(f"Error linking onboarding data for user {user.email}: {e}")
 
     def process_view(self, request, view_func, view_args, view_kwargs):
         """Process view to capture timing and other metrics"""

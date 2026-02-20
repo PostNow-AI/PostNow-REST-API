@@ -10,11 +10,12 @@ from .models import OnboardingStepTracking, VisualStylePreference
 from .serializers import (
     CreatorProfileSerializer,
     OnboardingStatusSerializer,
+    OnboardingTempDataSerializer,
     Step1BusinessSerializer,
     Step2BrandingSerializer,
     VisualStylePreferenceSerializer,
 )
-from .services import CreatorProfileService
+from .services import CreatorProfileService, OnboardingDataService
 
 
 class OnboardingStatusView(generics.RetrieveAPIView):
@@ -396,3 +397,88 @@ def track_onboarding_step(request):
         'step_number': step_number,
         'completed': tracking.completed,
     })
+
+
+@api_view(['POST', 'GET'])
+@permission_classes([permissions.AllowAny])
+def save_onboarding_temp_data(request):
+    """
+    Save temporary onboarding data before user signup.
+
+    POST: Save/update onboarding data for a session
+    GET: Retrieve existing data for a session (by session_id query param)
+
+    This data will be automatically linked to the user after signup.
+    """
+    if request.method == 'GET':
+        session_id = request.query_params.get('session_id')
+        if not session_id:
+            return Response(
+                {'error': 'session_id query parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        temp_data = OnboardingDataService.get_temp_data(session_id)
+        if not temp_data:
+            return Response(
+                {'error': 'No data found for this session'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return Response({
+            'session_id': temp_data.session_id,
+            'business_data': temp_data.business_data,
+            'branding_data': temp_data.branding_data,
+            'created_at': temp_data.created_at,
+            'updated_at': temp_data.updated_at,
+        })
+
+    # POST request
+    serializer = OnboardingTempDataSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    data = serializer.validated_data
+    session_id = data.pop('session_id')
+
+    # Remove None/empty values
+    clean_data = {k: v for k, v in data.items() if v not in (None, '', [])}
+
+    temp_data = OnboardingDataService.save_temp_data(session_id, clean_data)
+
+    return Response({
+        'status': 'ok',
+        'session_id': temp_data.session_id,
+        'message': 'Dados salvos temporariamente com sucesso',
+        'expires_at': temp_data.expires_at,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def link_onboarding_data(request):
+    """
+    Manually link onboarding data to current user.
+
+    This is called after signup to transfer temporary data to the user's profile.
+    Normally this happens automatically via signal, but can be called manually.
+    """
+    session_id = request.data.get('session_id')
+    if not session_id:
+        return Response(
+            {'error': 'session_id is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    profile = OnboardingDataService.link_data_to_user(request.user, session_id)
+
+    if profile:
+        return Response({
+            'status': 'ok',
+            'message': 'Dados vinculados ao perfil com sucesso',
+            'profile': CreatorProfileSerializer(profile).data,
+        })
+    else:
+        return Response({
+            'status': 'not_found',
+            'message': 'Nenhum dado temporário encontrado para esta sessão',
+        }, status=status.HTTP_404_NOT_FOUND)
