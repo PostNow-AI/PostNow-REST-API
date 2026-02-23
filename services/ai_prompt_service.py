@@ -1,3 +1,37 @@
+"""
+AIPromptService - Serviço de geração de prompts para IA.
+
+Este módulo contém a classe AIPromptService e funções auxiliares para
+geração de prompts estruturados enviados para modelos de IA.
+
+=============================================================================
+NOTA IMPORTANTE SOBRE ARQUITETURA (NÃO REFATORAR SEM LER)
+=============================================================================
+
+Os métodos desta classe contêm "repetição" proposital de dados do perfil
+(nome do negócio, setor, público-alvo, tom de voz, etc.) em cada prompt.
+
+ISSO NÃO É VIOLAÇÃO DE DRY. Motivos:
+
+1. Cada prompt é enviado INDEPENDENTEMENTE para a IA
+2. A IA não "lembra" de chamadas anteriores
+3. Cada prompt PRECISA ter o contexto completo para funcionar
+4. São dados de contexto, não lógica duplicada
+
+Exemplo:
+    - build_historical_analysis_prompt() → Chamada IA 1 (precisa do contexto)
+    - build_automatic_post_prompt()      → Chamada IA 2 (precisa do contexto)
+
+Se você extrair os dados do perfil para uma função auxiliar, o código fica
+mais "organizado", mas os dados ainda precisarão aparecer em cada prompt.
+A "repetição" é intencional e necessária.
+
+DRY se aplica a: lógica de código, funções, algoritmos
+DRY NÃO se aplica a: dados de contexto em prompts independentes
+
+=============================================================================
+"""
+
 import logging
 
 import webcolors
