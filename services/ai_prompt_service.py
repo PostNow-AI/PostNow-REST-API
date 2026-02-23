@@ -1,9 +1,155 @@
 import logging
 
+import webcolors
+
 from format_weekly_context import format_weekly_context_output
 from services.get_creator_profile_data import get_creator_profile_data
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# FUNÇÕES AUXILIARES PARA CORES
+# =============================================================================
+
+# Cache do mapeamento de cores CSS3 (criado uma vez na importação)
+_CSS3_COLOR_MAP = None
+
+
+def _get_css3_color_map() -> dict:
+    """
+    Retorna mapeamento de cores CSS3 (nome → rgb).
+    Usa cache para evitar recálculo.
+    """
+    global _CSS3_COLOR_MAP
+    if _CSS3_COLOR_MAP is None:
+        _CSS3_COLOR_MAP = {}
+        for name in webcolors.names():
+            try:
+                rgb = webcolors.name_to_rgb(name)
+                _CSS3_COLOR_MAP[name] = rgb
+            except ValueError:
+                pass
+    return _CSS3_COLOR_MAP
+
+
+def _find_closest_color(rgb: tuple) -> str:
+    """
+    Encontra o nome da cor CSS3 mais próxima usando distância Euclidiana.
+
+    Args:
+        rgb: Tupla (r, g, b) com valores 0-255
+
+    Returns:
+        Nome da cor CSS3 mais próxima (ex: 'coral', 'teal', 'salmon')
+    """
+    color_map = _get_css3_color_map()
+    min_distance = float('inf')
+    closest_name = 'gray'  # fallback
+
+    for name, (r, g, b) in color_map.items():
+        distance = (r - rgb[0])**2 + (g - rgb[1])**2 + (b - rgb[2])**2
+        if distance < min_distance:
+            min_distance = distance
+            closest_name = name
+
+    return closest_name
+
+
+def _hex_to_color_name(hex_color: str) -> str:
+    """
+    Converte qualquer código HEX para o nome de cor mais próximo.
+
+    Usa a biblioteca webcolors para encontrar o nome CSS3 mais próximo,
+    evitando que a IA de imagem interprete códigos HEX literalmente.
+
+    Args:
+        hex_color: Código HEX (ex: '#FF6B6B', '#4ECDC4')
+
+    Returns:
+        Nome da cor em inglês (ex: 'coral', 'medium aquamarine')
+    """
+    if not hex_color:
+        return 'gray'
+
+    try:
+        # Normaliza o hex (adiciona # se necessário)
+        if not hex_color.startswith('#'):
+            hex_color = f'#{hex_color}'
+
+        rgb = webcolors.hex_to_rgb(hex_color)
+
+        # Tenta match exato primeiro
+        try:
+            return webcolors.hex_to_name(hex_color)
+        except ValueError:
+            # Se não encontrar, busca a cor mais próxima
+            return _find_closest_color(rgb)
+    except Exception as e:
+        logger.warning(f"Erro ao converter cor {hex_color}: {e}")
+        return 'gray'
+
+
+def _format_colors_for_prompt(color_palette: list) -> str:
+    """
+    Formata paleta de cores para uso em prompts de IA.
+
+    Converte lista de HEX para nomes descritivos que a IA entende melhor.
+
+    Args:
+        color_palette: Lista de códigos HEX (ex: ['#FF6B6B', '#4ECDC4'])
+
+    Returns:
+        String formatada com nomes de cores (ex: '- coral\n- medium aquamarine')
+    """
+    if not color_palette:
+        return "- neutral colors"
+
+    descriptions = []
+    for hex_color in color_palette:
+        if hex_color:
+            name = _hex_to_color_name(hex_color)
+            descriptions.append(f"- {name}")
+
+    return "\n".join(descriptions) if descriptions else "- neutral colors"
+
+
+def _build_logo_section(business_name: str, color_palette: list, position: str = "bottom-right corner") -> str:
+    """
+    Gera instruções detalhadas para preservação de logo em imagens.
+
+    Esta função resolve o problema da IA não renderizar o logo corretamente,
+    fornecendo instruções específicas sobre posição, tamanho e preservação.
+
+    Args:
+        business_name: Nome da marca (ex: 'PostNow')
+        color_palette: Lista de cores HEX do perfil
+        position: Posição do logo na imagem (default: 'bottom-right corner')
+
+    Returns:
+        String com instruções completas para preservação do logo
+    """
+    colors_formatted = _format_colors_for_prompt(color_palette)
+
+    return f"""
+**LOGO (Preserved Element):**
+
+Using the attached logo image of "{business_name}", place it in the {position}
+at approximately 8% of the image width, ensuring it remains clearly visible
+but not dominant.
+
+PRESERVE EXACTLY: the icon shape and geometry, the text "{business_name}"
+spelling and arrangement, and the overall logo proportions. The logo must
+appear exactly as provided in the attachment.
+
+Change ONLY the logo colors if needed for contrast against the background.
+Choose from the brand palette colors that provide maximum readability:
+{colors_formatted}
+
+Keep the logo unchanged in every other aspect: same icon geometry, same text
+content, same layout structure. Ensure all parts of the logo are fully visible
+and legible against any background color.
+""".strip()
 
 
 class AIPromptService:
@@ -725,6 +871,15 @@ class AIPromptService:
 
         visual_style_info = get_visual_style_info()
 
+        # Gera seção de logo com instruções detalhadas
+        logo_section = _build_logo_section(
+            business_name=profile_data.get('business_name', ''),
+            color_palette=profile_data.get('color_palette', [])
+        )
+
+        # Formata cores da paleta para o prompt
+        colors_formatted = _format_colors_for_prompt(profile_data.get('color_palette', []))
+
         return [
             f"""
             Crie uma imagem seguindo o estilo e contexto descritos abaixo.
@@ -734,7 +889,7 @@ class AIPromptService:
                 - Descrição completa: {visual_style_info['descricao_completa']}
 
             - Contexto e conteudo:
-              - Contexto visual sugerido: {semantic_analysis['contexto_visual_sugerido']},
+                - Contexto visual sugerido: {semantic_analysis['contexto_visual_sugerido']},
                 - Elementos relevantes: {', '.join(semantic_analysis['objetos_relevantes'])},
                 - Tema principal do post: {semantic_analysis['tema_principal']}
 
@@ -743,13 +898,257 @@ class AIPromptService:
                 - Sensação geral: {semantic_analysis['sensação_geral']},
                 - Tons de cor sugeridos: {', '.join(semantic_analysis['tons_de_cor_sugeridos'])}
 
+            - Paleta de cores da marca (use estas cores preferencialmente):
+{colors_formatted}
+
+            {logo_section}
+
             - Regras e Restrições:
                 - Sempre renderize um texto na imagem com um título curto referente ao conteúdo do post.
-                - Renderize a logomarca quando anexada.
-                - NÃO gerar ou adicionar logomarca a não ser que seja anexada pelo usuário.
                 - Todas as imagens devem renderizar o texto do título do post na imagem.
                 - Nunca renderize o texto das hashtags do post na imagem.
-                - Nunca renderize o texto do código HEX das cores na imagem.
-                - Textos renderizados na imagem devem sempre ser escritos em português do Brasil (PT-BR). Porém o termo “(PT-BR)” não deve ser renderizado no texto da imagem.
+                - Nunca renderize códigos HEX de cores na imagem.
+                - Textos renderizados na imagem devem sempre ser escritos em português do Brasil (PT-BR).
         """
+        ]
+
+    # =========================================================================
+    # ANÁLISE HISTÓRICA E POSTS AUTOMÁTICOS
+    # =========================================================================
+
+    def build_historical_analysis_prompt(self, post_data: dict) -> list[str]:
+        """
+        Analisa posts anteriores para evitar conteúdo repetitivo.
+
+        Este método gera um prompt que analisa o histórico de conteúdos
+        anteriores e cria um novo direcionamento criativo inédito.
+
+        Args:
+            post_data: Dados do post (name, objective, further_details)
+
+        Returns:
+            Lista de prompts para análise histórica
+        """
+        profile_data = get_creator_profile_data(self.user)
+
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+
+        return [
+            """
+            Você é um estrategista criativo especializado em copywriting e conteúdo digital.
+            Sua função é analisar o histórico de conteúdos anteriores, entender o estilo,
+            linguagem e temas já abordados, e criar um novo direcionamento criativo inédito.
+            """,
+            f"""
+            🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
+
+            Nome do negócio: {profile_data.get('business_name', 'Não informado')}
+            Setor/Nicho: {profile_data.get('specialization', 'Não informado')}
+            Descrição do negócio: {profile_data.get('business_description', 'Não informado')}
+            Público-alvo: {profile_data.get('target_audience', 'Não informado')}
+            Interesses do público-alvo: {profile_data.get('target_interests', 'Não informado')}
+            Localização do negócio: {profile_data.get('business_location', 'Não informado')}
+            Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
+
+            🎯 OBJETIVO GERAL:
+
+            Assunto: {name}
+            Objetivo: {objective}
+            Mais detalhes: {further_details}
+
+            📌 TAREFA:
+
+            1. Analise o contexto e crie um direcionamento criativo NOVO
+            2. Identifique temas e abordagens a EVITAR (para não repetir)
+            3. Sugira novos títulos, subtítulos e CTAs originais
+
+            📦 FORMATO DE SAÍDA (JSON):
+
+            {{
+                "historical_analysis": "Resumo do que já foi feito (para referência)",
+                "avoid_list": ["tema a evitar 1", "expressão a evitar 2", "CTA a evitar 3"],
+                "new_direction": "Nova linha criativa e conceito principal",
+                "new_headline": "Sugestão de título inédito",
+                "new_subtitle": "Sugestão de subtítulo complementar",
+                "new_cta": "Sugestão de CTA original"
+            }}
+            """
+        ]
+
+    def build_automatic_post_prompt(self, analysis_data: dict = None) -> list[str]:
+        """
+        Gera post automático baseado em análise histórica.
+
+        Este método usa o resultado da análise histórica para gerar
+        conteúdo original que não repete posts anteriores.
+
+        Args:
+            analysis_data: Resultado do build_historical_analysis_prompt
+
+        Returns:
+            Lista de prompts para geração automática
+        """
+        profile_data = get_creator_profile_data(self.user)
+
+        analysis_json = analysis_data if analysis_data else {
+            "historical_analysis": "",
+            "avoid_list": [],
+            "new_direction": "",
+            "new_headline": "",
+            "new_subtitle": "",
+            "new_cta": ""
+        }
+
+        return [
+            """
+            Você é um especialista em copywriting estratégico e criativo para redes sociais.
+            Sua missão é gerar conteúdo ORIGINAL baseado no direcionamento criativo fornecido.
+            """,
+            f"""
+            🧠 DIRECIONAMENTO CRIATIVO (do módulo de análise histórica):
+
+            {analysis_json}
+
+            Função de cada campo:
+            - historical_analysis: referência do que foi feito (NÃO repetir)
+            - avoid_list: lista de ideias/expressões/CTAs a EVITAR
+            - new_direction: linha criativa que deve guiar o novo conteúdo
+            - new_headline/new_subtitle/new_cta: inspirações para o novo conteúdo
+
+            🧾 DADOS DO CLIENTE:
+
+            Nome do negócio: {profile_data.get('business_name', 'Não informado')}
+            Setor/Nicho: {profile_data.get('specialization', 'Não informado')}
+            Descrição do negócio: {profile_data.get('business_description', 'Não informado')}
+            Público-alvo: {profile_data.get('target_audience', 'Não informado')}
+            Interesses do público-alvo: {profile_data.get('target_interests', 'Não informado')}
+            Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
+
+            🎯 REGRAS:
+
+            1. Use new_direction como base criativa principal
+            2. NUNCA use nada da avoid_list
+            3. Inspire-se em new_headline/new_subtitle/new_cta, mas reescreva
+            4. Estrutura AIDA (Atenção, Interesse, Desejo, Ação)
+            5. Média de 5 emojis por texto
+            6. Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
+
+            📦 FORMATO DE SAÍDA:
+
+            {{
+                "titulo": "Título curto e criativo (até 8 palavras)",
+                "sub_titulo": "Subtítulo complementar",
+                "legenda": "Texto completo da copy com ~5 emojis",
+                "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
+                "cta": "Chamada para ação original"
+            }}
+            """
+        ]
+
+    # =========================================================================
+    # EDIÇÃO COM PRESERVAÇÃO
+    # =========================================================================
+
+    def build_content_edit_prompt(self, current_content: str, instructions: str = None) -> list[str]:
+        """
+        Prompt para edição de conteúdo preservando identidade.
+
+        Diferente de regenerate_standalone_post_prompt que recria o post inteiro,
+        este método edita APENAS o que foi solicitado, mantendo todo o resto.
+
+        Args:
+            current_content: Conteúdo original a ser editado
+            instructions: Instruções específicas de edição (None para variação automática)
+
+        Returns:
+            Lista de prompts para edição
+        """
+        instructions_section = ""
+        if instructions:
+            instructions_section = f"\n- Alterações solicitadas: {instructions}"
+
+        return [
+            """
+            Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.
+            Sua missão é editar o material já criado mantendo sua identidade, estilo e tom,
+            alterando APENAS o que for solicitado.
+            """,
+            f"""
+            ### DADOS DE ENTRADA:
+            - Conteúdo original: {current_content}{instructions_section}
+
+            ### REGRAS PARA EDIÇÃO:
+
+            1. **Mantenha toda a identidade visual e estilística do conteúdo original**:
+                - Tom de voz e estilo da copy
+                - Estrutura do texto
+                - Quantidade de emojis similar
+
+            2. **Modifique somente o que foi solicitado**, sem alterar nada além disso
+
+            3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a
+               mesma estrutura e parágrafos curtos
+
+            4. Nunca descaracterize o material já feito - a ideia é **refinar e ajustar**,
+               não recriar do zero
+
+            5. O resultado deve estar pronto para uso imediato
+
+            ### SAÍDA ESPERADA:
+
+            Retorne o conteúdo revisado no mesmo formato do original, com apenas as
+            alterações solicitadas aplicadas. Todo o restante deve permanecer idêntico.
+            """
+        ]
+
+    def build_image_edit_prompt(self, user_prompt: str = None) -> list[str]:
+        """
+        Prompt para edição de imagem preservando identidade visual.
+
+        Diferente de image_generation_prompt que cria imagem nova, este método
+        edita a imagem existente alterando APENAS o que foi solicitado.
+
+        Args:
+            user_prompt: Instruções do usuário para edição
+
+        Returns:
+            Lista de prompts para edição de imagem
+        """
+        edit_instructions = user_prompt if user_prompt else 'crie uma variação sutil mantendo a identidade'
+
+        return [
+            f"""
+            Você é um especialista em design digital e edição de imagens para marketing.
+            Sua missão é editar a imagem já criada, mantendo **100% da identidade visual,
+            layout, estilo, cores e elementos originais**, alterando **apenas o que for solicitado**.
+
+            ### DADOS DE ENTRADA:
+            - Imagem original: [IMAGEM ANEXADA]
+            - Alterações solicitadas: {edit_instructions}
+
+            ### REGRAS PARA EDIÇÃO:
+
+            1. **Nunca recrie a imagem do zero.**
+               O design, estilo, paleta de cores, tipografia e identidade visual devem
+               permanecer exatamente iguais à arte original.
+
+            2. **Aplique apenas as mudanças solicitadas.**
+               Exemplo: se o pedido for "mudar o título para X", altere somente o texto
+               do título, mantendo a fonte, cor, tamanho e posicionamento original.
+
+            3. **Não adicione novos elementos** que não foram solicitados.
+               O layout deve permanecer idêntico.
+
+            4. **Respeite sempre a logomarca oficial** caso já esteja aplicada na arte.
+
+            5. O resultado deve parecer exatamente a mesma imagem original,
+               com apenas os pontos ajustados conforme solicitado.
+
+            ### SAÍDA ESPERADA:
+            - A mesma imagem original, com apenas as alterações solicitadas aplicadas
+            - Nada além do que foi pedido deve ser modificado
+            - Design final pronto para uso, fiel ao original
+            """
         ]
