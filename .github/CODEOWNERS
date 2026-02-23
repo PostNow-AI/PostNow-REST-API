@@ -1,0 +1,16 @@
+# Default owners for everything
+* @PostNow-AI/backend-team
+
+# Core business logic
+/IdeaBank/ @rogeriofresende
+/CreatorProfile/ @rogeriofresende
+/Subscription/ @rogeriofresende
+/CreditSystem/ @rogeriofresende
+/ClientContext/ @rogeriofresende
+
+# Infrastructure and CI
+/.github/ @rogeriofresende
+
+# Security-sensitive files require additional review
+/Sonora_REST_API/settings.py @rogeriofresende
+*.env* @rogeriofresende

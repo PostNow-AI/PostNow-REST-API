@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussões
+    url: https://github.com/PostNow-AI/PostNow-REST-API/discussions
+    about: Para perguntas gerais, use Discussions
+  - name: 📧 Suporte
+    url: mailto:suporte@postnow.com.br
+    about: Para questões urgentes de produção
