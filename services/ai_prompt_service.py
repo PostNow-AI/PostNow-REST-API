@@ -28,8 +28,8 @@ def _get_css3_color_map() -> dict:
             try:
                 rgb = webcolors.name_to_rgb(name)
                 _CSS3_COLOR_MAP[name] = rgb
-            except ValueError:
-                pass
+            except ValueError as exc:
+                logger.debug("Ignoring invalid CSS3 color name from webcolors: %s (%s)", name, exc)
     return _CSS3_COLOR_MAP
 
 
