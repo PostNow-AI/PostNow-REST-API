@@ -1,7 +1,43 @@
+"""
+AIPromptService - Serviço de geração de prompts para IA.
+
+Este módulo contém a classe AIPromptService e funções auxiliares para
+geração de prompts estruturados enviados para modelos de IA.
+
+=============================================================================
+NOTA IMPORTANTE SOBRE ARQUITETURA (NÃO REFATORAR SEM LER)
+=============================================================================
+
+Os métodos desta classe contêm "repetição" proposital de dados do perfil
+(nome do negócio, setor, público-alvo, tom de voz, etc.) em cada prompt.
+
+ISSO NÃO É VIOLAÇÃO DE DRY. Motivos:
+
+1. Cada prompt é enviado INDEPENDENTEMENTE para a IA
+2. A IA não "lembra" de chamadas anteriores
+3. Cada prompt PRECISA ter o contexto completo para funcionar
+4. São dados de contexto, não lógica duplicada
+
+Exemplo:
+    - build_historical_analysis_prompt() → Chamada IA 1 (precisa do contexto)
+    - build_automatic_post_prompt()      → Chamada IA 2 (precisa do contexto)
+
+Se você extrair os dados do perfil para uma função auxiliar, o código fica
+mais "organizado", mas os dados ainda precisarão aparecer em cada prompt.
+A "repetição" é intencional e necessária.
+
+DRY se aplica a: lógica de código, funções, algoritmos
+DRY NÃO se aplica a: dados de contexto em prompts independentes
+
+=============================================================================
+"""
+
 import logging
 
-from format_weekly_context import format_weekly_context_output
+from services.color_extraction import format_colors_for_prompt
+from services.format_weekly_context import format_weekly_context_output
 from services.get_creator_profile_data import get_creator_profile_data
+from services.prompt_logo import build_logo_section
 
 logger = logging.getLogger(__name__)
 
@@ -725,6 +761,15 @@ class AIPromptService:
 
         visual_style_info = get_visual_style_info()
 
+        # Gera seção de logo com instruções detalhadas
+        logo_section = build_logo_section(
+            business_name=profile_data.get('business_name', ''),
+            color_palette=profile_data.get('color_palette', [])
+        )
+
+        # Formata cores da paleta para o prompt
+        colors_formatted = format_colors_for_prompt(profile_data.get('color_palette', []))
+
         return [
             f"""
             Crie uma imagem seguindo o estilo e contexto descritos abaixo.
@@ -734,7 +779,7 @@ class AIPromptService:
                 - Descrição completa: {visual_style_info['descricao_completa']}
 
             - Contexto e conteudo:
-              - Contexto visual sugerido: {semantic_analysis['contexto_visual_sugerido']},
+                - Contexto visual sugerido: {semantic_analysis['contexto_visual_sugerido']},
                 - Elementos relevantes: {', '.join(semantic_analysis['objetos_relevantes'])},
                 - Tema principal do post: {semantic_analysis['tema_principal']}
 
@@ -743,13 +788,257 @@ class AIPromptService:
                 - Sensação geral: {semantic_analysis['sensação_geral']},
                 - Tons de cor sugeridos: {', '.join(semantic_analysis['tons_de_cor_sugeridos'])}
 
+            - Paleta de cores da marca (use estas cores preferencialmente):
+{colors_formatted}
+
+            {logo_section}
+
             - Regras e Restrições:
                 - Sempre renderize um texto na imagem com um título curto referente ao conteúdo do post.
-                - Renderize a logomarca quando anexada.
-                - NÃO gerar ou adicionar logomarca a não ser que seja anexada pelo usuário.
                 - Todas as imagens devem renderizar o texto do título do post na imagem.
                 - Nunca renderize o texto das hashtags do post na imagem.
-                - Nunca renderize o texto do código HEX das cores na imagem.
-                - Textos renderizados na imagem devem sempre ser escritos em português do Brasil (PT-BR). Porém o termo “(PT-BR)” não deve ser renderizado no texto da imagem.
+                - Nunca renderize códigos HEX de cores na imagem.
+                - Textos renderizados na imagem devem sempre ser escritos em português do Brasil (PT-BR).
         """
+        ]
+
+    # =========================================================================
+    # ANÁLISE HISTÓRICA E POSTS AUTOMÁTICOS
+    # =========================================================================
+
+    def build_historical_analysis_prompt(self, post_data: dict) -> list[str]:
+        """
+        Analisa posts anteriores para evitar conteúdo repetitivo.
+
+        Este método gera um prompt que analisa o histórico de conteúdos
+        anteriores e cria um novo direcionamento criativo inédito.
+
+        Args:
+            post_data: Dados do post (name, objective, further_details)
+
+        Returns:
+            Lista de prompts para análise histórica
+        """
+        profile_data = get_creator_profile_data(self.user)
+
+        name = post_data.get('name', '')
+        objective = post_data.get('objective', '')
+        further_details = post_data.get('further_details', '')
+
+        return [
+            """
+            Você é um estrategista criativo especializado em copywriting e conteúdo digital.
+            Sua função é analisar o histórico de conteúdos anteriores, entender o estilo,
+            linguagem e temas já abordados, e criar um novo direcionamento criativo inédito.
+            """,
+            f"""
+            🧾 DADOS DE PERSONALIZAÇÃO DO CLIENTE:
+
+            Nome do negócio: {profile_data.get('business_name', 'Não informado')}
+            Setor/Nicho: {profile_data.get('specialization', 'Não informado')}
+            Descrição do negócio: {profile_data.get('business_description', 'Não informado')}
+            Público-alvo: {profile_data.get('target_audience', 'Não informado')}
+            Interesses do público-alvo: {profile_data.get('target_interests', 'Não informado')}
+            Localização do negócio: {profile_data.get('business_location', 'Não informado')}
+            Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
+
+            🎯 OBJETIVO GERAL:
+
+            Assunto: {name}
+            Objetivo: {objective}
+            Mais detalhes: {further_details}
+
+            📌 TAREFA:
+
+            1. Analise o contexto e crie um direcionamento criativo NOVO
+            2. Identifique temas e abordagens a EVITAR (para não repetir)
+            3. Sugira novos títulos, subtítulos e CTAs originais
+
+            📦 FORMATO DE SAÍDA (JSON):
+
+            {{
+                "historical_analysis": "Resumo do que já foi feito (para referência)",
+                "avoid_list": ["tema a evitar 1", "expressão a evitar 2", "CTA a evitar 3"],
+                "new_direction": "Nova linha criativa e conceito principal",
+                "new_headline": "Sugestão de título inédito",
+                "new_subtitle": "Sugestão de subtítulo complementar",
+                "new_cta": "Sugestão de CTA original"
+            }}
+            """
+        ]
+
+    def build_automatic_post_prompt(self, analysis_data: dict = None) -> list[str]:
+        """
+        Gera post automático baseado em análise histórica.
+
+        Este método usa o resultado da análise histórica para gerar
+        conteúdo original que não repete posts anteriores.
+
+        Args:
+            analysis_data: Resultado do build_historical_analysis_prompt
+
+        Returns:
+            Lista de prompts para geração automática
+        """
+        profile_data = get_creator_profile_data(self.user)
+
+        analysis_json = analysis_data if analysis_data else {
+            "historical_analysis": "",
+            "avoid_list": [],
+            "new_direction": "",
+            "new_headline": "",
+            "new_subtitle": "",
+            "new_cta": ""
+        }
+
+        return [
+            """
+            Você é um especialista em copywriting estratégico e criativo para redes sociais.
+            Sua missão é gerar conteúdo ORIGINAL baseado no direcionamento criativo fornecido.
+            """,
+            f"""
+            🧠 DIRECIONAMENTO CRIATIVO (do módulo de análise histórica):
+
+            {analysis_json}
+
+            Função de cada campo:
+            - historical_analysis: referência do que foi feito (NÃO repetir)
+            - avoid_list: lista de ideias/expressões/CTAs a EVITAR
+            - new_direction: linha criativa que deve guiar o novo conteúdo
+            - new_headline/new_subtitle/new_cta: inspirações para o novo conteúdo
+
+            🧾 DADOS DO CLIENTE:
+
+            Nome do negócio: {profile_data.get('business_name', 'Não informado')}
+            Setor/Nicho: {profile_data.get('specialization', 'Não informado')}
+            Descrição do negócio: {profile_data.get('business_description', 'Não informado')}
+            Público-alvo: {profile_data.get('target_audience', 'Não informado')}
+            Interesses do público-alvo: {profile_data.get('target_interests', 'Não informado')}
+            Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
+
+            🎯 REGRAS:
+
+            1. Use new_direction como base criativa principal
+            2. NUNCA use nada da avoid_list
+            3. Inspire-se em new_headline/new_subtitle/new_cta, mas reescreva
+            4. Estrutura AIDA (Atenção, Interesse, Desejo, Ação)
+            5. Média de 5 emojis por texto
+            6. Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
+
+            📦 FORMATO DE SAÍDA:
+
+            {{
+                "titulo": "Título curto e criativo (até 8 palavras)",
+                "sub_titulo": "Subtítulo complementar",
+                "legenda": "Texto completo da copy com ~5 emojis",
+                "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
+                "cta": "Chamada para ação original"
+            }}
+            """
+        ]
+
+    # =========================================================================
+    # EDIÇÃO COM PRESERVAÇÃO
+    # =========================================================================
+
+    def build_content_edit_prompt(self, current_content: str, instructions: str = None) -> list[str]:
+        """
+        Prompt para edição de conteúdo preservando identidade.
+
+        Diferente de regenerate_standalone_post_prompt que recria o post inteiro,
+        este método edita APENAS o que foi solicitado, mantendo todo o resto.
+
+        Args:
+            current_content: Conteúdo original a ser editado
+            instructions: Instruções específicas de edição (None para variação automática)
+
+        Returns:
+            Lista de prompts para edição
+        """
+        instructions_section = ""
+        if instructions:
+            instructions_section = f"\n- Alterações solicitadas: {instructions}"
+
+        return [
+            """
+            Você é um especialista em ajustes e refinamentos de conteúdo para marketing digital.
+            Sua missão é editar o material já criado mantendo sua identidade, estilo e tom,
+            alterando APENAS o que for solicitado.
+            """,
+            f"""
+            ### DADOS DE ENTRADA:
+            - Conteúdo original: {current_content}{instructions_section}
+
+            ### REGRAS PARA EDIÇÃO:
+
+            1. **Mantenha toda a identidade visual e estilística do conteúdo original**:
+                - Tom de voz e estilo da copy
+                - Estrutura do texto
+                - Quantidade de emojis similar
+
+            2. **Modifique somente o que foi solicitado**, sem alterar nada além disso
+
+            3. Ajuste apenas as frases, palavras ou CTA especificadas, mantendo a
+               mesma estrutura e parágrafos curtos
+
+            4. Nunca descaracterize o material já feito - a ideia é **refinar e ajustar**,
+               não recriar do zero
+
+            5. O resultado deve estar pronto para uso imediato
+
+            ### SAÍDA ESPERADA:
+
+            Retorne o conteúdo revisado no mesmo formato do original, com apenas as
+            alterações solicitadas aplicadas. Todo o restante deve permanecer idêntico.
+            """
+        ]
+
+    def build_image_edit_prompt(self, user_prompt: str = None) -> list[str]:
+        """
+        Prompt para edição de imagem preservando identidade visual.
+
+        Diferente de image_generation_prompt que cria imagem nova, este método
+        edita a imagem existente alterando APENAS o que foi solicitado.
+
+        Args:
+            user_prompt: Instruções do usuário para edição
+
+        Returns:
+            Lista de prompts para edição de imagem
+        """
+        edit_instructions = user_prompt if user_prompt else 'crie uma variação sutil mantendo a identidade'
+
+        return [
+            f"""
+            Você é um especialista em design digital e edição de imagens para marketing.
+            Sua missão é editar a imagem já criada, mantendo **100% da identidade visual,
+            layout, estilo, cores e elementos originais**, alterando **apenas o que for solicitado**.
+
+            ### DADOS DE ENTRADA:
+            - Imagem original: [IMAGEM ANEXADA]
+            - Alterações solicitadas: {edit_instructions}
+
+            ### REGRAS PARA EDIÇÃO:
+
+            1. **Nunca recrie a imagem do zero.**
+               O design, estilo, paleta de cores, tipografia e identidade visual devem
+               permanecer exatamente iguais à arte original.
+
+            2. **Aplique apenas as mudanças solicitadas.**
+               Exemplo: se o pedido for "mudar o título para X", altere somente o texto
+               do título, mantendo a fonte, cor, tamanho e posicionamento original.
+
+            3. **Não adicione novos elementos** que não foram solicitados.
+               O layout deve permanecer idêntico.
+
+            4. **Respeite sempre a logomarca oficial** caso já esteja aplicada na arte.
+
+            5. O resultado deve parecer exatamente a mesma imagem original,
+               com apenas os pontos ajustados conforme solicitado.
+
+            ### SAÍDA ESPERADA:
+            - A mesma imagem original, com apenas as alterações solicitadas aplicadas
+            - Nada além do que foi pedido deve ser modificado
+            - Design final pronto para uso, fiel ao original
+            """
         ]

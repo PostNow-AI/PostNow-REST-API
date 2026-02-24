@@ -48,3 +48,4 @@ whitenoise==6.6.0
 
 # Mailing API
 mailjet-rest==1.5.1
+webcolors==25.10.0
