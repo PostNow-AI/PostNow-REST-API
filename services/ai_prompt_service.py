@@ -156,8 +156,8 @@ class AIPromptService:
             - Descrição: {profile_data['business_description']}
             - Setor / nicho: {profile_data['specialization']}
             - Propósito: {profile_data['business_purpose']}
-            - Valores e personalidade: {profile_data['brand_personality']}
-            - Tom de voz: {profile_data['voice_tone']}
+            - Personalidade da marca: {profile_data['brand_personality']}
+              (Use estas características para definir o tom de voz adequado)
             - Público-alvo:  {profile_data['target_audience']}
             - Tipos de post desejados: {profile_data['desired_post_types']}
             - Objetivo principal: {profile_data['business_purpose']}
@@ -180,7 +180,7 @@ class AIPromptService:
 
             ---### 🧭 DIRETRIZES DE QUALIDADE E CONFIABILIDADE
             - Não invente estatísticas, datas ou referências.
-            - Prefira uma linguagem natural, persuasiva e compatível com {profile_data['voice_tone']}.
+            - Prefira uma linguagem natural, persuasiva e compatível com a personalidade da marca.
             - Se não houver dados de mercado ou público suficientes, foque na proposta de valor da empresa.
             - Inclua storytelling apenas se houver base no propósito, produto ou cliente real.
             - Caso detecte 'sem dados disponíveis' no contexto, não mencione isso explicitamente; apenas omita o conteúdo correspondente.
@@ -837,7 +837,8 @@ class AIPromptService:
             Descrição do negócio: {profile_data.get('business_description', 'Não informado')}
             Público-alvo: {profile_data.get('target_audience', 'Não informado')}
             Localização do negócio: {profile_data.get('business_location', 'Não informado')}
-            Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
+            Personalidade da marca: {profile_data.get('brand_personality', 'Não informado')}
+              (Use estas características para definir o tom de voz adequado)
 
             🎯 OBJETIVO GERAL:
 
@@ -910,7 +911,7 @@ class AIPromptService:
             Setor/Nicho: {profile_data.get('specialization', 'Não informado')}
             Descrição do negócio: {profile_data.get('business_description', 'Não informado')}
             Público-alvo: {profile_data.get('target_audience', 'Não informado')}
-            Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
+            Personalidade da marca: {profile_data.get('brand_personality', 'Não informado')}
 
             🎯 REGRAS:
 
@@ -919,7 +920,7 @@ class AIPromptService:
             3. Inspire-se em new_headline/new_subtitle/new_cta, mas reescreva
             4. Estrutura AIDA (Atenção, Interesse, Desejo, Ação)
             5. Média de 5 emojis por texto
-            6. Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
+            6. Use a personalidade da marca para definir o tom de voz adequado
 
             📦 FORMATO DE SAÍDA:
 
