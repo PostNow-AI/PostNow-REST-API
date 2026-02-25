@@ -67,9 +67,8 @@ class UserSubscriptionCancelView(APIView):
             # Case 1: Lifetime subscription (no Stripe subscription to cancel)
             if sub.plan.interval == 'lifetime':
                 sub.status = 'cancelled'
-                if not sub.end_date:
-                    from django.utils import timezone
-                    sub.end_date = timezone.now()
+                from django.utils import timezone
+                sub.end_date = timezone.now()
                 sub.save()
 
                 # Log lifetime subscription cancellation
@@ -89,7 +88,7 @@ class UserSubscriptionCancelView(APIView):
                     'message': 'Assinatura vitalícia cancelada com sucesso.'
                 }, status=status.HTTP_200_OK)
 
-            # Case 2: Recurring subscription - use webhook-first approach
+            # Case 2: Recurring subscription - cancel immediately in Stripe and locally
             if sub.stripe_subscription_id:
                 # Check if subscription exists in Stripe before trying to cancel
                 try:
@@ -98,11 +97,21 @@ class UserSubscriptionCancelView(APIView):
                         sub.stripe_subscription_id)
 
                     # If it exists and is active, cancel it in Stripe
-                    # The webhook will handle local database updates
                     if stripe_sub.status in ['active', 'trialing']:
                         stripe.Subscription.delete(sub.stripe_subscription_id)
+                        
+                        # Immediately update local status (no webhook wait)
+                        sub.status = 'cancelled'
+                        from django.utils import timezone
+                        sub.end_date = timezone.now()
+                        sub.save()
+                        
+                        # Clear cache to force re-validation
+                        from django.core.cache import cache
+                        cache_key = f"stripe_sub_status:{sub.stripe_subscription_id}"
+                        cache.delete(cache_key)
 
-                        # Log Stripe subscription cancellation request
+                        # Log Stripe subscription cancellation
                         AuditService.log_subscription_operation(
                             user=user,
                             action='subscription_cancelled',
@@ -111,21 +120,19 @@ class UserSubscriptionCancelView(APIView):
                                 'plan_name': sub.plan.name,
                                 'plan_interval': sub.plan.interval,
                                 'stripe_subscription_id': sub.stripe_subscription_id,
-                                'cancellation_type': 'stripe_webhook_pending'
+                                'cancellation_type': 'stripe_immediate'
                             }
                         )
 
                         return Response({
                             'success': True,
-                            'message': 'Cancelamento enviado para o Stripe. A assinatura será cancelada em breve.',
-                            'webhook_pending': True
+                            'message': 'Assinatura cancelada com sucesso.'
                         }, status=status.HTTP_200_OK)
                     else:
                         # Stripe subscription is already cancelled, just update locally
                         sub.status = 'cancelled'
-                        if not sub.end_date:
-                            from django.utils import timezone
-                            sub.end_date = timezone.now()
+                        from django.utils import timezone
+                        sub.end_date = timezone.now()
                         sub.save()
 
                         # Log local subscription cancellation
@@ -151,9 +158,8 @@ class UserSubscriptionCancelView(APIView):
                     if 'No such subscription' in str(e):
                         # Cancel locally for test subscriptions
                         sub.status = 'cancelled'
-                        if not sub.end_date:
-                            from django.utils import timezone
-                            sub.end_date = timezone.now()
+                        from django.utils import timezone
+                        sub.end_date = timezone.now()
                         sub.save()
 
                         # Log test subscription cancellation
@@ -179,9 +185,8 @@ class UserSubscriptionCancelView(APIView):
             else:
                 # No Stripe ID - cancel locally
                 sub.status = 'cancelled'
-                if not sub.end_date:
-                    from django.utils import timezone
-                    sub.end_date = timezone.now()
+                from django.utils import timezone
+                sub.end_date = timezone.now()
                 sub.save()
 
                 # Log local subscription cancellation
@@ -1228,7 +1233,6 @@ class AdminCreateSubscriptionView(APIView):
         try:
             from django.contrib.auth import get_user_model
             from django.utils import timezone
-            from dateutil.relativedelta import relativedelta
 
             User = get_user_model()
             user = User.objects.filter(email=email).first()
@@ -1251,14 +1255,12 @@ class AdminCreateSubscriptionView(APIView):
                     'message': f'Plano {plan_interval} não encontrado'
                 }, status=status.HTTP_404_NOT_FOUND)
 
-            # Create subscription
-            end_date = timezone.now() + relativedelta(years=1) if plan_interval == 'yearly' else timezone.now() + relativedelta(months=1)
-
+            # Create subscription with end_date=None (will be set only on cancellation)
             subscription = UserSubscription.objects.create(
                 user=user,
                 plan=plan,
                 status='active',
-                end_date=end_date,
+                end_date=None,
                 stripe_subscription_id=f'test_sub_{user.id}_{timezone.now().timestamp()}'
             )
 
@@ -1268,8 +1270,7 @@ class AdminCreateSubscriptionView(APIView):
                 'data': {
                     'subscription_id': subscription.id,
                     'plan': plan.name,
-                    'status': subscription.status,
-                    'end_date': subscription.end_date.isoformat()
+                    'status': subscription.status
                 }
             }, status=status.HTTP_201_CREATED)
 

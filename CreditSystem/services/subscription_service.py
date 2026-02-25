@@ -210,8 +210,9 @@ class SubscriptionService:
                 user=user, status='active'
             ).update(status='cancelled', end_date=timezone.now())
 
-            # Calcula data de fim
-            end_date = self._calculate_end_date(plan.interval)
+            # Para assinaturas Stripe, não calcular end_date (Stripe é source of truth)
+            # Para lifetime, também não precisa de end_date
+            end_date = None
 
             # Determina o status baseado no status do Stripe
             stripe_status = subscription.get('status', 'active')
@@ -316,12 +317,12 @@ class SubscriptionService:
             else:
                 local_status = 'cancelled'
 
-            # Cria nova assinatura
+            # Cria nova assinatura (end_date=None, será definido apenas ao cancelar)
             user_subscription = UserSubscription.objects.create(
                 user=user,
                 plan=plan,
                 start_date=timezone.now(),
-                end_date=end_date,
+                end_date=None,
                 status=local_status,
                 stripe_subscription_id=stripe_subscription_id
             )
@@ -390,6 +391,11 @@ class SubscriptionService:
                 user_subscription.status = 'cancelled'
                 user_subscription.end_date = timezone.now()
                 user_subscription.save()
+                
+                # Clear cache when subscription is cancelled
+                from django.core.cache import cache
+                cache_key = f"stripe_sub_status:{stripe_subscription_id}"
+                cache.delete(cache_key)
 
                 return {
                     'status': 'success',
@@ -434,6 +440,11 @@ class SubscriptionService:
                         user_subscription.end_date = timezone.now()
 
                 user_subscription.save()
+                
+                # Clear cache when subscription status changes
+                from django.core.cache import cache
+                cache_key = f"stripe_sub_status:{stripe_subscription_id}"
+                cache.delete(cache_key)
 
                 # Trigger credit reset if subscription became active
             if previous_status != 'active' and user_subscription.status == 'active':

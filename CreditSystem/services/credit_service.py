@@ -1,6 +1,9 @@
 from decimal import Decimal
 
+import stripe
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -61,6 +64,7 @@ class CreditService:
     def validate_user_subscription(user) -> bool:
         """
         Valida se o usuário possui uma assinatura ativa
+        Para assinaturas com Stripe ID, verifica status diretamente no Stripe (com cache)
 
         Args:
             user: Usuário a ser validado
@@ -78,11 +82,50 @@ class CreditService:
             if not active_subscription:
                 return False
 
-            # Para assinaturas com data de fim (não lifetime), verifica se não expirou
-            if active_subscription.end_date and active_subscription.end_date < timezone.now():
-                # Marca como expirada
-                active_subscription.status = 'expired'
-                active_subscription.save()
+            # Para assinaturas com Stripe, verificar status no Stripe (source of truth)
+            if active_subscription.stripe_subscription_id:
+                cache_key = f"stripe_sub_status:{active_subscription.stripe_subscription_id}"
+                cached_status = cache.get(cache_key)
+                
+                # If cached, use cached status
+                if cached_status is not None:
+                    if cached_status == 'inactive':
+                        active_subscription.status = 'expired'
+                        active_subscription.end_date = timezone.now()
+                        active_subscription.save()
+                        return False
+                    # cached_status == 'active', continue with normal flow
+                else:
+                    # No cache, check Stripe API
+                    try:
+                        stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
+                        stripe_sub = stripe.Subscription.retrieve(
+                            active_subscription.stripe_subscription_id
+                        )
+                        
+                        # Check if Stripe subscription is actually inactive
+                        if stripe_sub.status in ['canceled', 'incomplete_expired', 'past_due', 'unpaid']:
+                            # Stripe says it's cancelled - update local status
+                            active_subscription.status = 'expired'
+                            active_subscription.end_date = timezone.now()
+                            active_subscription.save()
+                            
+                            # Cache inactive status for 5 minutes
+                            cache.set(cache_key, 'inactive', 300)
+                            return False
+                        
+                        # Stripe subscription is active - cache this result
+                        cache.set(cache_key, 'active', 300)  # Cache for 5 minutes
+                        
+                    except stripe.error.StripeError as e:
+                        # If Stripe API fails, log and continue with local validation
+                        print(f"[STRIPE API ERROR] Failed to validate subscription {active_subscription.stripe_subscription_id}: {str(e)}")
+                        # Don't cache errors, allow retry on next validation
+
+            # For lifetime subscriptions or if Stripe check passed, validate subscription is active
+            # Note: end_date is now only metadata (shows when cancelled), not used for validation
+            # Only exception: if status is already 'cancelled' or 'expired', respect that
+            if active_subscription.status != 'active':
                 return False
 
             # Atualiza o status do usuário
@@ -101,7 +144,8 @@ class CreditService:
 
             return True
 
-        except Exception:
+        except Exception as e:
+            print(f"[SUBSCRIPTION VALIDATION ERROR] Unexpected error for user {user.id}: {str(e)}")
             return False
 
     @staticmethod
