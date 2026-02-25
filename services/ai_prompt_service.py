@@ -67,7 +67,6 @@ class AIPromptService:
             - Setor / nicho de mercado: {profile_data['specialization']}
             - Localização principal: {profile_data['business_location']}
             - Público-alvo: {profile_data['target_audience']}
-            - Interesses do público: {profile_data['target_interests']}
             - Concorrentes conhecidos: {profile_data['main_competitors']}
             - Perfis de referência: {profile_data['reference_profiles']}
 
@@ -160,7 +159,6 @@ class AIPromptService:
             - Valores e personalidade: {profile_data['brand_personality']}
             - Tom de voz: {profile_data['voice_tone']}
             - Público-alvo:  {profile_data['target_audience']}
-            - Interesses do Público: {profile_data['target_interests']}
             - Tipos de post desejados: {profile_data['desired_post_types']}
             - Objetivo principal: {profile_data['business_purpose']}
             - Produtos ou serviços prioritários: {profile_data['products_services']}
@@ -838,7 +836,6 @@ class AIPromptService:
             Setor/Nicho: {profile_data.get('specialization', 'Não informado')}
             Descrição do negócio: {profile_data.get('business_description', 'Não informado')}
             Público-alvo: {profile_data.get('target_audience', 'Não informado')}
-            Interesses do público-alvo: {profile_data.get('target_interests', 'Não informado')}
             Localização do negócio: {profile_data.get('business_location', 'Não informado')}
             Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
 
@@ -913,7 +910,6 @@ class AIPromptService:
             Setor/Nicho: {profile_data.get('specialization', 'Não informado')}
             Descrição do negócio: {profile_data.get('business_description', 'Não informado')}
             Público-alvo: {profile_data.get('target_audience', 'Não informado')}
-            Interesses do público-alvo: {profile_data.get('target_interests', 'Não informado')}
             Tom de voz: {profile_data.get('voice_tone', 'Profissional')}
 
             🎯 REGRAS:
