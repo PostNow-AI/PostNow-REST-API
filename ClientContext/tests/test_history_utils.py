@@ -1,11 +1,9 @@
 """Tests for history utilities."""
 
 import json
-from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from django.utils import timezone
 
 from ClientContext.utils.history_utils import get_recent_topics, get_recent_url_keys
 
