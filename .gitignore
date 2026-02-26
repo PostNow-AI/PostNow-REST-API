@@ -57,11 +57,12 @@ build_files.sh
 vercel_build.sh
 deploy_to_vercel.sh
 
-# Test files
-test_*.py
-*_test.py
-tests/
-test/
+# Test files (root level only - allow app-level tests)
+/tests/
+/test/
+# Allow tests inside Django apps
+!*/tests/
+!*/tests/**
 
 # Local development
 .env.local
