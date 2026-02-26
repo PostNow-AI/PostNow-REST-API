@@ -1,6 +1,5 @@
 """Tests for data extraction utilities."""
 
-import pytest
 from ClientContext.utils.data_extraction import (
     extract_from_opportunities,
     normalize_section_structure,
