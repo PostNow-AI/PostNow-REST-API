@@ -23,9 +23,12 @@ from ..utils.source_quality import pick_candidates, is_denied, is_allowed, allow
 from ..utils.text_utils import is_blocked_filetype, sanitize_query_for_allowlist, extract_json_block
 from ..utils.url_validation import coerce_url_to_str, recover_url, validate_url_permissive_async
 from ..utils.weekly_context import generate_weekly_context_email_template
+from ..utils.history_utils import get_recent_topics, get_recent_url_keys
+from ..utils.data_extraction import normalize_section_structure
 from .opportunity_ranking_service import OpportunityRankingService
 from .context_error_service import ContextErrorService
 from .context_stats_service import ContextStatsService
+from .context_persistence_service import ContextPersistenceService
 from services.get_creator_profile_data import get_creator_profile_data
 from services.prompt_utils import build_optimized_search_queries
 from services.user_validation_service import UserValidationService
@@ -55,6 +58,7 @@ class WeeklyContextService:
         opportunity_ranking_service: Optional[OpportunityRankingService] = None,
         error_service: Optional[ContextErrorService] = None,
         stats_service: Optional[ContextStatsService] = None,
+        persistence_service: Optional[ContextPersistenceService] = None,
     ):
         self.user_validation_service = user_validation_service or UserValidationService()
         self.semaphore_service = semaphore_service or SemaphoreService()
@@ -65,6 +69,7 @@ class WeeklyContextService:
         self.opportunity_ranking_service = opportunity_ranking_service or OpportunityRankingService()
         self.error_service = error_service or ContextErrorService()
         self.stats_service = stats_service or ContextStatsService()
+        self.persistence_service = persistence_service or ContextPersistenceService()
         self.dedupe_lookback_weeks = 4
 
     @sync_to_async
@@ -180,22 +185,12 @@ class WeeklyContextService:
                     raise ValueError("Invalid JSON format from AI synthesis")
 
             # --- CORREÇÃO DE ESTRUTURA ---
-            # Garantir que todas as seções críticas sejam dicionários
-            for section in ['mercado', 'concorrencia', 'publico', 'tendencias', 'sazonalidade', 'marca']:
-                if section in context_data:
-                    if isinstance(context_data[section], list):
-                        # Se for lista, tenta pegar o primeiro item se for dict
-                        if context_data[section] and isinstance(context_data[section][0], dict):
-                            context_data[section] = context_data[section][0]
-                        else:
-                            # Se for lista de strings ou vazia, transforma em dict vazio ou adapta
-                            context_data[section] = {}
-                    elif not isinstance(context_data[section], dict):
-                        context_data[section] = {}
+            # Garantir que todas as seções críticas sejam dicionários (movido para utils)
+            context_data = normalize_section_structure(context_data)
 
             # --- NOVO: Agregação e Ranking de Oportunidades ---
-            # Agora passando o mapa de URLs reais para recuperação
-            recent_used_url_keys = await self._get_recent_url_keys(user)
+            # Usar função utilitária para obter URLs recentes (movido para utils)
+            recent_used_url_keys = await get_recent_url_keys(user, self.dedupe_lookback_weeks)
             ranked_opportunities = await self.opportunity_ranking_service.aggregate_and_rank_opportunities(
                 context_data,
                 search_results_map,
@@ -204,161 +199,15 @@ class WeeklyContextService:
             # Injetar estrutura rankeada no contexto para o template usar
             context_data['ranked_opportunities'] = ranked_opportunities
 
-            client_context, created = await sync_to_async(ClientContext.objects.get_or_create)(user=user)
-
-            # Update the context fields (Mantendo compatibilidade com campos antigos onde possível)
-            # Para o novo motor, vamos salvar o JSON completo das oportunidades rankeadas
-            # num campo JSONField genérico ou adaptado. Como não temos um campo 'ranked_opportunities' no model,
-            # vamos salvar em 'market_opportunities' que é JSON, mas estruturado diferente.
-            # Ideal seria criar campo novo, mas por agora vamos usar 'market_opportunities' para armazenar TUDO.
-
-            # Salvar TODAS as oportunidades (raw) em market_opportunities para persistência total
-            client_context.market_opportunities = context_data.get(
-                'mercado', {}).get('fontes_analisadas', [])
-
-            # Salvar as Rankeadas (Top Picks) em 'market_tendencies' (campo JSON pouco usado) ou 'tendencies_data'
-            # Vamos usar 'tendencies_data' para armazenar o JSON final rankeado que o email vai usar.
-            client_context.tendencies_data = ranked_opportunities
-
-            # --- Helper: extrair dados do novo formato de oportunidades ---
-            def _extract_from_opportunities(section_data):
-                """Extrai textos legíveis do formato fontes_analisadas/oportunidades."""
-                fontes_analisadas = section_data.get('fontes_analisadas', [])
-                all_opps = []
-                all_titles = []
-                for fonte in fontes_analisadas:
-                    all_titles.append(fonte.get('titulo_original', ''))
-                    for opp in fonte.get('oportunidades', []):
-                        all_opps.append(opp)
-                return fontes_analisadas, all_opps, all_titles
-
-            # === MERCADO ===
-            mercado = context_data.get('mercado', {})
-            mercado_raw, mercado_opps, mercado_titles = _extract_from_opportunities(mercado)
-            # Panorama: usar campo direto OU sintetizar dos textos analisados
-            client_context.market_panorama = mercado.get('panorama', '') or \
-                '. '.join([o.get('texto_base_analisado', '') for o in mercado_opps[:3] if o.get('texto_base_analisado')])
-            # Tendências: títulos das ideias geradas
-            client_context.market_tendencies = mercado.get('tendencias', []) or \
-                [o.get('titulo_ideia', '') for o in mercado_opps if o.get('titulo_ideia')]
-            # Desafios: filtrar oportunidades do tipo Polêmica como desafios
-            client_context.market_challenges = mercado.get('desafios', []) or \
-                [o.get('titulo_ideia', '') for o in mercado_opps if o.get('tipo') in ('Polêmica', 'Newsjacking')]
-            client_context.market_sources = mercado.get('fontes', [])
-            client_context.market_opportunities = mercado_raw
-
-            # === CONCORRÊNCIA ===
-            concorrencia = context_data.get('concorrencia', {})
-            conc_raw, conc_opps, conc_titles = _extract_from_opportunities(concorrencia)
-            # Principais: títulos das fontes analisadas (nomes dos concorrentes/artigos)
-            client_context.competition_main = concorrencia.get('principais', []) or conc_titles
-            # Estratégias: sintetizar dos gatilhos criativos
-            client_context.competition_strategies = concorrencia.get('estrategias', '') or \
-                '. '.join([o.get('gatilho_criativo', '') for o in conc_opps[:3] if o.get('gatilho_criativo')])
-            # Oportunidades: títulos das ideias
-            client_context.competition_opportunities = concorrencia.get('oportunidades', '') or \
-                ', '.join([o.get('titulo_ideia', '') for o in conc_opps[:3] if o.get('titulo_ideia')])
-            client_context.competition_benchmark = conc_raw
-            client_context.competition_sources = concorrencia.get('fontes', [])
-
-            # === PÚBLICO ===
-            publico = context_data.get('publico', {})
-            client_context.target_audience_profile = publico.get('perfil', '')
-            client_context.target_audience_behaviors = publico.get('comportamento_online', '')
-            client_context.target_audience_interests = publico.get('interesses', [])
-            client_context.target_audience_sources = publico.get('fontes', [])
-
-            # === TENDÊNCIAS ===
-            tendencias = context_data.get('tendencias', {})
-            tend_raw, tend_opps, tend_titles = _extract_from_opportunities(tendencias)
-            client_context.tendencies_popular_themes = tendencias.get('temas_populares', []) or \
-                [o.get('titulo_ideia', '') for o in tend_opps if o.get('titulo_ideia')]
-            # Gerar hashtags a partir dos títulos das oportunidades (o novo formato não gera hashtags)
-            if tendencias.get('hashtags'):
-                client_context.tendencies_hashtags = tendencias['hashtags']
-            else:
-                hashtags = set()
-                for o in tend_opps + mercado_opps:
-                    titulo = o.get('titulo_ideia', '')
-                    # Extrair palavras significativas dos títulos para hashtags
-                    for word in titulo.split():
-                        clean = word.strip('?!.,;:()[]{}"\'-').capitalize()
-                        if len(clean) > 3 and clean.isalpha():
-                            hashtags.add(f"#{clean}")
-                    # Usar tipo como hashtag também
-                    tipo = o.get('tipo', '')
-                    if tipo:
-                        hashtags.add(f"#{tipo.replace(' ', '')}")
-                client_context.tendencies_hashtags = sorted(list(hashtags))[:15]
-
-            # Gerar keywords a partir dos títulos e gatilhos criativos
-            if tendencias.get('keywords'):
-                client_context.tendencies_keywords = tendencias['keywords']
-            else:
-                keywords = set()
-                for o in tend_opps:
-                    titulo = o.get('titulo_ideia', '')
-                    gatilho = o.get('gatilho_criativo', '')
-                    # Extrair frases-chave dos títulos
-                    if titulo:
-                        keywords.add(titulo)
-                    if gatilho:
-                        keywords.add(gatilho)
-                client_context.tendencies_keywords = list(keywords)[:10]
-            client_context.tendencies_sources = tendencias.get('fontes', [])
-
-            # === SAZONALIDADE ===
-            sazonalidade = context_data.get('sazonalidade', {})
-            client_context.seasonal_relevant_dates = sazonalidade.get('datas_relevantes', [])
-            client_context.seasonal_local_events = sazonalidade.get('eventos_locais', [])
-            client_context.seasonal_sources = sazonalidade.get('fontes', [])
-
-            # === MARCA ===
-            marca = context_data.get('marca', {})
-            client_context.brand_online_presence = marca.get('presenca_online', '')
-            client_context.brand_reputation = marca.get('reputacao', '')
-            client_context.brand_communication_style = marca.get('tom_comunicacao_atual', '')
-            client_context.brand_sources = marca.get('fontes', [])
-
-            client_context.weekly_context_error = None
-            client_context.weekly_context_error_date = None
-            await sync_to_async(client_context.save)()
+            # --- PERSISTÊNCIA: Usar serviço dedicado (SRP) ---
+            client_context = await self.persistence_service.save_context(
+                user=user,
+                context_data=context_data,
+                ranked_opportunities=ranked_opportunities
+            )
 
             # --- HISTÓRICO: Salvar cópia no histórico ---
-            from ..models import ClientContextHistory
-
-            await sync_to_async(ClientContextHistory.objects.create)(
-                user=user,
-                original_context=client_context,
-                # Copiar todos os campos
-                market_panorama=client_context.market_panorama,
-                market_tendencies=client_context.market_tendencies,
-                market_challenges=client_context.market_challenges,
-                market_opportunities=client_context.market_opportunities,
-                market_sources=client_context.market_sources,
-                competition_main=client_context.competition_main,
-                competition_strategies=client_context.competition_strategies,
-                competition_benchmark=client_context.competition_benchmark,
-                competition_opportunities=client_context.competition_opportunities,
-                competition_sources=client_context.competition_sources,
-                target_audience_profile=client_context.target_audience_profile,
-                target_audience_behaviors=client_context.target_audience_behaviors,
-                target_audience_interests=client_context.target_audience_interests,
-                target_audience_sources=client_context.target_audience_sources,
-                tendencies_popular_themes=client_context.tendencies_popular_themes,
-                tendencies_hashtags=client_context.tendencies_hashtags,
-                tendencies_data=client_context.tendencies_data,
-                tendencies_keywords=client_context.tendencies_keywords,
-                tendencies_sources=client_context.tendencies_sources,
-                seasonal_relevant_dates=client_context.seasonal_relevant_dates,
-                seasonal_local_events=client_context.seasonal_local_events,
-                seasonal_sources=client_context.seasonal_sources,
-                brand_online_presence=client_context.brand_online_presence,
-                brand_reputation=client_context.brand_reputation,
-                brand_communication_style=client_context.brand_communication_style,
-                brand_sources=client_context.brand_sources
-            )
-            logger.info(f"Saved context history for user {user.id}")
+            await self.persistence_service.save_context_history(user, client_context)
 
             await sync_to_async(self.audit_service.log_context_generation)(
                 user=user,
@@ -411,9 +260,9 @@ class WeeklyContextService:
             policy.allowlist_ratio_threshold,
         )
 
-        # 2. Histórico Anti-Repetição
-        excluded_topics = await self._get_recent_topics(user)
-        used_url_keys_recent = await self._get_recent_url_keys(user)
+        # 2. Histórico Anti-Repetição (usando funções utilitárias)
+        excluded_topics = await get_recent_topics(user, self.dedupe_lookback_weeks)
+        used_url_keys_recent = await get_recent_url_keys(user, self.dedupe_lookback_weeks)
         # Também evita duplicar links dentro do mesmo e-mail (entre seções)
         used_url_keys_this_run: set[str] = set()
 
@@ -663,66 +512,5 @@ class WeeklyContextService:
         full_json_str = "{" + ", ".join(final_json_parts) + "}"
         return full_json_str, search_results
 
-    async def _get_recent_topics(self, user: User) -> list:
-        """Recupera tópicos abordados nas últimas 4 semanas para evitar repetição."""
-        from ..models import ClientContextHistory
-        from datetime import timedelta
-        from django.utils import timezone
-
-        one_month_ago = timezone.now() - timedelta(weeks=4)
-
-        history = await sync_to_async(lambda: list(ClientContextHistory.objects.filter(
-            user=user,
-            created_at__gte=one_month_ago
-        ).values_list('tendencies_popular_themes', flat=True)))()
-
-        # Flatten list
-        topics = []
-        for item in history:
-            if item:  # item pode ser lista ou string JSON
-                if isinstance(item, list):
-                    topics.extend(item)
-                elif isinstance(item, str):
-                    try:
-                        topics.extend(json.loads(item))
-                    except Exception:
-                        pass
-        return list(set(topics))  # Únicos
-
-    async def _get_recent_url_keys(self, user: User) -> set[str]:
-        """
-        Recupera chaves (domain+path) usadas recentemente a partir do histórico.
-        Janela: `self.dedupe_lookback_weeks` semanas.
-        """
-        from ..models import ClientContextHistory
-        from datetime import timedelta
-        from django.utils import timezone
-
-        now = timezone.now()
-        since = now - timedelta(days=max(self.dedupe_lookback_weeks, 1) * 7)
-
-        histories = await sync_to_async(lambda: list(
-            ClientContextHistory.objects.filter(
-                user=user, created_at__gte=since)
-            .order_by("-created_at")
-            .values("tendencies_data")
-        ))()
-
-        used: set[str] = set()
-        for h in histories:
-            data = h.get("tendencies_data") or {}
-            if not isinstance(data, dict):
-                continue
-            for group in data.values():
-                if not isinstance(group, dict):
-                    continue
-                for item in (group.get("items") or []):
-                    if not isinstance(item, dict):
-                        continue
-                    url = item.get("url_fonte")
-                    if isinstance(url, str) and url.startswith("http"):
-                        k = normalize_url_key(url)
-                        if k:
-                            used.add(k)
-
-        return used
+    # NOTE: _get_recent_topics e _get_recent_url_keys foram movidos para
+    # ClientContext/utils/history_utils.py conforme feedback do CTO (SOLID/DRY)
