@@ -8,7 +8,7 @@ on:
 jobs:
   generate-content:
     runs-on: ubuntu-latest
-    environment: Production # <-- Add this line
+    environment: Production
     strategy:
       matrix:
         batch:
