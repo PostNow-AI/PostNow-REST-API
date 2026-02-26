@@ -56,7 +56,8 @@ _default_hosts = [
     'postnow.com.br',
     '.postnow.com.br',  # All subdomains
     "app.postnow.com.br",
-    '18.228.36.142'
+    '18.228.36.142',
+    'ec2-18-228-36-142.sa-east-1.compute.amazonaws.com'
 ]
 ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()] + _default_hosts
 
