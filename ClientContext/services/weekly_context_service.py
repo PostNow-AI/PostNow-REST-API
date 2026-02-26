@@ -13,13 +13,10 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from AuditSystem.services import AuditService
-from ..models import ClientContext
 from ..utils.url_dedupe import normalize_url_key
 from ..utils.policy_resolver import resolve_policy
 from ..utils.source_quality import pick_candidates, is_denied, is_allowed, allowed_domains, build_allowlist_query
 from ..utils.text_utils import is_blocked_filetype, sanitize_query_for_allowlist, extract_json_block
-from ..utils.url_validation import coerce_url_to_str, recover_url, validate_url_permissive_async
-from ..utils.weekly_context import generate_weekly_context_email_template
 from ..utils.history_utils import get_recent_topics, get_recent_url_keys
 from ..utils.data_extraction import normalize_section_structure
 from .opportunity_ranking_service import OpportunityRankingService

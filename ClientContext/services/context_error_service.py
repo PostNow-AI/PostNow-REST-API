@@ -45,7 +45,8 @@ class ContextErrorService:
             client_context.weekly_context_error_date = None
             client_context.save()
         except ClientContext.DoesNotExist:
-            pass
+            # No context exists for this user; nothing to clear
+            logger.debug("No ClientContext found for user %s when clearing error.", user.id)
 
     @sync_to_async
     def get_users_with_errors(self, offset: int = 0, limit: int = None) -> List[Dict[str, Any]]:
