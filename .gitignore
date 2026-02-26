@@ -57,11 +57,12 @@ build_files.sh
 vercel_build.sh
 deploy_to_vercel.sh
 
-# Test files
-test_*.py
-*_test.py
-tests/
-test/
+# Test files (temporary/debug only - project tests are tracked)
+# test_*.py  # Commented: allow project tests
+# *_test.py  # Commented: allow project tests
+# tests/     # Commented: allow project tests
+# test/      # Commented: allow project tests
+scripts/test_*.py
 
 # Local development
 .env.local
