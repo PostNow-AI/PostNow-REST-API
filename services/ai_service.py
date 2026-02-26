@@ -235,7 +235,6 @@ class AiService:
                 contents=contents,
                 config=config
         ):
-            print(chunk)
             if not self._check_for_content_parts(chunk):
                 continue
 
