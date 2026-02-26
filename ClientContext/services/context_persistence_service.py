@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User

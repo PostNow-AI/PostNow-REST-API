@@ -2,12 +2,9 @@
 
 import json
 import logging
-import asyncio
-import re
-import requests
 import os
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from urllib.parse import urlparse
 from google.genai import types
 

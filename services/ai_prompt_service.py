@@ -4,8 +4,6 @@ from datetime import datetime
 from format_weekly_context import format_weekly_context_output
 from services.get_creator_profile_data import get_creator_profile_data
 from services.prompt_utils import (
-    build_optimized_search_queries,
-    format_date_ptbr,
     get_json_schema,
     get_upcoming_holidays,
 )

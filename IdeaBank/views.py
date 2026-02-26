@@ -21,11 +21,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from AuditSystem.services import AuditService
-from Analytics.services.image_pregen_policy import (
-    ACTION_PRE_GENERATE,
-    make_image_pregen_decision,
-)
-from Analytics.services.text_variant_policy import make_text_variant_decision
 from ClientContext.models import ClientContext
 from ClientContext.serializers import ClientContextSerializer
 from CreatorProfile.models import CreatorProfile
