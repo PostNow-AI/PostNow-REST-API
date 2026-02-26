@@ -2,7 +2,8 @@
 
 **Data:** Fevereiro 2026
 **Autor:** Equipe de Engenharia
-**Status:** Aguardando aprovação do CTO
+**Status:** ✅ Aprovado e Executado (2026-02-26)
+**Aprovado por:** MatheusBlanco (CTO)
 
 ---
 
@@ -129,22 +130,22 @@ git push origin --delete NOME_DA_BRANCH
 
 ### Proteção da devel
 
-- [ ] CTO aprova configurar proteção na `devel` do REST-API
-- [ ] CTO aprova configurar proteção na `devel` do UI
+- [x] CTO aprova configurar proteção na `devel` do REST-API ✅ Executado
+- [x] CTO aprova configurar proteção na `devel` do UI ✅ Executado
 
 ### Branches REST-API
 
-- [ ] `docs/analytics-bandits` - Deletar / Manter / Arquivar
-- [ ] `feat/Rogerio` - Deletar / Manter / Arquivar
-- [ ] `feat/radar` - Deletar / Manter / Arquivar
-- [ ] `feature/campaigns-mvp` - Deletar / Manter / Arquivar
-- [ ] `carousel-mvp` - Deletar / Manter / Arquivar
+- [x] `docs/analytics-bandits` - ✅ Deletada
+- [x] `feat/Rogerio` - ✅ Deletada
+- [x] `feat/radar` - ✅ Deletada
+- [x] `feature/campaigns-mvp` - ✅ Deletada
+- [x] `carousel-mvp` - ✅ Deletada
 
 ### Branches UI
 
-- [ ] `POC/Rogerio` - Deletar / Manter / Arquivar
-- [ ] `feat/Rogerio` - Deletar / Manter / Arquivar
-- [ ] `feat/radar` - Deletar / Manter / Arquivar
+- [x] `POC/Rogerio` - ✅ Deletada
+- [x] `feat/Rogerio` - ✅ Deletada
+- [x] `feat/radar` - ✅ Deletada
 
 ---
 
@@ -152,7 +153,7 @@ git push origin --delete NOME_DA_BRANCH
 
 | Nome | Cargo | Data | Assinatura |
 |------|-------|------|------------|
-| | CTO | | |
+| MatheusBlanco | CTO | 2026-02-26 | PR #35 aprovado |
 
 ---
 
