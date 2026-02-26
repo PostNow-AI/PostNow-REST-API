@@ -769,3 +769,274 @@ Para ajustar suas preferências, acesse sua conta no PostNow.
 """
 
     return text.strip()
+
+
+def generate_opportunities_email_template(context_data, user_data):
+    """
+    Generate HTML template for Monday's Opportunities Email.
+    Focuses on content opportunities from tendencies_data.
+    """
+    business_name = user_data.get('business_name', 'Sua Empresa')
+    user_name = user_data.get('user_name', user_data.get('user__first_name', 'Usuário'))
+    frontend_url = os.environ.get('FRONTEND_URL', 'https://app.postnow.ai')
+
+    # Extract ranked opportunities
+    tendencies_data = context_data.get('tendencies_data', {})
+    opportunities_html = _generate_ranked_opportunities_html(tendencies_data)
+
+    # Get hashtags and keywords
+    hashtags = context_data.get('tendencies_hashtags', [])
+    keywords = context_data.get('tendencies_keywords', [])
+
+    hashtags_html = ""
+    if hashtags and isinstance(hashtags, list):
+        hashtags_html = " ".join([f'<span style="background: #e0e7ff; color: #4338ca; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px;">#{h}</span>' for h in hashtags[:10]])
+
+    keywords_html = ""
+    if keywords and isinstance(keywords, list):
+        keywords_html = " ".join([f'<span style="background: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px;">{k}</span>' for k in keywords[:8]])
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oportunidades de Conteúdo - {business_name}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 40px 20px;">
+                <table role="presentation" style="max-width: 640px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 32px; text-align: center;">
+                            <h1 style="margin: 0; color: white; font-size: 28px;">🚀 Oportunidades de Conteúdo</h1>
+                            <p style="margin: 8px 0 0 0; color: #d1fae5; font-size: 16px;">Semana de {business_name}</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 32px;">
+                            <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+                                Olá, <strong>{user_name}</strong>! 👋
+                            </p>
+                            <p style="color: #6b7280; font-size: 15px; line-height: 1.6;">
+                                Aqui estão as <strong>melhores oportunidades de conteúdo</strong> identificadas esta semana para {business_name}:
+                            </p>
+
+                            <!-- Opportunities -->
+                            {opportunities_html if opportunities_html else '<p style="color: #6b7280;">Nenhuma oportunidade identificada esta semana.</p>'}
+
+                            <!-- Hashtags -->
+                            {f'''<div style="margin-top: 24px; padding: 16px; background: #f8fafc; border-radius: 8px;">
+                                <h4 style="margin: 0 0 12px 0; color: #374151;">📌 Hashtags em Alta</h4>
+                                <div>{hashtags_html}</div>
+                            </div>''' if hashtags_html else ''}
+
+                            <!-- Keywords -->
+                            {f'''<div style="margin-top: 16px; padding: 16px; background: #fffbeb; border-radius: 8px;">
+                                <h4 style="margin: 0 0 12px 0; color: #374151;">🔑 Palavras-chave</h4>
+                                <div>{keywords_html}</div>
+                            </div>''' if keywords_html else ''}
+
+                            <!-- CTA -->
+                            <table role="presentation" style="width: 100%; margin-top: 32px;">
+                                <tr>
+                                    <td style="text-align: center;">
+                                        <a href="{frontend_url}/weekly-context" style="display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+                                            Criar Conteúdo Agora
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Footer -->
+                            <p style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px; text-align: center;">
+                                📬 Este é o email de Oportunidades (Segunda-feira). Na Quarta você receberá a Inteligência de Mercado.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+
+    return html
+
+
+def generate_market_intelligence_email_template(context_data, user_data):
+    """
+    Generate HTML template for Wednesday's Market Intelligence Email.
+    Focuses on market, competition, audience, and brand insights.
+    """
+    business_name = user_data.get('business_name', 'Sua Empresa')
+    user_name = user_data.get('user_name', user_data.get('user__first_name', 'Usuário'))
+    frontend_url = os.environ.get('FRONTEND_URL', 'https://app.postnow.ai')
+
+    # Extract market data
+    market_panorama = _format_text_data(context_data.get('market_panorama'), "Análise de mercado em andamento...")
+    market_tendencies = context_data.get('market_tendencies', [])
+    market_challenges = context_data.get('market_challenges', [])
+
+    # Extract competition data
+    competition_main = context_data.get('competition_main', [])
+    competition_strategies = _format_text_data(context_data.get('competition_strategies'), "")
+
+    # Extract audience data
+    audience_profile = _format_text_data(context_data.get('target_audience_profile'), "")
+    audience_behaviors = _format_text_data(context_data.get('target_audience_behaviors'), "")
+
+    # Extract brand data
+    brand_presence = _format_text_data(context_data.get('brand_online_presence'), "")
+    brand_reputation = _format_text_data(context_data.get('brand_reputation'), "")
+
+    # Extract seasonal data
+    seasonal_dates = context_data.get('seasonal_relevant_dates', [])
+    seasonal_events = context_data.get('seasonal_local_events', [])
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inteligência de Mercado - {business_name}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+    <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="padding: 40px 20px;">
+                <table role="presentation" style="max-width: 640px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 32px; text-align: center;">
+                            <h1 style="margin: 0; color: white; font-size: 28px;">🧠 Inteligência de Mercado</h1>
+                            <p style="margin: 8px 0 0 0; color: #c7d2fe; font-size: 16px;">Análise Semanal - {business_name}</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 32px;">
+                            <p style="color: #374151; font-size: 16px; line-height: 1.6;">
+                                Olá, <strong>{user_name}</strong>! 👋
+                            </p>
+                            <p style="color: #6b7280; font-size: 15px; line-height: 1.6;">
+                                Aqui está sua <strong>análise de inteligência de mercado</strong> desta semana:
+                            </p>
+
+                            <!-- Market Section -->
+                            <div style="margin-top: 24px; padding: 20px; background: #f0fdf4; border-left: 4px solid #10b981; border-radius: 8px;">
+                                <h3 style="margin: 0 0 12px 0; color: #065f46;">📊 Panorama do Mercado</h3>
+                                <p style="color: #374151; font-size: 14px; line-height: 1.6; margin: 0;">{market_panorama}</p>
+                                {_render_json_as_bullets(market_tendencies, "") if market_tendencies else ""}
+                            </div>
+
+                            <!-- Competition Section -->
+                            {f'''<div style="margin-top: 20px; padding: 20px; background: #fef2f2; border-left: 4px solid #ef4444; border-radius: 8px;">
+                                <h3 style="margin: 0 0 12px 0; color: #991b1b;">🎯 Concorrência</h3>
+                                {_render_json_as_bullets(competition_main, "")}
+                                <p style="color: #374151; font-size: 14px; line-height: 1.6; margin-top: 8px;">{competition_strategies}</p>
+                            </div>''' if competition_main or competition_strategies else ""}
+
+                            <!-- Audience Section -->
+                            {f'''<div style="margin-top: 20px; padding: 20px; background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 8px;">
+                                <h3 style="margin: 0 0 12px 0; color: #1e40af;">👥 Seu Público</h3>
+                                <p style="color: #374151; font-size: 14px; line-height: 1.6; margin: 0;"><strong>Perfil:</strong> {audience_profile}</p>
+                                <p style="color: #374151; font-size: 14px; line-height: 1.6; margin: 8px 0 0 0;"><strong>Comportamento:</strong> {audience_behaviors}</p>
+                            </div>''' if audience_profile or audience_behaviors else ""}
+
+                            <!-- Brand Section -->
+                            {f'''<div style="margin-top: 20px; padding: 20px; background: #faf5ff; border-left: 4px solid #8b5cf6; border-radius: 8px;">
+                                <h3 style="margin: 0 0 12px 0; color: #6b21a8;">✨ Sua Marca</h3>
+                                <p style="color: #374151; font-size: 14px; line-height: 1.6; margin: 0;"><strong>Presença Online:</strong> {brand_presence}</p>
+                                <p style="color: #374151; font-size: 14px; line-height: 1.6; margin: 8px 0 0 0;"><strong>Reputação:</strong> {brand_reputation}</p>
+                            </div>''' if brand_presence or brand_reputation else ""}
+
+                            <!-- Seasonal Section -->
+                            {f'''<div style="margin-top: 20px; padding: 20px; background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 8px;">
+                                <h3 style="margin: 0 0 12px 0; color: #92400e;">📅 Calendário</h3>
+                                {_render_json_as_bullets(seasonal_dates + seasonal_events, "Sem datas relevantes identificadas.")}
+                            </div>''' if seasonal_dates or seasonal_events else ""}
+
+                            <!-- CTA -->
+                            <table role="presentation" style="width: 100%; margin-top: 32px;">
+                                <tr>
+                                    <td style="text-align: center;">
+                                        <a href="{frontend_url}/weekly-context" style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+                                            Ver Análise Completa
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- Footer -->
+                            <p style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px; text-align: center;">
+                                📬 Este é o email de Inteligência de Mercado (Quarta-feira). Na Segunda você recebe as Oportunidades de Conteúdo.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>"""
+
+    return html
+
+
+def _generate_ranked_opportunities_html(tendencies_data):
+    """Generate HTML for ranked opportunities from tendencies_data."""
+    if not tendencies_data or not isinstance(tendencies_data, dict):
+        return ""
+
+    html_parts = []
+    priority_order = ['polemica', 'educativo', 'newsjacking', 'futuro', 'estudo_caso', 'entretenimento', 'outros']
+
+    colors = {
+        'polemica': ('#ef4444', '#fef2f2'),
+        'educativo': ('#3b82f6', '#eff6ff'),
+        'newsjacking': ('#f59e0b', '#fffbeb'),
+        'futuro': ('#8b5cf6', '#faf5ff'),
+        'estudo_caso': ('#10b981', '#f0fdf4'),
+        'entretenimento': ('#ec4899', '#fdf2f8'),
+        'outros': ('#6b7280', '#f9fafb'),
+    }
+
+    for key in priority_order:
+        if key not in tendencies_data:
+            continue
+
+        group = tendencies_data[key]
+        items = group.get('items', [])
+
+        if not items:
+            continue
+
+        title = group.get('titulo', key.title())
+        border_color, bg_color = colors.get(key, ('#6b7280', '#f9fafb'))
+
+        items_html = ""
+        for item in items[:3]:
+            titulo = item.get('titulo_ideia', 'Oportunidade')
+            score = item.get('score', 0)
+            gatilho = item.get('gatilho_criativo', '')
+
+            items_html += f'''
+            <div style="padding: 12px; background: white; border-radius: 6px; margin-bottom: 8px; border: 1px solid #e5e7eb;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong style="color: #374151; font-size: 14px;">{titulo}</strong>
+                    <span style="background: {border_color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">{score}%</span>
+                </div>
+                {f'<p style="color: #6b7280; font-size: 12px; margin: 4px 0 0 0;">{gatilho}</p>' if gatilho else ''}
+            </div>'''
+
+        html_parts.append(f'''
+        <div style="margin-bottom: 20px; padding: 16px; background: {bg_color}; border-left: 4px solid {border_color}; border-radius: 8px;">
+            <h4 style="margin: 0 0 12px 0; color: #374151;">{title}</h4>
+            {items_html}
+        </div>''')
+
+    return "".join(html_parts)
