@@ -1,6 +1,94 @@
 import os
 
 
+def _generate_enriched_opportunities_html(tendencies_data: dict) -> str:
+    """Generate HTML for enriched opportunities section."""
+    if not tendencies_data:
+        return ''
+
+    html_parts = []
+    category_colors = {
+        'polemica': {'bg': '#fef2f2', 'border': '#ef4444', 'text': '#dc2626'},
+        'educativo': {'bg': '#f0fdf4', 'border': '#22c55e', 'text': '#16a34a'},
+        'newsjacking': {'bg': '#fefce8', 'border': '#eab308', 'text': '#ca8a04'},
+        'entretenimento': {'bg': '#fdf4ff', 'border': '#d946ef', 'text': '#c026d3'},
+        'estudo_caso': {'bg': '#eff6ff', 'border': '#3b82f6', 'text': '#2563eb'},
+        'futuro': {'bg': '#f5f3ff', 'border': '#8b5cf6', 'text': '#7c3aed'},
+        'outros': {'bg': '#f8fafc', 'border': '#64748b', 'text': '#475569'},
+    }
+
+    for category_key, category_data in tendencies_data.items():
+        if not isinstance(category_data, dict):
+            continue
+        titulo = category_data.get('titulo', '')
+        items = category_data.get('items', [])
+        if not items:
+            continue
+        colors = category_colors.get(category_key, category_colors['outros'])
+
+        html_parts.append(f'''
+        <div style="margin-bottom: 24px; border: 1px solid {colors['border']}; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: {colors['border']}; padding: 12px 16px;">
+                <h4 style="margin: 0; color: white; font-size: 16px; font-weight: 600;">{titulo}</h4>
+            </div>
+            <div style="padding: 16px; background-color: {colors['bg']};">
+        ''')
+
+        for i, item in enumerate(items[:3]):
+            titulo_ideia = item.get('titulo_ideia', '')
+            descricao = item.get('descricao', '')
+            score = item.get('score', 0)
+            url_fonte = item.get('url_fonte', '')
+            enriched_sources = item.get('enriched_sources', [])
+            enriched_analysis = item.get('enriched_analysis', '')
+
+            html_parts.append(f'''
+                <div style="{'margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;' if i > 0 else ''}">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                        <h5 style="margin: 0; color: {colors['text']}; font-size: 15px; font-weight: 600; flex: 1;">{titulo_ideia}</h5>
+                        <span style="background-color: {colors['border']}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-left: 8px;">Score: {score}</span>
+                    </div>
+                    <p style="margin: 0 0 12px 0; color: #4b5563; font-size: 14px; line-height: 1.5;">{descricao}</p>
+            ''')
+
+            if enriched_analysis:
+                html_parts.append(f'''
+                    <div style="background-color: white; border-left: 3px solid {colors['border']}; padding: 12px; margin-bottom: 12px; border-radius: 4px;">
+                        <p style="margin: 0 0 4px 0; color: {colors['text']}; font-size: 12px; font-weight: 600;">Analise Aprofundada:</p>
+                        <p style="margin: 0; color: #374151; font-size: 13px; line-height: 1.5;">{enriched_analysis}</p>
+                    </div>
+                ''')
+
+            html_parts.append('<div style="margin-top: 8px;"><p style="margin: 0 0 6px 0; color: #6b7280; font-size: 12px; font-weight: 500;">Fontes:</p><div style="display: flex; flex-wrap: wrap; gap: 6px;">')
+
+            if url_fonte:
+                html_parts.append(f'<a href="{url_fonte}" style="display: inline-block; background-color: white; color: #3b82f6; padding: 4px 8px; border-radius: 4px; font-size: 11px; text-decoration: none; border: 1px solid #e5e7eb;">Fonte principal</a>')
+
+            for j, source in enumerate(enriched_sources[:3]):
+                source_url = source.get('url', '')
+                source_title = source.get('title', f'Fonte {j + 2}')
+                if len(source_title) > 30:
+                    source_title = source_title[:27] + '...'
+                if source_url:
+                    html_parts.append(f'<a href="{source_url}" style="display: inline-block; background-color: white; color: #3b82f6; padding: 4px 8px; border-radius: 4px; font-size: 11px; text-decoration: none; border: 1px solid #e5e7eb;">{source_title}</a>')
+
+            html_parts.append('</div></div></div>')
+        html_parts.append('</div></div>')
+
+    if not html_parts:
+        return ''
+
+    return f'''
+        <table role="presentation" style="width: 100%; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+            <tr><td style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 20px; color: white;">
+                <h2 style="margin: 0; font-size: 20px; font-weight: 600;">Oportunidades de Conteudo da Semana</h2>
+                <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Ideias ranqueadas e enriquecidas com fontes adicionais</p>
+            </td></tr>
+            <tr><td style="padding: 24px;">{''.join(html_parts)}</td></tr>
+        </table>
+    '''
+
+
 def generate_weekly_context_email_template(context_data, user_data):
     """Generate HTML email template for weekly context report"""
 
@@ -52,6 +140,10 @@ def generate_weekly_context_email_template(context_data, user_data):
         'fontes': context_data.get('seasonal_sources', [])
     }
 
+    # Enriched opportunities data (Phase 2)
+    tendencies_data = context_data.get('tendencies_data', {})
+    enriched_opportunities_html = _generate_enriched_opportunities_html(tendencies_data)
+
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -95,6 +187,9 @@ def generate_weekly_context_email_template(context_data, user_data):
                                     </td>
                                 </tr>
                             </table>
+
+                            <!-- Enriched Opportunities Section (Phase 2) -->
+                            {enriched_opportunities_html}
 
                             <!-- Market Overview Section -->
                             <table role="presentation" style="width: 100%; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">

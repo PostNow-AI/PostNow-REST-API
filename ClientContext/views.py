@@ -14,6 +14,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from ClientContext.models import ClientContext
+from ClientContext.services.context_enrichment_service import ContextEnrichmentService
 from ClientContext.services.retry_client_context import RetryClientContext
 from ClientContext.services.weekly_context_email_service import (
     WeeklyContextEmailService,
@@ -276,6 +277,91 @@ def send_weekly_context_email(request):
             AuditService.log_system_operation(
                 user=None,
                 action='weekly_context_email_failed',
+                status='error',
+                resource_type='WeeklyContextEmail',
+                details={'error': str(e)}
+            )
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        finally:
+            loop.close()
+
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def enrich_and_send_weekly_context_email(request):
+    """
+    Enrich context data (Phase 2) and send weekly context email.
+
+    This endpoint:
+    1. Fetches contexts pending enrichment
+    2. Enriches each context with additional sources and analysis
+    3. Sends the weekly context email with enriched data
+    """
+    try:
+        batch_number = int(request.GET.get('batch', 1))
+        batch_size = 2  # Process 2 users per batch to avoid timeouts
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            # Phase 2: Enrich contexts
+            AuditService.log_system_operation(
+                user=None,
+                action='context_enrichment_started',
+                status='info',
+                resource_type='ContextEnrichment',
+            )
+
+            enrichment_service = ContextEnrichmentService()
+            enrichment_result = loop.run_until_complete(
+                enrichment_service.enrich_all_users_context(
+                    batch_number=batch_number,
+                    batch_size=batch_size
+                )
+            )
+
+            AuditService.log_system_operation(
+                user=None,
+                action='context_enrichment_completed',
+                status='success',
+                resource_type='ContextEnrichment',
+                details=enrichment_result
+            )
+
+            # Send emails with enriched data
+            email_service = WeeklyContextEmailService()
+            email_result = loop.run_until_complete(
+                email_service.mail_weekly_context()
+            )
+
+            AuditService.log_system_operation(
+                user=None,
+                action='weekly_context_email_sent',
+                status='success' if email_result['status'] == 'completed' else 'failure',
+                resource_type='WeeklyContextEmail',
+                details=email_result
+            )
+
+            return Response({
+                'status': 'completed',
+                'enrichment': enrichment_result,
+                'email': email_result
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            AuditService.log_system_operation(
+                user=None,
+                action='enrich_and_send_failed',
                 status='error',
                 resource_type='WeeklyContextEmail',
                 details={'error': str(e)}

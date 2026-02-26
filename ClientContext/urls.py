@@ -13,6 +13,8 @@ urlpatterns = [
          name='retry_generate_weekly_context'),
     path('send-weekly-context-email/', views.send_weekly_context_email,
          name='send_weekly_context_email'),
+    path('enrich-and-send-weekly-context-email/', views.enrich_and_send_weekly_context_email,
+         name='enrich_and_send_weekly_context_email'),
     path('generate-single-client-context/', views.generate_single_client_context,
          name='generate_single_client_context'),
 ]

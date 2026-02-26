@@ -51,6 +51,25 @@ class ClientContext(models.Model):
         default=list, blank=True, null=True)
     seasonal_sources = models.JSONField(default=list, blank=True, null=True)
 
+    # Enrichment fields (Phase 2)
+    ENRICHMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('enriched', 'Enriched'),
+        ('failed', 'Failed'),
+    ]
+    context_enrichment_status = models.CharField(
+        max_length=20,
+        choices=ENRICHMENT_STATUS_CHOICES,
+        default='pending',
+        blank=True,
+        null=True
+    )
+    context_enrichment_date = models.DateTimeField(blank=True, null=True)
+    context_enrichment_error = models.TextField(default="", blank=True, null=True)
+
+    # Ranked opportunities with enrichment data
+    tendencies_data = models.JSONField(default=dict, blank=True, null=True)
+
     brand_online_presence = models.TextField(default="", blank=True, null=True)
     brand_reputation = models.TextField(default="", blank=True, null=True)
     brand_communication_style = models.TextField(
