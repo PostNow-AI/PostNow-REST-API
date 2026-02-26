@@ -222,9 +222,9 @@ REST_AUTH = {
     'USER_DETAILS_SERIALIZER': 'Users.serializers.CustomUserDetailsSerializer',
 }
 
-ACCOUNT_AUTHENTICATION_METHOD = "email"  # Use Email / Password authentication
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_EMAIL_REQUIRED = True
+# Django-allauth settings (updated to new format)
+ACCOUNT_LOGIN_METHODS = {"email"}  # Use Email / Password authentication
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]  # Required signup fields
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"  # Require email confirmation
 # Automatically log in after email verification
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
@@ -261,7 +261,6 @@ SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 SOCIALACCOUNT_LOGIN_ON_GET = False  # Require POST for social login (security)
 
 # Account connection settings
-ACCOUNT_SIGNUP_EMAIL_ENTER_TWICE = False
 ACCOUNT_SESSION_REMEMBER = True
 
 # Google OAuth credentials (add these to your .env file)
