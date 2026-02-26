@@ -72,8 +72,9 @@ class MailjetService:
                     status='failure',
                     details={'to_email': to_email, 'subject': subject, 'error': str(e)}
                 )
-            except Exception:
-                pass  # Audit logging should not block email error handling
+            except Exception as audit_error:
+                # Audit logging failure should not block email error handling
+                logger.warning(f"Failed to log audit for email error: {audit_error}")
             raise Exception(f"Failed to send email: {e}")
 
     def _attachment_helper(self, attachments: list) -> None:
