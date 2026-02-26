@@ -215,7 +215,6 @@ def generate_post_idea(request):
     try:
         post_data = serializer.validated_data
         include_image_requested = post_data.get("include_image", False)
-        include_image_generate_now = include_image_requested
 
         context = ClientContext.objects.filter(user=user).first()
         serializer = ClientContextSerializer(context)

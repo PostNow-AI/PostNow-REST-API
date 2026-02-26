@@ -105,9 +105,6 @@ def build_optimized_search_queries(profile_data: dict) -> dict:
     benchmarks = profile_data.get('benchmark_brands') or f"melhores {profile_data.get('specialization', '')} referência mundo brasil"
     benchmarks_query = benchmarks.replace(',', ' OR ')
 
-    instagram_raw = profile_data.get('business_instagram_handle') or ''
-    instagram = instagram_raw.strip('@') if instagram_raw else profile_data.get('business_name', '')
-
     queries = {
         'mercado': f"""
             {products_keywords} {profile_data['specialization']}

@@ -45,7 +45,8 @@ async def get_recent_topics(user: User, lookback_weeks: int = 4) -> List[str]:
                 try:
                     topics.extend(json.loads(item))
                 except (json.JSONDecodeError, TypeError):
-                    pass
+                    # Malformed JSON entry, skip silently
+                    logger.debug("Skipping malformed JSON in topics history: %s", item[:100] if len(item) > 100 else item)
 
     return list(set(topics))
 
