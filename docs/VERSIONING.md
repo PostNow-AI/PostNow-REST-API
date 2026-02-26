@@ -45,15 +45,17 @@ v1.2.3
 
 ## Estratégia de Branching
 
-Utilizamos **GitHub Flow** adaptado para deploy contínuo:
+Utilizamos um fluxo **main/devel** com feature branches:
 
 ```
 main (produção)
   │
-  ├── feature/nova-funcionalidade
-  ├── fix/corrigir-bug
-  ├── hotfix/correcao-urgente
-  └── release/v1.2.0
+  └── devel (desenvolvimento)
+        │
+        ├── feat/nova-funcionalidade
+        ├── fix/corrigir-bug
+        ├── refactor/melhorar-codigo
+        └── hotfix/correcao-urgente (vai direto para main)
 ```
 
 ### Branches
@@ -61,102 +63,109 @@ main (produção)
 | Branch | Propósito | Merge para |
 |--------|-----------|------------|
 | `main` | Produção (sempre deployável) | - |
-| `feature/*` | Novas funcionalidades | `main` |
-| `fix/*` | Correções de bugs | `main` |
-| `hotfix/*` | Correções urgentes em produção | `main` |
-| `release/*` | Preparação de release | `main` |
+| `devel` | Desenvolvimento e integração | `main` (quando estável) |
+| `feat/*` | Novas funcionalidades | `devel` |
+| `fix/*` | Correções de bugs | `devel` |
+| `refactor/*` | Refatorações | `devel` |
+| `hotfix/*` | Correções urgentes em produção | `main` (e depois `devel`) |
 
 ### Nomenclatura de branches
 
 ```bash
 # Features
-feature/adicionar-login-social
-feature/PN-123-nova-dashboard    # Com ticket
+feat/adicionar-login-social
+feat/contexto-semanal-2.0
+feat/insta-api
 
 # Fixes
 fix/corrigir-validacao-email
-fix/PN-456-erro-checkout
+fix/onboarding-data-persistence
 
-# Hotfixes (urgente)
+# Refatorações
+refactor/solid-dry-cto-review
+
+# Hotfixes (urgente, vai direto para main)
 hotfix/corrigir-falha-pagamento
 
-# Releases
-release/v1.2.0
+# Outros
+Dashboard-2.0
+onboarding-2.1
 ```
 
 ---
 
 ## Convenção de Commits
 
-Seguimos [Conventional Commits](https://www.conventionalcommits.org/):
+Utilizamos **Gitmoji + Conventional Commits**:
 
 ```
-<tipo>[escopo opcional]: <descrição>
+<tipo>: <emoji> <descrição>
 
 [corpo opcional]
 
 [rodapé opcional]
 ```
 
-### Tipos de commit
+### Tipos de commit com Gitmoji
 
-| Tipo | Descrição | Impacto na versão |
-|------|-----------|-------------------|
-| `feat` | Nova funcionalidade | MINOR |
-| `fix` | Correção de bug | PATCH |
-| `docs` | Documentação | - |
-| `style` | Formatação (não afeta código) | - |
-| `refactor` | Refatoração sem mudança de comportamento | - |
-| `perf` | Melhoria de performance | PATCH |
-| `test` | Adicionar/corrigir testes | - |
-| `chore` | Manutenção (deps, configs) | - |
-| `ci` | Mudanças em CI/CD | - |
+| Tipo | Emoji | Código | Descrição | Versão |
+|------|-------|--------|-----------|--------|
+| `feat` | ✨ | `:sparkles:` | Nova funcionalidade | MINOR |
+| `fix` | 🐛 | `:bug:` | Correção de bug | PATCH |
+| `docs` | 📝 | `:memo:` | Documentação | - |
+| `style` | 🎨 | `:art:` | Formatação/estrutura de código | - |
+| `refactor` | ♻️ | `:recycle:` | Refatoração | - |
+| `perf` | ⚡ | `:zap:` | Melhoria de performance | PATCH |
+| `test` | ✅ | `:white_check_mark:` | Testes | - |
+| `chore` | 🔧 | `:wrench:` | Configurações | - |
+| `ci` | 👷 | `:construction_worker:` | CI/CD | - |
+| `build` | 📦 | `:package:` | Build/dependências | - |
+| `revert` | ⏪ | `:rewind:` | Reverter mudanças | - |
+| `wip` | 🚧 | `:construction:` | Trabalho em progresso | - |
+| `remove` | 🔥 | `:fire:` | Remover código/arquivos | - |
+
+### Exemplos de commits (padrão da equipe)
+
+```bash
+# Feature
+feat: :sparkles: Adds fallback email sending to admin users
+
+# Bug fix
+fix: :bug: Strips html from text
+
+# Documentação
+docs: :memo: Updates .env.example
+
+# Refatoração
+refactor: :art: Formats code for proper format
+
+# CI/CD
+chore: :construction_worker: Adds devel workflow
+
+# Remover código
+refactor: :fire: Removes unused files
+```
 
 ### Breaking Changes
 
-Para breaking changes, adicione `!` após o tipo ou `BREAKING CHANGE:` no rodapé:
+Para breaking changes, adicione `!` após o tipo:
 
 ```bash
-feat!: remover endpoint deprecated /api/v1/old
+feat!: :sparkles: Remove deprecated endpoint /api/v1/old
 
-# ou
-
-feat: novo sistema de autenticação
-
-BREAKING CHANGE: tokens antigos não são mais aceitos
-```
-
-### Exemplos de commits
-
-```bash
-# Feature simples
-feat(auth): adicionar login com Google
-
-# Fix com ticket
-fix(checkout): corrigir cálculo de desconto
-
-Closes #123
-
-# Refatoração
-refactor(api): extrair lógica de validação para utils
-
-# Breaking change
-feat(api)!: migrar endpoints para v2
-
-BREAKING CHANGE: todos os endpoints agora usam /api/v2/
-Endpoints v1 serão removidos em 30 dias.
+BREAKING CHANGE: endpoint removido, usar /api/v2/new
 ```
 
 ---
 
 ## Workflow de Desenvolvimento
 
-### 1. Criar branch a partir de main
+### 1. Criar branch a partir de devel
 
 ```bash
-git checkout main
-git pull origin main
-git checkout -b feature/minha-feature
+git checkout devel
+git pull origin devel
+git checkout -b feat/minha-feature
 ```
 
 ### 2. Desenvolver e commitar
@@ -164,69 +173,93 @@ git checkout -b feature/minha-feature
 ```bash
 # Commits pequenos e frequentes
 git add .
-git commit -m "feat(modulo): implementar funcionalidade X"
+git commit -m "feat: :sparkles: Implementa funcionalidade X"
 ```
 
-### 3. Abrir Pull Request
+### 3. Abrir Pull Request para devel
 
 ```bash
-git push origin feature/minha-feature
-# Abrir PR no GitHub
+git push origin feat/minha-feature
+# Abrir PR: feat/minha-feature → devel
 ```
 
 ### 4. Code Review
 
-- Mínimo 1 aprovação
-- CI deve passar (se configurado)
+- Mínimo 1 aprovação obrigatória
+- CI deve passar (UI: lint, typecheck, test, build)
 - Resolver conflitos se houver
 
-### 5. Merge e Deploy
+### 5. Merge para devel
 
 - Squash merge para manter histórico limpo
-- Deploy automático via Vercel
+- Feature integrada em devel
+
+### 6. Release para main
+
+Quando devel estiver estável:
+
+```bash
+git checkout main
+git merge devel
+git tag -a v1.1.0 -m "Release v1.1.0"
+git push origin main --tags
+```
 
 ---
 
 ## Releases
 
+### Fluxo de Release
+
+```
+feat/X ──┐
+feat/Y ──┼──► devel ──► main ──► tag v1.x.0 ──► Release automática
+fix/Z  ──┘
+```
+
 ### Criando uma release
 
-1. **Criar branch de release**:
+1. **Garantir que devel está estável**
+2. **Merge devel → main**:
 ```bash
 git checkout main
 git pull origin main
-git checkout -b release/v1.2.0
+git merge devel
 ```
 
-2. **Atualizar versão** (se aplicável):
-
-Para **PostNow-UI** (package.json):
-```bash
-npm version minor  # ou major/patch
-```
-
-Para **PostNow-REST-API**, criar/atualizar `VERSION` na raiz:
-```bash
-echo "1.2.0" > VERSION
-```
-
-3. **Criar tag e release no GitHub**:
+3. **Criar tag**:
 ```bash
 git tag -a v1.2.0 -m "Release v1.2.0"
-git push origin v1.2.0
+git push origin main --tags
 ```
 
-4. **Criar Release no GitHub**:
-   - Ir em Releases > Draft new release
-   - Selecionar a tag
-   - Gerar release notes automaticamente
-   - Publicar
+4. **Release automática**: O workflow cria a release no GitHub automaticamente com changelog.
 
-### Changelog automático
+### Hotfix (correção urgente)
 
-O GitHub gera changelogs baseado nos commits. Para isso funcionar bem:
-- Use Conventional Commits
-- PRs devem ter títulos descritivos
+```bash
+# 1. Branch a partir de main
+git checkout main
+git checkout -b hotfix/corrigir-bug-critico
+
+# 2. Fix
+git commit -m "fix: :bug: Corrige bug crítico em produção"
+
+# 3. PR direto para main
+git push origin hotfix/corrigir-bug-critico
+# Abrir PR: hotfix/corrigir-bug-critico → main
+
+# 4. Após merge, criar tag
+git checkout main
+git pull
+git tag -a v1.2.1 -m "Hotfix v1.2.1"
+git push origin v1.2.1
+
+# 5. Sincronizar hotfix com devel
+git checkout devel
+git merge main
+git push origin devel
+```
 
 ---
 
@@ -235,64 +268,61 @@ O GitHub gera changelogs baseado nos commits. Para isso funcionar bem:
 ### Cenário 1: Nova feature
 
 ```bash
-# 1. Criar branch
-git checkout -b feature/adicionar-exportar-pdf
+# 1. Criar branch a partir de devel
+git checkout devel
+git pull origin devel
+git checkout -b feat/exportar-pdf
 
 # 2. Desenvolver e commitar
-git commit -m "feat(export): adicionar botão de exportar PDF"
-git commit -m "feat(export): implementar geração de PDF"
-git commit -m "test(export): adicionar testes unitários"
+git commit -m "feat: :sparkles: Adiciona botão de exportar PDF"
+git commit -m "feat: :sparkles: Implementa geração de PDF"
+git commit -m "test: :white_check_mark: Adiciona testes unitários"
 
-# 3. Push e PR
-git push origin feature/adicionar-exportar-pdf
-# Abrir PR: "feat: adicionar exportação para PDF"
+# 3. Push e PR para devel
+git push origin feat/exportar-pdf
+# Abrir PR: feat/exportar-pdf → devel
 
-# 4. Após merge, se for release:
-git checkout main
-git pull
-git tag -a v1.3.0 -m "Release v1.3.0 - Exportação PDF"
-git push origin v1.3.0
+# 4. Após review e merge, feature está em devel
+# 5. Quando for fazer release, merge devel → main + tag
 ```
 
-### Cenário 2: Bug fix urgente (hotfix)
+### Cenário 2: Bug fix normal
 
 ```bash
-# 1. Criar branch de hotfix
+# 1. Branch a partir de devel
+git checkout devel
+git checkout -b fix/validacao-email
+
+# 2. Fix
+git commit -m "fix: :bug: Corrige validação de email duplicado"
+
+# 3. PR para devel
+git push origin fix/validacao-email
+# Abrir PR: fix/validacao-email → devel
+```
+
+### Cenário 3: Hotfix urgente em produção
+
+```bash
+# 1. Branch direto de main (não de devel!)
 git checkout main
-git checkout -b hotfix/corrigir-falha-login
+git checkout -b hotfix/falha-pagamento
 
-# 2. Fix rápido
-git commit -m "fix(auth): corrigir timeout no login social"
+# 2. Fix urgente
+git commit -m "fix: :bug: Corrige falha crítica no pagamento"
 
-# 3. PR com label "hotfix" e merge rápido
-git push origin hotfix/corrigir-falha-login
+# 3. PR direto para main (bypass devel)
+git push origin hotfix/falha-pagamento
+# Abrir PR: hotfix/falha-pagamento → main
 
-# 4. Tag de patch
-git checkout main
-git pull
+# 4. Após merge, tag de patch
 git tag -a v1.2.1 -m "Hotfix v1.2.1"
 git push origin v1.2.1
-```
 
-### Cenário 3: Breaking change (major release)
-
-```bash
-# 1. Branch de release
-git checkout -b release/v2.0.0
-
-# 2. Commits com breaking changes
-git commit -m "feat(api)!: migrar para novo formato de response
-
-BREAKING CHANGE: estrutura de response alterada.
-Antes: { data: [...] }
-Agora: { items: [...], meta: {...} }"
-
-# 3. Atualizar documentação de migração
-git commit -m "docs: adicionar guia de migração v1 para v2"
-
-# 4. Release
-git tag -a v2.0.0 -m "Release v2.0.0 - Nova API"
-git push origin v2.0.0
+# 5. Não esquecer de sincronizar com devel!
+git checkout devel
+git merge main
+git push origin devel
 ```
 
 ---
@@ -308,20 +338,35 @@ Para manter **PostNow-REST-API** e **PostNow-UI** sincronizados:
 | v1.1.0 | v1.2.0 | UI-only: melhorias visuais |
 | v1.2.0 | v1.3.0 | API: novo endpoint Y |
 
-**Dica**: Use o mesmo número de versão MAJOR para garantir compatibilidade.
+**Regra**: O número MAJOR deve ser igual para garantir compatibilidade.
 
 ---
 
 ## Checklist de Release
 
-- [ ] Todos os PRs da release foram merged
-- [ ] Testes passando
-- [ ] Documentação atualizada
-- [ ] Versão atualizada (package.json ou VERSION)
+- [ ] Todas as features/fixes em devel estão testadas
+- [ ] CI passando em devel
+- [ ] Merge devel → main feito
 - [ ] Tag criada com padrão `v{MAJOR}.{MINOR}.{PATCH}`
-- [ ] Release notes geradas no GitHub
+- [ ] Release automática gerada no GitHub
 - [ ] Deploy em produção verificado
+- [ ] devel sincronizado com main (se houve hotfix)
 - [ ] Comunicar equipe sobre a release
+
+---
+
+## Branch Protection
+
+### main
+- ✅ PR obrigatório
+- ✅ 1 aprovação mínima
+- ✅ Dismiss stale reviews
+- ✅ CI obrigatório (UI)
+- ❌ Force push bloqueado
+
+### devel
+- ✅ PR obrigatório
+- ✅ 1 aprovação mínima
 
 ---
 
@@ -329,5 +374,5 @@ Para manter **PostNow-REST-API** e **PostNow-UI** sincronizados:
 
 - [Semantic Versioning](https://semver.org/)
 - [Conventional Commits](https://www.conventionalcommits.org/)
+- [Gitmoji](https://gitmoji.dev/)
 - [GitHub Flow](https://docs.github.com/en/get-started/quickstart/github-flow)
-- [Keep a Changelog](https://keepachangelog.com/)
