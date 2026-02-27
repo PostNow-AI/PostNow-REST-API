@@ -255,48 +255,29 @@ def retry_generate_client_context(request):
 @permission_classes([AllowAny])
 def send_weekly_context_email(request):
     """
-    [DEPRECATED] Use send_market_intelligence_email instead.
+    [DISABLED] This endpoint has been replaced by:
+    - send_market_intelligence_email (Wednesday)
+    - enrich_and_send_opportunities_email (Monday)
 
-    This endpoint is kept for backward compatibility.
-    Will be removed in v2.0.0.
+    The weekly context generation (generate_client_context) is still active
+    as it feeds the AI prompt service for content generation.
     """
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    AuditService.log_system_operation(
+        user=None,
+        action='weekly_context_email_disabled',
+        status='info',
+        resource_type='WeeklyContextEmail',
+        details={'message': 'Endpoint disabled. Use market_intelligence or opportunities endpoints.'}
+    )
 
-        try:
-            email_service = WeeklyContextEmailService()
-            result = loop.run_until_complete(
-                email_service.mail_weekly_context()
-            )
-
-            AuditService.log_system_operation(
-                user=None,
-                action='weekly_context_email_sent',
-                status='success' if result['status'] == 'success' else 'failure',
-                resource_type='WeeklyContextEmail',
-                details=result
-            )
-
-            return Response(result, status=status.HTTP_200_OK)
-
-        except Exception as e:
-            AuditService.log_system_operation(
-                user=None,
-                action='weekly_context_email_failed',
-                status='error',
-                resource_type='WeeklyContextEmail',
-                details={'error': str(e)}
-            )
-            return Response({
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        finally:
-            loop.close()
-
-    except Exception as e:
-        return Response({
-            'error': str(e)
+    return Response({
+        'status': 'disabled',
+        'message': 'This endpoint has been disabled.',
+        'alternatives': [
+            '/client-context/send-market-intelligence-email/ (Wednesday)',
+            '/client-context/enrich-and-send-opportunities-email/ (Monday)',
+        ]
+    }, status=status.HTTP_410_GONE
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
