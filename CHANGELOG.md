@@ -17,12 +17,21 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Validação de URLs (detecção de 404/soft-404)
 - Deduplicação de URLs entre oportunidades
 - Design visual unificado PostNow para e-mails
-- 26 testes unitários para ContextEnrichmentService
-- Scripts de geração de mockups para validação visual
+- 31 testes unitários (URL validation, N+1 fix, services)
+- Mockups HTML para validação visual (ver `docs/mockups/README.md`)
+- Script de diagnóstico Mailjet (`scripts/diagnose_mailjet.py`)
 
 ### Changed
 - Score de oportunidades agora exibido no formato X/100
 - Refatoração do ContextEnrichmentService para seguir limite de 400 linhas
+
+### Fixed
+- Validação de URL agora retorna `False` em caso de erro (antes retornava `True`)
+- Corrigido problema N+1 query em 6 serviços (pré-carregamento de usuários)
+- Filtro Django `__isnull=True` em vez de `=None` para queries NULL
+- Race condition entre workflows Phase 1 e Phase 1b (horários ajustados)
+- Retry de contextos com status `failed` no enriquecimento
+- Validação de `tendencies_data` vazio (`{}` vs `NULL`)
 
 ## [1.0.0] - 2026-02-26
 
