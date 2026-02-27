@@ -41,12 +41,17 @@ def generate_market_intelligence_email(context_data: dict, user_data: dict) -> s
     relevant_dates = context_data.get('seasonal_relevant_dates', [])
     local_events = context_data.get('seasonal_local_events', [])
 
+    brand_presence = context_data.get('brand_online_presence', '')
+    brand_reputation = context_data.get('brand_reputation', '')
+    brand_style = context_data.get('brand_communication_style', '')
+
     # Gerar seções
     market_section = _generate_market_section(market_panorama, market_tendencies, market_challenges)
     competition_section = _generate_competition_section(competition_main, competition_strategies, competition_opportunities)
     audience_section = _generate_audience_section(audience_profile, audience_behaviors, audience_interests)
     trends_section = _generate_trends_section(popular_themes, hashtags, keywords)
     calendar_section = _generate_calendar_section(relevant_dates, local_events)
+    brand_section = _generate_brand_section(brand_presence, brand_reputation, brand_style)
 
     html = f'''<!DOCTYPE html>
 <html lang="pt-BR">
@@ -87,6 +92,7 @@ def generate_market_intelligence_email(context_data: dict, user_data: dict) -> s
                             {audience_section}
                             {trends_section}
                             {calendar_section}
+                            {brand_section}
 
                             <!-- CTA -->
                             <table role="presentation" style="width: 100%; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); border-radius: 12px; margin-top: 24px;">
@@ -367,3 +373,48 @@ def _format_date(d) -> str:
             return f"{date} - {event}"
         return event or date or str(d)
     return str(d)
+
+
+def _generate_brand_section(presence: str, reputation: str, style: str) -> str:
+    """Gera a seção Análise da Marca."""
+    if not presence and not reputation and not style:
+        return ''
+
+    presence_html = ''
+    if presence:
+        presence_html = f'''
+            <p style="margin: 0 0 12px 0; color: #475569; font-size: 14px; line-height: 1.6;">
+                <strong>Presença Online:</strong> {presence}
+            </p>'''
+
+    reputation_html = ''
+    if reputation:
+        reputation_html = f'''
+            <p style="margin: 0 0 12px 0; color: #475569; font-size: 14px; line-height: 1.6;">
+                <strong>Reputação:</strong> {reputation}
+            </p>'''
+
+    style_html = ''
+    if style:
+        style_html = f'''
+            <div style="background-color: #fef3c7; border-left: 3px solid #f59e0b; padding: 12px; border-radius: 0 6px 6px 0;">
+                <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.5;">
+                    <strong>Estilo de Comunicação:</strong> {style}
+                </p>
+            </div>'''
+
+    return f'''
+    <table role="presentation" style="width: 100%; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+        <tr>
+            <td style="background-color: #0891b2; padding: 14px 20px;">
+                <h3 style="margin: 0; color: white; font-size: 16px; font-weight: 600;">Análise da Marca</h3>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 20px; background-color: #ffffff;">
+                {presence_html}
+                {reputation_html}
+                {style_html}
+            </td>
+        </tr>
+    </table>'''

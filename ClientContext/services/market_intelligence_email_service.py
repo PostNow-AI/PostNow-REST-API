@@ -38,6 +38,7 @@ class MarketIntelligenceEmailService:
                 'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests',
                 'tendencies_popular_themes', 'tendencies_hashtags', 'tendencies_keywords',
                 'seasonal_relevant_dates', 'seasonal_local_events',
+                'brand_online_presence', 'brand_reputation', 'brand_communication_style',
             )
         )
 

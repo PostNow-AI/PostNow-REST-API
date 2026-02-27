@@ -47,6 +47,11 @@ SECTION_SEARCH_CONFIG = {
         'query_template': 'datas comemorativas marketing {month} {year}',
         'section_type': 'mercado',
     },
+    'marca': {
+        'field': 'brand_online_presence',
+        'query_template': '{business_name} marca presença digital {year}',
+        'section_type': 'mercado',
+    },
 }
 
 
@@ -184,6 +189,12 @@ class MarketIntelligenceEnrichmentService:
                     existing, enriched_sources['calendario_enriched_sources']
                 )
 
+            if enriched_sources.get('marca_enriched_sources'):
+                existing = client_context.brand_sources or []
+                client_context.brand_sources = self._merge_sources(
+                    existing, enriched_sources['marca_enriched_sources']
+                )
+
             await sync_to_async(client_context.save)()
 
             total_sources = sum(len(v) for v in enriched_sources.values())
@@ -228,6 +239,7 @@ class MarketIntelligenceEnrichmentService:
         now = timezone.now()
         query = config['query_template'].format(
             business_sector=profile_data.get('specialization', ''),
+            business_name=profile_data.get('business_name', ''),
             target_audience=profile_data.get('target_audience', ''),
             year=now.year,
             month=now.strftime('%B'),
@@ -295,5 +307,6 @@ class MarketIntelligenceEnrichmentService:
                 'target_audience_profile', 'target_audience_sources',
                 'tendencies_popular_themes', 'tendencies_sources',
                 'seasonal_relevant_dates', 'seasonal_sources',
+                'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources',
             )[offset:offset + limit]
         )
