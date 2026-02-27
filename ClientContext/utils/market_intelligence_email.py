@@ -45,13 +45,21 @@ def generate_market_intelligence_email(context_data: dict, user_data: dict) -> s
     brand_reputation = context_data.get('brand_reputation', '')
     brand_style = context_data.get('brand_communication_style', '')
 
-    # Gerar seções
-    market_section = _generate_market_section(market_panorama, market_tendencies, market_challenges)
-    competition_section = _generate_competition_section(competition_main, competition_strategies, competition_opportunities)
-    audience_section = _generate_audience_section(audience_profile, audience_behaviors, audience_interests)
-    trends_section = _generate_trends_section(popular_themes, hashtags, keywords)
-    calendar_section = _generate_calendar_section(relevant_dates, local_events)
-    brand_section = _generate_brand_section(brand_presence, brand_reputation, brand_style)
+    # Extrair fontes enriquecidas
+    market_sources = context_data.get('market_sources', [])
+    competition_sources = context_data.get('competition_sources', [])
+    audience_sources = context_data.get('target_audience_sources', [])
+    trends_sources = context_data.get('tendencies_sources', [])
+    seasonal_sources = context_data.get('seasonal_sources', [])
+    brand_sources = context_data.get('brand_sources', [])
+
+    # Gerar seções com fontes
+    market_section = _generate_market_section(market_panorama, market_tendencies, market_challenges, market_sources)
+    competition_section = _generate_competition_section(competition_main, competition_strategies, competition_opportunities, competition_sources)
+    audience_section = _generate_audience_section(audience_profile, audience_behaviors, audience_interests, audience_sources)
+    trends_section = _generate_trends_section(popular_themes, hashtags, keywords, trends_sources)
+    calendar_section = _generate_calendar_section(relevant_dates, local_events, seasonal_sources)
+    brand_section = _generate_brand_section(brand_presence, brand_reputation, brand_style, brand_sources)
 
     html = f'''<!DOCTYPE html>
 <html lang="pt-BR">
@@ -132,7 +140,45 @@ def generate_market_intelligence_email(context_data: dict, user_data: dict) -> s
     return html
 
 
-def _generate_market_section(panorama: str, tendencies: list, challenges: list) -> str:
+def _generate_sources_html(sources: list, max_sources: int = 3) -> str:
+    """Gera HTML compacto para lista de fontes."""
+    if not sources:
+        return ''
+
+    # Limitar número de fontes e extrair URLs
+    urls = []
+    for source in sources[:max_sources]:
+        if isinstance(source, str):
+            urls.append(source)
+        elif isinstance(source, dict):
+            urls.append(source.get('url', ''))
+
+    if not urls:
+        return ''
+
+    links = ' • '.join([
+        f'<a href="{url}" style="color: #6366f1; text-decoration: none; font-size: 11px;">{_extract_domain(url)}</a>'
+        for url in urls if url
+    ])
+
+    return f'''
+        <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #e2e8f0;">
+            <span style="color: #94a3b8; font-size: 11px;">Fontes: </span>{links}
+        </div>'''
+
+
+def _extract_domain(url: str) -> str:
+    """Extrai o domínio de uma URL para exibição."""
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        domain = parsed.netloc.replace('www.', '')
+        return domain[:25] + '...' if len(domain) > 25 else domain
+    except Exception:
+        return url[:25] + '...' if len(url) > 25 else url
+
+
+def _generate_market_section(panorama: str, tendencies: list, challenges: list, sources: list = None) -> str:
     """Gera a seção Panorama do Mercado."""
     if not panorama and not tendencies and not challenges:
         return ''
@@ -155,6 +201,8 @@ def _generate_market_section(panorama: str, tendencies: list, challenges: list) 
                 {items}
             </ul>'''
 
+    sources_html = _generate_sources_html(sources or [])
+
     return f'''
     <table role="presentation" style="width: 100%; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
         <tr>
@@ -169,12 +217,13 @@ def _generate_market_section(panorama: str, tendencies: list, challenges: list) 
                 </p>
                 {tendencies_html}
                 {challenges_html}
+                {sources_html}
             </td>
         </tr>
     </table>'''
 
 
-def _generate_competition_section(competitors: list, strategies: str, opportunities: str) -> str:
+def _generate_competition_section(competitors: list, strategies: str, opportunities: str, sources: list = None) -> str:
     """Gera a seção Análise da Concorrência."""
     if not competitors and not strategies and not opportunities:
         return ''
@@ -203,6 +252,8 @@ def _generate_competition_section(competitors: list, strategies: str, opportunit
                 </p>
             </div>'''
 
+    sources_html = _generate_sources_html(sources or [])
+
     return f'''
     <table role="presentation" style="width: 100%; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
         <tr>
@@ -215,12 +266,13 @@ def _generate_competition_section(competitors: list, strategies: str, opportunit
                 {competitors_html}
                 {strategies_html}
                 {opportunities_html}
+                {sources_html}
             </td>
         </tr>
     </table>'''
 
 
-def _generate_audience_section(profile: str, behaviors: str, interests: list) -> str:
+def _generate_audience_section(profile: str, behaviors: str, interests: list, sources: list = None) -> str:
     """Gera a seção Insights do Público."""
     if not profile and not behaviors and not interests:
         return ''
@@ -247,6 +299,8 @@ def _generate_audience_section(profile: str, behaviors: str, interests: list) ->
         ])
         interests_html = f'<div>{tags}</div>'
 
+    sources_html = _generate_sources_html(sources or [])
+
     return f'''
     <table role="presentation" style="width: 100%; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
         <tr>
@@ -259,12 +313,13 @@ def _generate_audience_section(profile: str, behaviors: str, interests: list) ->
                 {profile_html}
                 {behaviors_html}
                 {interests_html}
+                {sources_html}
             </td>
         </tr>
     </table>'''
 
 
-def _generate_trends_section(themes: list, hashtags: list, keywords: list) -> str:
+def _generate_trends_section(themes: list, hashtags: list, keywords: list, sources: list = None) -> str:
     """Gera a seção Tendências da Semana."""
     if not themes and not hashtags and not keywords:
         return ''
@@ -297,6 +352,8 @@ def _generate_trends_section(themes: list, hashtags: list, keywords: list) -> st
             <p style="margin: 12px 0 8px 0; color: #1e293b; font-size: 13px; font-weight: 600;">Palavras-chave:</p>
             <div>{tags}</div>'''
 
+    sources_html = _generate_sources_html(sources or [])
+
     return f'''
     <table role="presentation" style="width: 100%; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
         <tr>
@@ -309,12 +366,13 @@ def _generate_trends_section(themes: list, hashtags: list, keywords: list) -> st
                 {themes_html}
                 {hashtags_html}
                 {keywords_html}
+                {sources_html}
             </td>
         </tr>
     </table>'''
 
 
-def _generate_calendar_section(dates: list, events: list) -> str:
+def _generate_calendar_section(dates: list, events: list, sources: list = None) -> str:
     """Gera a seção Calendário Estratégico."""
     if not dates and not events:
         return ''
@@ -337,6 +395,8 @@ def _generate_calendar_section(dates: list, events: list) -> str:
                 {items}
             </ul>'''
 
+    sources_html = _generate_sources_html(sources or [])
+
     return f'''
     <table role="presentation" style="width: 100%; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
         <tr>
@@ -348,6 +408,7 @@ def _generate_calendar_section(dates: list, events: list) -> str:
             <td style="padding: 20px; background-color: #ffffff;">
                 {dates_html}
                 {events_html}
+                {sources_html}
             </td>
         </tr>
     </table>'''
@@ -375,7 +436,7 @@ def _format_date(d) -> str:
     return str(d)
 
 
-def _generate_brand_section(presence: str, reputation: str, style: str) -> str:
+def _generate_brand_section(presence: str, reputation: str, style: str, sources: list = None) -> str:
     """Gera a seção Análise da Marca."""
     if not presence and not reputation and not style:
         return ''
@@ -403,6 +464,8 @@ def _generate_brand_section(presence: str, reputation: str, style: str) -> str:
                 </p>
             </div>'''
 
+    sources_html = _generate_sources_html(sources or [])
+
     return f'''
     <table role="presentation" style="width: 100%; margin-bottom: 20px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
         <tr>
@@ -415,6 +478,7 @@ def _generate_brand_section(presence: str, reputation: str, style: str) -> str:
                 {presence_html}
                 {reputation_html}
                 {style_html}
+                {sources_html}
             </td>
         </tr>
     </table>'''

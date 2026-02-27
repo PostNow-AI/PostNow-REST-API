@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
+from django.db.models import Q
 
 from ClientContext.models import ClientContext
 from services.ai_service import AiService
@@ -422,17 +423,17 @@ Todas as ideias devem ser em português brasileiro (PT-BR).
 
         Critério:
             - weekly_context_error IS NULL (contexto gerado com sucesso)
-            - tendencies_data IS NULL (ainda não processado pela Fase 1b)
+            - tendencies_data IS NULL OU tendencies_data é dict vazio {}
 
-        Nota: O .exclude(tendencies_data__isnull=False) retorna apenas registros
-        onde tendencies_data É NULL, garantindo que processamos apenas usuários
-        que ainda não tiveram suas oportunidades geradas.
+        Nota: Usamos Q objects para capturar tanto NULL quanto dicts vazios,
+        já que o default do campo é dict (que cria {} ao invés de NULL).
         """
         return list(
             ClientContext.objects.filter(
                 weekly_context_error__isnull=True,  # Contexto gerado sem erro
-            ).exclude(
-                tendencies_data__isnull=False,  # Apenas onde tendencies_data é NULL
+            ).filter(
+                # Pega NULL ou dict vazio {}
+                Q(tendencies_data__isnull=True) | Q(tendencies_data={})
             ).select_related('user').values(
                 'id', 'user_id',
                 'market_panorama', 'market_tendencies', 'market_challenges',

@@ -58,7 +58,8 @@ class ClientContext(models.Model):
     brand_sources = models.JSONField(default=list, blank=True, null=True)
 
     # Dados de oportunidades/tendências (usado no e-mail de Segunda)
-    tendencies_data = models.JSONField(default=dict, blank=True, null=True)
+    # Nota: Sem default para evitar confusão entre NULL e {} nas queries
+    tendencies_data = models.JSONField(blank=True, null=True)
 
     # Status do enriquecimento (Fase 2)
     ENRICHMENT_STATUS_CHOICES = [

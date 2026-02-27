@@ -44,8 +44,6 @@ CONTEXT_FIELD_MAPPING = {
     },
     'sazonalidade': {
         'datas_relevantes': ('seasonal_relevant_dates', []),
-    },
-    'sazonal': {
         'eventos_locais': ('seasonal_local_events', []),
         'fontes': ('seasonal_sources', []),
     },

@@ -100,8 +100,10 @@ class OpportunitiesEmailService:
             tendencies_data = context_data.get('tendencies_data', {})
 
             # Validar se há oportunidades para enviar
+            # Verifica se items é uma lista não vazia com pelo menos um item válido
             has_opportunities = tendencies_data and any(
-                cat.get('items') for cat in tendencies_data.values() if isinstance(cat, dict)
+                isinstance(cat.get('items'), list) and len(cat.get('items', [])) > 0
+                for cat in tendencies_data.values() if isinstance(cat, dict)
             )
             if not has_opportunities:
                 logger.info(f"User {user.id} sem oportunidades para enviar, pulando")
