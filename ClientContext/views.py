@@ -15,6 +15,7 @@ from rest_framework.response import Response
 
 from ClientContext.models import ClientContext
 from ClientContext.services.context_enrichment_service import ContextEnrichmentService
+from ClientContext.services.opportunities_email_service import OpportunitiesEmailService
 from ClientContext.services.retry_client_context import RetryClientContext
 from ClientContext.services.weekly_context_email_service import (
     WeeklyContextEmailService,
@@ -297,14 +298,16 @@ def send_weekly_context_email(request):
 @api_view(['GET'])
 @authentication_classes([])
 @permission_classes([AllowAny])
-def enrich_and_send_weekly_context_email(request):
+def enrich_and_send_opportunities_email(request):
     """
-    Enrich context data (Phase 2) and send weekly context email.
+    Enrich context data (Phase 2) and send opportunities email.
+
+    MONDAY EMAIL - Content Opportunities
 
     This endpoint:
     1. Fetches contexts pending enrichment
     2. Enriches each context with additional sources and analysis
-    3. Sends the weekly context email with enriched data
+    3. Sends the opportunities email with enriched data
     """
     try:
         batch_number = int(request.GET.get('batch', 1))
@@ -338,17 +341,17 @@ def enrich_and_send_weekly_context_email(request):
                 details=enrichment_result
             )
 
-            # Send emails with enriched data
-            email_service = WeeklyContextEmailService()
+            # Send opportunities emails with enriched data
+            email_service = OpportunitiesEmailService()
             email_result = loop.run_until_complete(
-                email_service.mail_weekly_context()
+                email_service.mail_opportunities()
             )
 
             AuditService.log_system_operation(
                 user=None,
-                action='weekly_context_email_sent',
+                action='opportunities_email_sent',
                 status='success' if email_result['status'] == 'completed' else 'failure',
-                resource_type='WeeklyContextEmail',
+                resource_type='OpportunitiesEmail',
                 details=email_result
             )
 
@@ -361,9 +364,62 @@ def enrich_and_send_weekly_context_email(request):
         except Exception as e:
             AuditService.log_system_operation(
                 user=None,
-                action='enrich_and_send_failed',
+                action='enrich_and_send_opportunities_failed',
                 status='error',
-                resource_type='WeeklyContextEmail',
+                resource_type='OpportunitiesEmail',
+                details={'error': str(e)}
+            )
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        finally:
+            loop.close()
+
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def send_market_intelligence_email(request):
+    """
+    Send market intelligence email.
+
+    WEDNESDAY EMAIL - Market Intelligence
+
+    Contains: Market overview, competition analysis, audience insights,
+    trends, brand analysis, and seasonal calendar.
+    """
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            email_service = WeeklyContextEmailService()
+            result = loop.run_until_complete(
+                email_service.mail_weekly_context()
+            )
+
+            AuditService.log_system_operation(
+                user=None,
+                action='market_intelligence_email_sent',
+                status='success' if result['status'] == 'completed' else 'failure',
+                resource_type='MarketIntelligenceEmail',
+                details=result
+            )
+
+            return Response(result, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            AuditService.log_system_operation(
+                user=None,
+                action='market_intelligence_email_failed',
+                status='error',
+                resource_type='MarketIntelligenceEmail',
                 details={'error': str(e)}
             )
             return Response({
