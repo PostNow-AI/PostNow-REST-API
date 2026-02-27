@@ -452,8 +452,14 @@ def send_market_intelligence_email(request):
 
     Contains: Market overview, competition analysis, audience insights,
     trends, and seasonal calendar - all with enriched sources.
+
+    Query params:
+        batch: Batch number for processing (default: 1)
     """
     try:
+        batch_number = int(request.GET.get('batch', 1))
+        batch_size = 5  # Process 5 users per batch
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -461,7 +467,10 @@ def send_market_intelligence_email(request):
             # Phase 1: Enrich market intelligence data
             enrichment_service = MarketIntelligenceEnrichmentService()
             enrichment_result = loop.run_until_complete(
-                enrichment_service.enrich_all_users()
+                enrichment_service.enrich_all_users(
+                    batch_number=batch_number,
+                    batch_size=batch_size
+                )
             )
 
             AuditService.log_system_operation(
@@ -475,7 +484,10 @@ def send_market_intelligence_email(request):
             # Phase 2: Send emails with enriched data
             email_service = MarketIntelligenceEmailService()
             result = loop.run_until_complete(
-                email_service.send_all()
+                email_service.send_all(
+                    batch_number=batch_number,
+                    batch_size=batch_size
+                )
             )
 
             AuditService.log_system_operation(

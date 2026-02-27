@@ -26,25 +26,49 @@ class MarketIntelligenceEmailService:
         self.mailjet_service = MailjetService()
 
     @staticmethod
-    async def fetch_users_context_data() -> list:
-        """Busca usuários e seus dados de contexto para envio."""
-        return await sync_to_async(list)(
-            ClientContext.objects.filter(
-                weekly_context_error__isnull=True,  # Filtro correto para NULL
-            ).select_related('user').values(
-                'id', 'user__id', 'user__email', 'user__first_name',
-                'market_panorama', 'market_tendencies', 'market_challenges', 'market_sources',
-                'competition_main', 'competition_strategies', 'competition_opportunities', 'competition_sources',
-                'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources',
-                'tendencies_popular_themes', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources',
-                'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources',
-                'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources',
-            )
+    async def fetch_users_context_data(
+        batch_number: int = 1,
+        batch_size: int = 0
+    ) -> list:
+        """
+        Busca usuários e seus dados de contexto para envio.
+
+        Args:
+            batch_number: Número do batch (1-indexed)
+            batch_size: Tamanho do batch (0 = todos)
+        """
+        offset = (batch_number - 1) * batch_size if batch_size > 0 else 0
+
+        queryset = ClientContext.objects.filter(
+            weekly_context_error__isnull=True,
+        ).select_related('user').values(
+            'id', 'user__id', 'user__email', 'user__first_name',
+            'market_panorama', 'market_tendencies', 'market_challenges', 'market_sources',
+            'competition_main', 'competition_strategies', 'competition_opportunities', 'competition_sources',
+            'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources',
+            'tendencies_popular_themes', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources',
+            'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources',
+            'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources',
         )
 
-    async def send_all(self) -> Dict[str, Any]:
-        """Envia e-mail de Inteligência de Mercado para todos os usuários."""
-        contexts = await self.fetch_users_context_data()
+        if batch_size > 0:
+            queryset = queryset[offset:offset + batch_size]
+
+        return await sync_to_async(list)(queryset)
+
+    async def send_all(
+        self,
+        batch_number: int = 1,
+        batch_size: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Envia e-mail de Inteligência de Mercado para usuários.
+
+        Args:
+            batch_number: Número do batch (1-indexed)
+            batch_size: Tamanho do batch (0 = todos)
+        """
+        contexts = await self.fetch_users_context_data(batch_number, batch_size)
 
         if not contexts:
             return {

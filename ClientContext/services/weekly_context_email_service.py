@@ -22,7 +22,7 @@ class WeeklyContextEmailService:
         """Fetch users and their weekly context data to be mailed."""
         return await sync_to_async(list)(
             ClientContext.objects.filter(
-                weekly_context_error=None,
+                weekly_context_error__isnull=True,  # Filtro correto para NULL
             ).select_related('user').values(
                 'id', 'user__id', 'user__email', 'user__first_name', 'market_panorama', 'market_tendencies',
                 'market_challenges', 'market_sources', 'competition_main', 'competition_strategies',

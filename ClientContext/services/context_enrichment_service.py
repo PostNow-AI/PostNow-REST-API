@@ -273,7 +273,7 @@ class ContextEnrichmentService:
         """
         queryset = ClientContext.objects.filter(
             weekly_context_error__isnull=True,
-            context_enrichment_status='pending',  # Apenas pendentes, evita reprocessar 'failed'
+            context_enrichment_status__in=['pending', 'failed'],  # Inclui failed para retry
         ).select_related('user').values(
             'id', 'user_id', 'user__email', 'user__first_name',
             'tendencies_data', 'context_enrichment_status'
