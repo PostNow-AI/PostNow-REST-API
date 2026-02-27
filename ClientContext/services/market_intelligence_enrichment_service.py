@@ -85,13 +85,24 @@ class MarketIntelligenceEnrichmentService:
                 'message': 'No contexts to enrich',
             }
 
+        # Pre-fetch all users in a single query to avoid N+1
+        user_ids = [ctx['user_id'] for ctx in contexts]
+        users_queryset = await sync_to_async(list)(
+            User.objects.filter(id__in=user_ids)
+        )
+        users_by_id = {user.id: user for user in users_queryset}
+
         processed = 0
         failed = 0
         results = []
 
         for context_data in contexts:
             try:
-                user = await sync_to_async(User.objects.get)(id=context_data['user_id'])
+                user = users_by_id.get(context_data['user_id'])
+                if not user:
+                    logger.error(f"User {context_data['user_id']} not found")
+                    failed += 1
+                    continue
                 result = await self.enrich_user_context(user, context_data)
                 results.append(result)
                 if result.get('status') == 'success':

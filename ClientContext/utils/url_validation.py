@@ -86,8 +86,8 @@ async def validate_url_permissive_async(url: str) -> bool:
 
     except Exception as e:
         logger.debug(f"URL validation error for {url}: {str(e)}")
-        # On any error, be permissive - assume URL is valid
-        return True
+        # On error, assume URL is invalid
+        return False
 
 
 async def _validate_with_get(session: aiohttp.ClientSession, url: str) -> bool:
@@ -116,8 +116,8 @@ async def _validate_with_get(session: aiohttp.ClientSession, url: str) -> bool:
                 return True
             return False
     except Exception:
-        # On error, be permissive
-        return True
+        # On error, assume URL is invalid
+        return False
 
 
 def validate_url_sync(url: str) -> bool:

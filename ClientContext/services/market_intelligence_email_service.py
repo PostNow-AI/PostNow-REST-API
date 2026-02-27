@@ -83,13 +83,24 @@ class MarketIntelligenceEmailService:
             user_id = context['user__id']
             users_context[user_id].append(context)
 
+        # Pre-fetch all users in a single query to avoid N+1
+        user_ids = list(users_context.keys())
+        users_queryset = await sync_to_async(list)(
+            User.objects.filter(id__in=user_ids)
+        )
+        users_by_id = {user.id: user for user in users_queryset}
+
         processed = 0
         failed = 0
         skipped = 0
 
         for user_id in users_context.keys():
             try:
-                user = await sync_to_async(User.objects.get)(id=user_id)
+                user = users_by_id.get(user_id)
+                if not user:
+                    logger.error(f"User {user_id} not found")
+                    failed += 1
+                    continue
                 context_data = users_context[user_id][0]
                 result = await self.send_to_user(user, context_data)
                 if result['status'] == 'success':
