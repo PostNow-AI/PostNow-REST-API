@@ -17,13 +17,14 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Validação de URLs (detecção de 404/soft-404)
 - Deduplicação de URLs entre oportunidades
 - Design visual unificado PostNow para e-mails
-- 31 testes unitários (URL validation, N+1 fix, services)
+- **57 testes unitários** cobrindo segurança, validação e serviços
 - Mockups HTML para validação visual (ver `docs/mockups/README.md`)
 - Script de diagnóstico Mailjet (`scripts/diagnose_mailjet.py`)
 
 ### Changed
 - Score de oportunidades agora exibido no formato X/100
 - Refatoração do ContextEnrichmentService para seguir limite de 400 linhas
+- Workflow de oportunidades agora usa batches (1-5) como market intelligence
 
 ### Fixed
 - Validação de URL agora retorna `False` em caso de erro (antes retornava `True`)
@@ -32,6 +33,16 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 - Race condition entre workflows Phase 1 e Phase 1b (horários ajustados)
 - Retry de contextos com status `failed` no enriquecimento
 - Validação de `tendencies_data` vazio (`{}` vs `NULL`)
+- Parse de JSON com regex (preserva "json" no conteúdo)
+- Reset de `context_enrichment_status` ao gerar novo contexto semanal
+- Tratamento de `User.DoesNotExist` em múltiplos serviços
+
+### Security
+- **Timing attack prevention**: `secrets.compare_digest()` para validação de tokens
+- **XSS prevention**: Sanitização HTML em templates de e-mail (`html.escape`)
+- **Header injection prevention**: Sanitização de subject de e-mail
+- Autenticação adicionada em endpoint `manual_generate_client_context`
+- Validação de batch number (1-100) em todos os endpoints
 
 ## [1.0.0] - 2026-02-26
 
