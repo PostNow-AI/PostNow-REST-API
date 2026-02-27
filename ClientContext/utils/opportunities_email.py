@@ -118,7 +118,7 @@ def _generate_opportunity_item(item: dict, colors: dict, index: int) -> str:
     <div style="{separator}">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
             <h4 style="margin: 0; color: {STYLES['text_primary']}; font-size: 15px; font-weight: 600; flex: 1; line-height: 1.4;">{titulo}</h4>
-            <span style="background-color: {colors['border']}; color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-left: 12px; white-space: nowrap;">Score {score}</span>
+            <span style="background-color: {colors['border']}; color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-left: 12px; white-space: nowrap;">{score}/100</span>
         </div>
         <p style="margin: 0 0 12px 0; color: {STYLES['text_secondary']}; font-size: 14px; line-height: 1.5;">{descricao}</p>
         {analysis_html}
@@ -260,7 +260,7 @@ def generate_opportunities_plain_text(tendencies_data: dict, user_data: dict) ->
                 descricao = item.get('descricao', '')
                 enriched_analysis = item.get('enriched_analysis', '')
 
-                lines.append(f"\n{i}. {titulo_ideia} (Score: {score})")
+                lines.append(f"\n{i}. {titulo_ideia} ({score}/100)")
                 lines.append(f"   {descricao}")
 
                 if enriched_analysis:
