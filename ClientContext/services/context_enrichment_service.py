@@ -10,19 +10,13 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from ClientContext.models import ClientContext
-from ClientContext.utils.source_quality import is_denied, score_source
-from ClientContext.utils.url_dedupe import normalize_url_key
-from ClientContext.utils.url_validation import validate_url_permissive_async
+from ClientContext.utils.search_utils import build_search_query, fetch_and_filter_sources
+from ClientContext.utils.enrichment_analysis import generate_enriched_analysis
 from services.google_search_service import GoogleSearchService
 from services.ai_service import AiService
 from services.semaphore_service import SemaphoreService
 
 logger = logging.getLogger(__name__)
-
-# Number of additional sources to fetch per opportunity (after filtering)
-ENRICHMENT_SOURCES_PER_OPPORTUNITY = 3
-# Fetch more from Google to have margin after filtering
-GOOGLE_SEARCH_RESULTS = 6
 
 # Map opportunity categories to source_quality sections
 CATEGORY_TO_SECTION = {
@@ -59,7 +53,7 @@ class ContextEnrichmentService:
 
         Args:
             batch_number: Current batch number for processing
-            batch_size: Number of users to process per batch (default 2 to avoid timeouts)
+            batch_size: Number of users to process per batch
 
         Returns:
             Dict with processing results
@@ -68,7 +62,6 @@ class ContextEnrichmentService:
         offset = (batch_number - 1) * batch_size
         limit = batch_size if batch_size > 0 else None
 
-        # Fetch contexts pending enrichment
         contexts = await self._get_pending_contexts(offset=offset, limit=limit)
         total = len(contexts)
 
@@ -134,25 +127,19 @@ class ContextEnrichmentService:
             tendencies_data = context_data.get('tendencies_data') or {}
 
             if not tendencies_data:
-                # No opportunities to enrich
-                await self._update_enrichment_status(
-                    client_context, 'enriched', None
-                )
+                await self._update_enrichment_status(client_context, 'enriched', None)
                 return {
                     'user_id': user.id,
                     'status': 'success',
                     'message': 'No opportunities to enrich'
                 }
 
-            # Track used URLs across all categories to avoid duplicates
             used_url_keys: Set[str] = set()
 
-            # Enrich each category
             enriched_data = await self._enrich_all_categories(
                 tendencies_data, user, used_url_keys
             )
 
-            # Save enriched data
             client_context.tendencies_data = enriched_data
             await self._update_enrichment_status(client_context, 'enriched', None)
 
@@ -205,11 +192,10 @@ class ContextEnrichmentService:
                 enriched_data[category_key] = category_data
                 continue
 
-            # Get the section for source quality scoring
             section = CATEGORY_TO_SECTION.get(category_key, 'mercado')
 
             enriched_items = []
-            for item in items[:3]:  # Only process top 3 per category
+            for item in items[:3]:
                 enriched_item = await self._enrich_opportunity(
                     item, user, section, used_url_keys
                 )
@@ -233,13 +219,13 @@ class ContextEnrichmentService:
         Enrich a single opportunity with additional sources and analysis.
 
         Args:
-            opportunity: Dict with opportunity data (titulo_ideia, score, url_fonte, etc.)
+            opportunity: Dict with opportunity data
             user: User instance for AI service calls
             section: Section name for source quality scoring
             used_url_keys: Set of already used URL keys for deduplication
 
         Returns:
-            Enriched opportunity dict with enriched_sources and enriched_analysis
+            Enriched opportunity dict
         """
         enriched_opportunity = opportunity.copy()
 
@@ -248,17 +234,15 @@ class ContextEnrichmentService:
             return enriched_opportunity
 
         try:
-            # Step 1: Google search for additional sources
-            search_query = self._build_search_query(opportunity)
-            enriched_sources = await self._fetch_and_filter_sources(
-                search_query, section, used_url_keys
+            search_query = build_search_query(opportunity)
+            enriched_sources = await fetch_and_filter_sources(
+                self.google_search_service, search_query, section, used_url_keys
             )
             enriched_opportunity['enriched_sources'] = enriched_sources
 
-            # Step 2: Generate deeper analysis with Gemini (only if we have sources)
             if enriched_sources:
-                enriched_analysis = await self._generate_enriched_analysis(
-                    opportunity, enriched_sources, user
+                enriched_analysis = await generate_enriched_analysis(
+                    self.ai_service, opportunity, enriched_sources, user
                 )
                 enriched_opportunity['enriched_analysis'] = enriched_analysis
             else:
@@ -270,186 +254,6 @@ class ContextEnrichmentService:
             enriched_opportunity['enriched_analysis'] = ''
 
         return enriched_opportunity
-
-    def _build_search_query(self, opportunity: Dict[str, Any]) -> str:
-        """
-        Build a search query for the opportunity.
-
-        Args:
-            opportunity: Opportunity dict
-
-        Returns:
-            Search query string
-        """
-        titulo = opportunity.get('titulo_ideia', '')
-        tipo = opportunity.get('tipo', '')
-
-        # Clean up tipo (remove emojis)
-        emojis_to_remove = ['🔥', '🧠', '📰', '😂', '💼', '🔮', '⚡']
-        for emoji in emojis_to_remove:
-            tipo = tipo.replace(emoji, '').strip()
-
-        # Build a focused search query
-        query_parts = [titulo]
-        if tipo and tipo.lower() not in titulo.lower():
-            query_parts.append(tipo)
-
-        return ' '.join(query_parts)
-
-    async def _fetch_and_filter_sources(
-        self,
-        query: str,
-        section: str,
-        used_url_keys: Set[str]
-    ) -> List[Dict[str, str]]:
-        """
-        Fetch additional sources from Google Search with quality filtering.
-
-        Uses source_quality.py for denylist/allowlist filtering and scoring.
-        Uses url_validation.py for URL validation.
-        Uses url_dedupe.py for deduplication.
-
-        Args:
-            query: Search query
-            section: Section name for source quality scoring
-            used_url_keys: Set of already used URL keys for deduplication
-
-        Returns:
-            List of validated, filtered source dicts with 'url', 'title', 'snippet'
-        """
-        try:
-            # Fetch more results than needed to have margin after filtering
-            results = await sync_to_async(self.google_search_service.search)(
-                query=query,
-                num_results=GOOGLE_SEARCH_RESULTS
-            )
-
-            if not results:
-                return []
-
-            # Score and filter sources
-            scored_sources = []
-            for result in results:
-                url = result.get('url', '')
-                if not url:
-                    continue
-
-                # Skip denied sources
-                if is_denied(url):
-                    logger.debug(f"[ENRICHMENT] Denied URL: {url}")
-                    continue
-
-                # Check for duplicates
-                url_key = normalize_url_key(url)
-                if url_key and url_key in used_url_keys:
-                    logger.debug(f"[ENRICHMENT] Duplicate URL skipped: {url}")
-                    continue
-
-                # Score the source
-                source_score = score_source(section, url)
-
-                scored_sources.append({
-                    'url': url,
-                    'title': result.get('title', ''),
-                    'snippet': result.get('snippet', ''),
-                    'score': source_score,
-                    'url_key': url_key
-                })
-
-            # Sort by score (highest first)
-            scored_sources.sort(key=lambda x: x['score'], reverse=True)
-
-            # Validate and collect top sources
-            validated_sources = []
-            for source in scored_sources:
-                if len(validated_sources) >= ENRICHMENT_SOURCES_PER_OPPORTUNITY:
-                    break
-
-                url = source['url']
-
-                # Validate URL (check for 404, soft-404)
-                is_valid = await validate_url_permissive_async(url)
-                if not is_valid:
-                    logger.debug(f"[ENRICHMENT] Invalid URL (404/soft-404): {url}")
-                    continue
-
-                # Mark URL as used
-                if source['url_key']:
-                    used_url_keys.add(source['url_key'])
-
-                validated_sources.append({
-                    'url': url,
-                    'title': source['title'],
-                    'snippet': source['snippet']
-                })
-
-            logger.info(
-                f"[ENRICHMENT] Query '{query[:50]}...' -> "
-                f"{len(results)} raw, {len(scored_sources)} scored, "
-                f"{len(validated_sources)} validated"
-            )
-
-            return validated_sources
-
-        except Exception as e:
-            logger.warning(f"Error fetching additional sources for '{query}': {str(e)}")
-            return []
-
-    async def _generate_enriched_analysis(
-        self,
-        opportunity: Dict[str, Any],
-        sources: List[Dict[str, str]],
-        user: User
-    ) -> str:
-        """
-        Generate enriched analysis using Gemini.
-
-        Args:
-            opportunity: Original opportunity data
-            sources: Additional sources fetched
-            user: User instance
-
-        Returns:
-            Enriched analysis text
-        """
-        try:
-            titulo = opportunity.get('titulo_ideia', '')
-            descricao = opportunity.get('descricao', '')
-            tipo = opportunity.get('tipo', '')
-
-            # Build sources context
-            sources_text = ""
-            for i, source in enumerate(sources, 1):
-                sources_text += f"\n{i}. {source.get('title', 'Sem titulo')}\n"
-                sources_text += f"   {source.get('snippet', '')}\n"
-
-            prompt = f"""Analise a seguinte oportunidade de conteudo e forneca uma analise mais profunda:
-
-OPORTUNIDADE:
-- Titulo: {titulo}
-- Tipo: {tipo}
-- Descricao: {descricao}
-
-FONTES ADICIONAIS ENCONTRADAS:
-{sources_text}
-
-Com base nas fontes adicionais, forneca:
-1. Contexto expandido sobre o tema (2-3 frases)
-2. Angulos de abordagem recomendados (2-3 sugestoes)
-3. Pontos de atencao ou controversias relevantes
-
-Responda de forma concisa e objetiva, em portugues brasileiro.
-Maximo de 200 palavras no total."""
-
-            analysis = await sync_to_async(self.ai_service.generate_text)(
-                [prompt], user
-            )
-
-            return analysis.strip()
-
-        except Exception as e:
-            logger.warning(f"Error generating enriched analysis: {str(e)}")
-            return ''
 
     @sync_to_async
     def _get_pending_contexts(
