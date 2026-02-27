@@ -57,6 +57,25 @@ class ClientContext(models.Model):
         default="", blank=True, null=True)
     brand_sources = models.JSONField(default=list, blank=True, null=True)
 
+    # Dados de oportunidades/tendências (usado no e-mail de Segunda)
+    tendencies_data = models.JSONField(default=dict, blank=True, null=True)
+
+    # Status do enriquecimento (Fase 2)
+    ENRICHMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('enriched', 'Enriched'),
+        ('failed', 'Failed'),
+    ]
+    context_enrichment_status = models.CharField(
+        max_length=20,
+        choices=ENRICHMENT_STATUS_CHOICES,
+        default='pending',
+        blank=True,
+        null=True
+    )
+    context_enrichment_date = models.DateTimeField(blank=True, null=True)
+    context_enrichment_error = models.TextField(default="", blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

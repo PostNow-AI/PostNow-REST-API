@@ -1,0 +1,54 @@
+name: Weekly Market Intelligence Email (Wednesday)
+
+on:
+  schedule:
+    # Every Wednesday at 10:00 AM UTC (7:00 AM BRT)
+    - cron: '0 10 * * 3'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to run against'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  API_BASE_URL: ${{ secrets.API_BASE_URL }}
+
+jobs:
+  send-market-intelligence-email:
+    name: Send Market Intelligence Email
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Send Market Intelligence Email
+        run: |
+          echo "Triggering market intelligence email..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            "${{ env.API_BASE_URL }}/client-context/send-market-intelligence-email/" \
+            -H "Content-Type: application/json")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response: $BODY"
+          echo "HTTP Code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Failed to send market intelligence email"
+            exit 1
+          fi
+
+          echo "Market intelligence email sent successfully!"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Weekly market intelligence email job failed!"
+          # Add notification logic here (Slack, email, etc.)
