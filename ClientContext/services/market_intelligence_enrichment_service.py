@@ -21,34 +21,31 @@ from services.google_search_service import GoogleSearchService
 logger = logging.getLogger(__name__)
 
 # Mapeamento de seções para queries de busca
+# Configuração de busca para cada seção do e-mail de Inteligência de Mercado
+# - query_template: Template para construir a query de busca no Google
+# - section_type: Tipo de seção para scoring de qualidade das fontes
 SECTION_SEARCH_CONFIG = {
     'mercado': {
-        'field': 'market_panorama',
         'query_template': '{business_sector} mercado tendências {year}',
         'section_type': 'mercado',
     },
     'concorrencia': {
-        'field': 'competition_strategies',
         'query_template': '{business_sector} concorrentes estratégias {year}',
         'section_type': 'concorrencia',
     },
     'publico': {
-        'field': 'target_audience_profile',
         'query_template': '{target_audience} comportamento digital {year}',
         'section_type': 'tendencias',
     },
     'tendencias': {
-        'field': 'tendencies_popular_themes',
         'query_template': '{business_sector} tendências redes sociais {year}',
         'section_type': 'tendencias',
     },
     'calendario': {
-        'field': 'seasonal_relevant_dates',
         'query_template': 'datas comemorativas marketing {month} {year}',
         'section_type': 'mercado',
     },
     'marca': {
-        'field': 'brand_online_presence',
         'query_template': '{business_name} marca presença digital {year}',
         'section_type': 'mercado',
     },

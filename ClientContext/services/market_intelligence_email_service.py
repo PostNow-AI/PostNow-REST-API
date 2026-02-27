@@ -61,6 +61,7 @@ class MarketIntelligenceEmailService:
 
         processed = 0
         failed = 0
+        skipped = 0
 
         for user_id in users_context.keys():
             try:
@@ -69,6 +70,8 @@ class MarketIntelligenceEmailService:
                 result = await self.send_to_user(user, context_data)
                 if result['status'] == 'success':
                     processed += 1
+                elif result['status'] == 'skipped':
+                    skipped += 1
                 else:
                     failed += 1
             except Exception as e:
@@ -79,6 +82,7 @@ class MarketIntelligenceEmailService:
             'status': 'completed',
             'total_users': len(users_context),
             'processed': processed,
+            'skipped': skipped,
             'failed': failed,
         }
 
@@ -87,7 +91,32 @@ class MarketIntelligenceEmailService:
         try:
             user_data = await sync_to_async(get_creator_profile_data)(user)
 
-            subject = f"Inteligência de Mercado - {user_data['business_name']}"
+            # Validar business_name
+            business_name = user_data.get('business_name')
+            if not business_name:
+                logger.warning(f"User {user.id} sem business_name, pulando envio")
+                return {
+                    'status': 'skipped',
+                    'user_id': user.id,
+                    'reason': 'missing_business_name'
+                }
+
+            # Validar se há dados de contexto para enviar
+            has_context = any([
+                context_data.get('market_panorama'),
+                context_data.get('competition_main'),
+                context_data.get('target_audience_profile'),
+                context_data.get('tendencies_popular_themes'),
+            ])
+            if not has_context:
+                logger.info(f"User {user.id} sem dados de contexto, pulando envio")
+                return {
+                    'status': 'skipped',
+                    'user_id': user.id,
+                    'reason': 'no_context_data'
+                }
+
+            subject = f"Inteligência de Mercado - {business_name}"
             html_content = generate_market_intelligence_email(context_data, user_data)
 
             success, response = await self.mailjet_service.send_email(

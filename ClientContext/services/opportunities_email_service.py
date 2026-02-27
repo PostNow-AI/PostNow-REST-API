@@ -56,6 +56,7 @@ class OpportunitiesEmailService:
 
         processed = 0
         failed = 0
+        skipped = 0
 
         for user_id in users_context.keys():
             try:
@@ -64,6 +65,8 @@ class OpportunitiesEmailService:
                 result = await self.send_to_user(user, context_data)
                 if result['status'] == 'success':
                     processed += 1
+                elif result['status'] == 'skipped':
+                    skipped += 1
                 else:
                     failed += 1
             except Exception as e:
@@ -74,6 +77,7 @@ class OpportunitiesEmailService:
             'status': 'completed',
             'total_users': len(users_context),
             'processed': processed,
+            'skipped': skipped,
             'failed': failed,
         }
 
@@ -82,10 +86,32 @@ class OpportunitiesEmailService:
         try:
             user_data = await sync_to_async(get_creator_profile_data)(user)
 
+            # Validar business_name
+            business_name = user_data.get('business_name')
+            if not business_name:
+                logger.warning(f"User {user.id} sem business_name, pulando envio")
+                return {
+                    'status': 'skipped',
+                    'user_id': user.id,
+                    'reason': 'missing_business_name'
+                }
+
             # tendencies_data contém as oportunidades enriquecidas
             tendencies_data = context_data.get('tendencies_data', {})
 
-            subject = f"Oportunidades de Conteúdo - {user_data['business_name']}"
+            # Validar se há oportunidades para enviar
+            has_opportunities = tendencies_data and any(
+                cat.get('items') for cat in tendencies_data.values() if isinstance(cat, dict)
+            )
+            if not has_opportunities:
+                logger.info(f"User {user.id} sem oportunidades para enviar, pulando")
+                return {
+                    'status': 'skipped',
+                    'user_id': user.id,
+                    'reason': 'no_opportunities'
+                }
+
+            subject = f"Oportunidades de Conteúdo - {business_name}"
             html_content = generate_opportunities_email_template(tendencies_data, user_data)
 
             success, response = await self.mailjet_service.send_email(

@@ -420,13 +420,19 @@ Todas as ideias devem ser em português brasileiro (PT-BR).
         """
         Busca contextos que precisam de geração de oportunidades.
 
-        Critério: contexto gerado (sem erro) E sem tendencies_data OU tendencies_data vazio
+        Critério:
+            - weekly_context_error IS NULL (contexto gerado com sucesso)
+            - tendencies_data IS NULL (ainda não processado pela Fase 1b)
+
+        Nota: O .exclude(tendencies_data__isnull=False) retorna apenas registros
+        onde tendencies_data É NULL, garantindo que processamos apenas usuários
+        que ainda não tiveram suas oportunidades geradas.
         """
         return list(
             ClientContext.objects.filter(
-                weekly_context_error__isnull=True,
+                weekly_context_error__isnull=True,  # Contexto gerado sem erro
             ).exclude(
-                tendencies_data__isnull=False,
+                tendencies_data__isnull=False,  # Apenas onde tendencies_data é NULL
             ).select_related('user').values(
                 'id', 'user_id',
                 'market_panorama', 'market_tendencies', 'market_challenges',
