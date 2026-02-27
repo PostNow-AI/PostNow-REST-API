@@ -22,6 +22,7 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ### Changed
 - Score de oportunidades agora exibido no formato X/100
+- Refatoração do ContextEnrichmentService para seguir limite de 400 linhas
 
 ## [1.0.0] - 2026-02-26
 
