@@ -14,24 +14,33 @@ on:
         options:
           - production
           - staging
+      batch:
+        description: 'Batch number to process'
+        required: false
+        default: '1'
+        type: string
 
 env:
   API_BASE_URL: ${{ secrets.API_BASE_URL }}
 
 jobs:
   send-opportunities-email:
-    name: Enrich and Send Opportunities Email
+    name: Enrich and Send Opportunities Email (Batch ${{ matrix.batch }})
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'production' }}
+    strategy:
+      max-parallel: 2
+      matrix:
+        batch: [1, 2, 3, 4, 5]
 
     steps:
-      - name: Send Opportunities Email
+      - name: Send Opportunities Email - Batch ${{ matrix.batch }}
         run: |
-          echo "Triggering opportunities email..."
+          echo "Triggering opportunities email - Batch ${{ matrix.batch }}..."
 
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X GET \
-            "${{ env.API_BASE_URL }}/client-context/enrich-and-send-opportunities-email/" \
+            "${{ env.API_BASE_URL }}/client-context/enrich-and-send-opportunities-email/?batch=${{ matrix.batch }}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
 
@@ -42,14 +51,28 @@ jobs:
           echo "HTTP Code: $HTTP_CODE"
 
           if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Failed to send opportunities email"
+            echo "Failed to send opportunities email for batch ${{ matrix.batch }}"
             exit 1
           fi
 
-          echo "Opportunities email sent successfully!"
+          echo "Opportunities email sent successfully for batch ${{ matrix.batch }}!"
 
-      - name: Notify on failure
-        if: failure()
+      - name: Wait between batches
+        if: matrix.batch != 5
+        run: sleep 60
+
+  notify-completion:
+    name: Notify Completion
+    runs-on: ubuntu-latest
+    needs: send-opportunities-email
+    if: always()
+
+    steps:
+      - name: Check Results
         run: |
-          echo "Weekly opportunities email job failed!"
-          # Add notification logic here (Slack, email, etc.)
+          if [ "${{ needs.send-opportunities-email.result }}" == "success" ]; then
+            echo "All batches completed successfully!"
+          else
+            echo "Some batches failed. Check logs for details."
+            exit 1
+          fi

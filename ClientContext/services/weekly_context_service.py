@@ -1,5 +1,7 @@
+import html
 import json
 import logging
+import re
 from typing import Any, Dict, Optional
 
 from asgiref.sync import sync_to_async
@@ -165,8 +167,11 @@ class WeeklyContextService:
 
     async def _process_user_context(self, user_id: int) -> Dict[str, Any]:
         """Process weekly context generation for a single user."""
-        # Placeholder for actual context generation logic
-        user = await sync_to_async(User.objects.get)(id=user_id)
+        try:
+            user = await sync_to_async(User.objects.get)(id=user_id)
+        except User.DoesNotExist:
+            return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
+
         try:
 
             user_data = await self.user_validation_service.get_user_data(user_id)
@@ -187,8 +192,9 @@ class WeeklyContextService:
                         'reason': validation_result['reason']}
 
             context_result = await sync_to_async(self._generate_context_for_user)(user)
-            context_json = context_result.replace(
-                'json', '', 1).strip('`').strip()
+            # Remove markdown code block se presente (```json ... ```)
+            context_json = re.sub(r'^```(?:json)?\s*', '', context_result.strip())
+            context_json = re.sub(r'\s*```$', '', context_json).strip()
 
             context_data = json.loads(context_json).get(
                 'contexto_pesquisado', {})
@@ -200,6 +206,9 @@ class WeeklyContextService:
 
             client_context.weekly_context_error = None
             client_context.weekly_context_error_date = None
+            # Resetar status de enriquecimento para nova semana
+            client_context.context_enrichment_status = 'pending'
+            client_context.context_enrichment_error = None
 
             await sync_to_async(client_context.save)()
 
@@ -265,10 +274,13 @@ class WeeklyContextService:
             f"Updated existing ClientContext for user {user.id} with error: {error_message}")
 
         subject = "Falha na Geração de Contexto Semanal"
+        # Sanitizar dados para prevenir XSS no email de admin
+        safe_email = html.escape(str(user.email))
+        safe_error = html.escape(str(error_message or 'Erro interno de servidor'))
         html_content = f"""
         <h1>Falha na Geração de Contexto Semanal</h1>
-        <p>Ocorreu um erro durante o processo de geração de contexto semanal para o usuário {user.email}.</p>
-        <pre>{error_message or 'Erro interno de servidor'}</pre>
+        <p>Ocorreu um erro durante o processo de geração de contexto semanal para o usuário {safe_email}.</p>
+        <pre>{safe_error}</pre>
         """
         await self.mailjet_service.send_fallback_email_to_admins(
             subject, html_content)

@@ -136,6 +136,7 @@ class ContextEnrichmentService:
         Returns:
             Dict with enrichment result
         """
+        client_context = None
         try:
             client_context = await sync_to_async(ClientContext.objects.get)(user=user)
             tendencies_data = context_data.get('tendencies_data') or {}
@@ -166,11 +167,12 @@ class ContextEnrichmentService:
 
         except Exception as e:
             logger.error(f"Error enriching context for user {user.id}: {str(e)}")
-            try:
-                client_context = await sync_to_async(ClientContext.objects.get)(user=user)
-                await self._update_enrichment_status(client_context, 'failed', str(e))
-            except Exception:
-                pass
+            # Reutiliza client_context se já foi buscado, evita query duplicada
+            if client_context:
+                try:
+                    await self._update_enrichment_status(client_context, 'failed', str(e))
+                except Exception:
+                    pass
             return {
                 'user_id': user.id,
                 'status': 'failed',
