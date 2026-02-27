@@ -18,6 +18,7 @@ from ClientContext.services.context_enrichment_service import ContextEnrichmentS
 from ClientContext.services.market_intelligence_email_service import MarketIntelligenceEmailService
 from ClientContext.services.opportunities_email_service import OpportunitiesEmailService
 from ClientContext.services.opportunities_generation_service import OpportunitiesGenerationService
+from ClientContext.services.market_intelligence_enrichment_service import MarketIntelligenceEnrichmentService
 from ClientContext.services.retry_client_context import RetryClientContext
 from ClientContext.services.weekly_context_email_service import (
     WeeklyContextEmailService,
@@ -442,18 +443,36 @@ def enrich_and_send_opportunities_email(request):
 @permission_classes([AllowAny])
 def send_market_intelligence_email(request):
     """
-    Send market intelligence email.
+    Enrich and send market intelligence email.
 
     WEDNESDAY EMAIL - Market Intelligence
 
+    Phase 1: Enrich each section with additional sources via Google Search
+    Phase 2: Send email with enriched data
+
     Contains: Market overview, competition analysis, audience insights,
-    trends, brand analysis, and seasonal calendar.
+    trends, and seasonal calendar - all with enriched sources.
     """
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         try:
+            # Phase 1: Enrich market intelligence data
+            enrichment_service = MarketIntelligenceEnrichmentService()
+            enrichment_result = loop.run_until_complete(
+                enrichment_service.enrich_all_users()
+            )
+
+            AuditService.log_system_operation(
+                user=None,
+                action='market_intelligence_enrichment_completed',
+                status='success' if enrichment_result['status'] == 'completed' else 'partial',
+                resource_type='MarketIntelligenceEnrichment',
+                details=enrichment_result
+            )
+
+            # Phase 2: Send emails with enriched data
             email_service = MarketIntelligenceEmailService()
             result = loop.run_until_complete(
                 email_service.send_all()
@@ -467,7 +486,11 @@ def send_market_intelligence_email(request):
                 details=result
             )
 
-            return Response(result, status=status.HTTP_200_OK)
+            return Response({
+                'status': 'completed',
+                'enrichment': enrichment_result,
+                'email': result
+            }, status=status.HTTP_200_OK)
 
         except Exception as e:
             AuditService.log_system_operation(
