@@ -116,7 +116,7 @@ def score_source(section: str, url: str) -> int:
         for sect, domains in ALLOWED_DOMAINS.items():
             if domain in domains:
                 # Slightly lower score if not the primary section
-                return domains[domain] - 10
+                return max(0, domains[domain] - 10)
 
         # Check for known TLDs
         if domain.endswith('.gov.br'):

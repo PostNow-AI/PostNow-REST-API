@@ -316,5 +316,5 @@ class MarketIntelligenceEnrichmentService:
                 'tendencies_popular_themes', 'tendencies_sources',
                 'seasonal_relevant_dates', 'seasonal_sources',
                 'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources',
-            )[offset:offset + limit]
+            ).order_by('id')[offset:offset + limit]  # Ordenação determinística
         )

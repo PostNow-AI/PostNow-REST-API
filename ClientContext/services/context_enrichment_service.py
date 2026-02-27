@@ -18,6 +18,9 @@ from services.semaphore_service import SemaphoreService
 
 logger = logging.getLogger(__name__)
 
+# Limite máximo de retries para contextos com falha
+MAX_ENRICHMENT_RETRIES = 3
+
 # Map opportunity categories to source_quality sections
 CATEGORY_TO_SECTION = {
     'polemica': 'tendencias',
@@ -282,13 +285,22 @@ class ContextEnrichmentService:
         Returns:
             List of context dicts
         """
+        from django.db.models import F
+        from django.db.models.functions import Coalesce
+
         queryset = ClientContext.objects.filter(
             weekly_context_error__isnull=True,
-            context_enrichment_status__in=['pending', 'failed'],  # Inclui failed para retry
+            context_enrichment_status__in=['pending', 'failed'],
+        ).exclude(
+            # Exclui contextos que falharam mais de MAX_ENRICHMENT_RETRIES vezes
+            # Usando o campo context_enrichment_error para contar tentativas
+            context_enrichment_status='failed',
+            context_enrichment_error__contains=f'[retry:{MAX_ENRICHMENT_RETRIES}]'
         ).select_related('user').values(
             'id', 'user_id', 'user__email', 'user__first_name',
-            'tendencies_data', 'context_enrichment_status'
-        )
+            'tendencies_data', 'context_enrichment_status',
+            'context_enrichment_error'
+        ).order_by('id')  # Ordenação determinística para paginação
 
         if limit is not None:
             return list(queryset[offset:offset + limit])
@@ -311,5 +323,20 @@ class ContextEnrichmentService:
         """
         client_context.context_enrichment_status = status
         client_context.context_enrichment_date = timezone.now()
-        client_context.context_enrichment_error = error or ''
+
+        if status == 'failed' and error:
+            # Incrementar contador de retries
+            current_error = client_context.context_enrichment_error or ''
+            retry_count = 1
+            if '[retry:' in current_error:
+                try:
+                    start = current_error.index('[retry:') + 7
+                    end = current_error.index(']', start)
+                    retry_count = int(current_error[start:end]) + 1
+                except (ValueError, IndexError):
+                    retry_count = 1
+            client_context.context_enrichment_error = f'[retry:{retry_count}] {error}'
+        else:
+            client_context.context_enrichment_error = error or ''
+
         client_context.save()

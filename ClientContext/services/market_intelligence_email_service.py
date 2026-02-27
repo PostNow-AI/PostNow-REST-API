@@ -49,7 +49,7 @@ class MarketIntelligenceEmailService:
             'tendencies_popular_themes', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources',
             'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources',
             'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources',
-        )
+        ).order_by('id')  # Ordenação determinística para paginação
 
         if batch_size > 0:
             queryset = queryset[offset:offset + batch_size]

@@ -34,7 +34,7 @@ class OpportunitiesEmailService:
             ).select_related('user').values(
                 'id', 'user__id', 'user__email', 'user__first_name',
                 'tendencies_data',
-            )
+            ).order_by('id')  # Ordenação determinística
         )
 
     async def mail_opportunities(self) -> Dict[str, Any]:

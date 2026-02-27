@@ -68,6 +68,11 @@ async def fetch_and_filter_sources(
         List of validated, filtered source dicts with 'url', 'title', 'snippet'
     """
     try:
+        # Verificar se o serviço está configurado
+        if not google_search_service.is_configured():
+            logger.warning("[ENRICHMENT] Google CSE not configured, skipping source enrichment")
+            return []
+
         # Fetch more results than needed to have margin after filtering
         results = await sync_to_async(google_search_service.search)(
             query=query,

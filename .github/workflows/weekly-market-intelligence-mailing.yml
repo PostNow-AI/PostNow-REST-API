@@ -41,7 +41,8 @@ jobs:
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X GET \
             "${{ env.API_BASE_URL }}/client-context/send-market-intelligence-email/?batch=${{ matrix.batch }}" \
-            -H "Content-Type: application/json")
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
           BODY=$(echo "$RESPONSE" | head -n -1)

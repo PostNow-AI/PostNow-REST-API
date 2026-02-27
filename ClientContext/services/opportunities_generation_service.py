@@ -452,5 +452,5 @@ Todas as ideias devem ser em português brasileiro (PT-BR).
                 'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests',
                 'tendencies_popular_themes', 'tendencies_hashtags', 'tendencies_keywords',
                 'seasonal_relevant_dates', 'seasonal_local_events',
-            )[offset:offset + limit]
+            ).order_by('id')[offset:offset + limit]  # Ordenação determinística
         )

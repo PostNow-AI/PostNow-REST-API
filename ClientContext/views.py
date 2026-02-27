@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 from AuditSystem.services import AuditService
 from django.contrib.auth.models import User
@@ -12,6 +13,38 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
+# Token secreto para endpoints de batch (definido no GitHub Secrets como CRON_SECRET)
+BATCH_API_TOKEN = os.getenv('CRON_SECRET', '')
+
+# Limites de validação
+MAX_BATCH_NUMBER = 100
+MIN_BATCH_NUMBER = 1
+
+
+def _validate_batch_token(request) -> bool:
+    """Valida o token de autenticação para endpoints de batch."""
+    if not BATCH_API_TOKEN:
+        # Se não há token configurado, permite (desenvolvimento)
+        return True
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+        return token == BATCH_API_TOKEN
+    return False
+
+
+def _validate_batch_number(batch_str: str) -> int:
+    """Valida e retorna o número do batch."""
+    try:
+        batch = int(batch_str)
+        if batch < MIN_BATCH_NUMBER:
+            return MIN_BATCH_NUMBER
+        if batch > MAX_BATCH_NUMBER:
+            return MAX_BATCH_NUMBER
+        return batch
+    except (ValueError, TypeError):
+        return 1
 
 from ClientContext.models import ClientContext
 from ClientContext.services.context_enrichment_service import ContextEnrichmentService
@@ -33,9 +66,16 @@ from ClientContext.services.weekly_context_service import WeeklyContextService
 def generate_client_context(request):
     """Generate client context view."""
 
+    # Validar token de autenticação
+    if not _validate_batch_token(request):
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
     try:
         # Get batch number from query params (default to 1)
-        batch_number = int(request.GET.get('batch', 1))
+        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 3  # Process 3 users per batch, to avoid vercel timeouts
 
         loop = asyncio.new_event_loop()
@@ -207,9 +247,16 @@ def generate_single_client_context(request):
 def retry_generate_client_context(request):
     """Retry generate client context view."""
 
+    # Validar token de autenticação
+    if not _validate_batch_token(request):
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
     try:
-       # Get batch number from query params (default to 1)
-        batch_number = int(request.GET.get('batch', 1))
+        # Get batch number from query params (default to 1)
+        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 2  # Process 2 users per batch, to avoid vercel timeouts
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -225,7 +272,7 @@ def retry_generate_client_context(request):
             retry_context_service = RetryClientContext()
             result = loop.run_until_complete(
                 retry_context_service.process_all_users_context(
-                    batch_number=1, batch_size=0)
+                    batch_number=batch_number, batch_size=batch_size)
             )
             AuditService.log_system_operation(
                 user=None,
@@ -265,8 +312,15 @@ def generate_opportunities(request):
     Query params:
         batch: Batch number for processing (default: 1)
     """
+    # Validar token de autenticação
+    if not _validate_batch_token(request):
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
     try:
-        batch_number = int(request.GET.get('batch', 1))
+        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 5  # Process 5 users per batch
 
         loop = asyncio.new_event_loop()
@@ -365,8 +419,15 @@ def enrich_and_send_opportunities_email(request):
     2. Enriches each context with additional sources and analysis
     3. Sends the opportunities email with enriched data
     """
+    # Validar token de autenticação
+    if not _validate_batch_token(request):
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
     try:
-        batch_number = int(request.GET.get('batch', 1))
+        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 2  # Process 2 users per batch to avoid timeouts
 
         loop = asyncio.new_event_loop()
@@ -456,8 +517,15 @@ def send_market_intelligence_email(request):
     Query params:
         batch: Batch number for processing (default: 1)
     """
+    # Validar token de autenticação
+    if not _validate_batch_token(request):
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
     try:
-        batch_number = int(request.GET.get('batch', 1))
+        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 5  # Process 5 users per batch
 
         loop = asyncio.new_event_loop()
