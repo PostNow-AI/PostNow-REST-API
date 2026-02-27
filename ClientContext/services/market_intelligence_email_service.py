@@ -5,7 +5,7 @@ Este é um serviço SEPARADO do WeeklyContextEmailService.
 Usa o template market_intelligence_email.py.
 """
 import logging
-from collections import defaultdict
+import re
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
@@ -17,6 +17,14 @@ from services.get_creator_profile_data import get_creator_profile_data
 from services.mailjet_service import MailjetService
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_subject(text: str) -> str:
+    """Remove caracteres que podem quebrar headers de e-mail."""
+    if not text:
+        return ''
+    # Remove quebras de linha e caracteres de controle
+    return re.sub(r'[\r\n\x00-\x1f]', '', str(text))[:100]
 
 
 class MarketIntelligenceEmailService:
@@ -78,10 +86,12 @@ class MarketIntelligenceEmailService:
                 'message': 'No users to process',
             }
 
-        users_context = defaultdict(list)
+        # Dict simples pois cada usuário tem apenas um contexto
+        users_context = {}
         for context in contexts:
             user_id = context['user__id']
-            users_context[user_id].append(context)
+            if user_id not in users_context:
+                users_context[user_id] = context
 
         # Pre-fetch all users in a single query to avoid N+1
         user_ids = list(users_context.keys())
@@ -94,14 +104,13 @@ class MarketIntelligenceEmailService:
         failed = 0
         skipped = 0
 
-        for user_id in users_context.keys():
+        for user_id, context_data in users_context.items():
             try:
                 user = users_by_id.get(user_id)
                 if not user:
                     logger.error(f"User {user_id} not found")
                     failed += 1
                     continue
-                context_data = users_context[user_id][0]
                 result = await self.send_to_user(user, context_data)
                 if result['status'] == 'success':
                     processed += 1
@@ -151,7 +160,7 @@ class MarketIntelligenceEmailService:
                     'reason': 'no_context_data'
                 }
 
-            subject = f"Inteligência de Mercado - {business_name}"
+            subject = f"Inteligência de Mercado - {_sanitize_subject(business_name)}"
             html_content = generate_market_intelligence_email(context_data, user_data)
 
             success, response = await self.mailjet_service.send_email(

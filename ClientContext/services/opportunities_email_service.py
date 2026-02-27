@@ -4,7 +4,7 @@ Serviço de envio do e-mail de Oportunidades de Conteúdo (Segunda-feira).
 Usa o template opportunities_email.py com dados enriquecidos (Fase 2).
 """
 import logging
-from collections import defaultdict
+import re
 from typing import Any, Dict
 
 from asgiref.sync import sync_to_async
@@ -18,6 +18,14 @@ from services.mailjet_service import MailjetService
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_subject(text: str) -> str:
+    """Remove caracteres que podem quebrar headers de e-mail."""
+    if not text:
+        return ''
+    # Remove quebras de linha e caracteres de controle
+    return re.sub(r'[\r\n\x00-\x1f]', '', str(text))[:100]
+
+
 class OpportunitiesEmailService:
     """Serviço para envio do e-mail de Oportunidades de Conteúdo."""
 
@@ -25,21 +33,45 @@ class OpportunitiesEmailService:
         self.mailjet_service = MailjetService()
 
     @staticmethod
-    async def fetch_users_with_opportunities() -> list:
-        """Busca usuários com dados de oportunidades enriquecidas para envio."""
-        return await sync_to_async(list)(
-            ClientContext.objects.filter(
-                weekly_context_error__isnull=True,  # Filtro correto para NULL
-                context_enrichment_status='enriched',  # Apenas dados enriquecidos
-            ).select_related('user').values(
-                'id', 'user__id', 'user__email', 'user__first_name',
-                'tendencies_data',
-            ).order_by('id')  # Ordenação determinística
-        )
+    async def fetch_users_with_opportunities(
+        batch_number: int = 1,
+        batch_size: int = 0
+    ) -> list:
+        """
+        Busca usuários com dados de oportunidades enriquecidas para envio.
 
-    async def mail_opportunities(self) -> Dict[str, Any]:
-        """Envia e-mail de Oportunidades para todos os usuários."""
-        contexts = await self.fetch_users_with_opportunities()
+        Args:
+            batch_number: Número do batch (1-indexed)
+            batch_size: Tamanho do batch (0 = todos)
+        """
+        offset = (batch_number - 1) * batch_size if batch_size > 0 else 0
+
+        queryset = ClientContext.objects.filter(
+            weekly_context_error__isnull=True,
+            context_enrichment_status='enriched',
+        ).select_related('user').values(
+            'id', 'user__id', 'user__email', 'user__first_name',
+            'tendencies_data',
+        ).order_by('id')
+
+        if batch_size > 0:
+            queryset = queryset[offset:offset + batch_size]
+
+        return await sync_to_async(list)(queryset)
+
+    async def mail_opportunities(
+        self,
+        batch_number: int = 1,
+        batch_size: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Envia e-mail de Oportunidades para usuários.
+
+        Args:
+            batch_number: Número do batch (1-indexed)
+            batch_size: Tamanho do batch (0 = todos)
+        """
+        contexts = await self.fetch_users_with_opportunities(batch_number, batch_size)
 
         if not contexts:
             return {
@@ -49,10 +81,12 @@ class OpportunitiesEmailService:
                 'message': 'No users to process',
             }
 
-        users_context = defaultdict(list)
+        # Dict simples pois cada usuário tem apenas um contexto
+        users_context = {}
         for context in contexts:
             user_id = context['user__id']
-            users_context[user_id].append(context)
+            if user_id not in users_context:
+                users_context[user_id] = context
 
         # Pre-fetch all users in a single query to avoid N+1
         user_ids = list(users_context.keys())
@@ -65,14 +99,13 @@ class OpportunitiesEmailService:
         failed = 0
         skipped = 0
 
-        for user_id in users_context.keys():
+        for user_id, context_data in users_context.items():
             try:
                 user = users_by_id.get(user_id)
                 if not user:
                     logger.error(f"User {user_id} not found")
                     failed += 1
                     continue
-                context_data = users_context[user_id][0]
                 result = await self.send_to_user(user, context_data)
                 if result['status'] == 'success':
                     processed += 1
@@ -124,7 +157,7 @@ class OpportunitiesEmailService:
                     'reason': 'no_opportunities'
                 }
 
-            subject = f"Oportunidades de Conteúdo - {business_name}"
+            subject = f"Oportunidades de Conteúdo - {_sanitize_subject(business_name)}"
             html_content = generate_opportunities_email_template(tendencies_data, user_data)
 
             success, response = await self.mailjet_service.send_email(

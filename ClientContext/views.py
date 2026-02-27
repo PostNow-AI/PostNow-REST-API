@@ -1,5 +1,6 @@
 import asyncio
 import os
+import secrets
 
 from AuditSystem.services import AuditService
 from django.contrib.auth.models import User
@@ -30,7 +31,8 @@ def _validate_batch_token(request) -> bool:
     auth_header = request.headers.get('Authorization', '')
     if auth_header.startswith('Bearer '):
         token = auth_header[7:]
-        return token == BATCH_API_TOKEN
+        # Usar compare_digest para evitar timing attacks
+        return secrets.compare_digest(token, BATCH_API_TOKEN)
     return False
 
 
@@ -53,9 +55,7 @@ from ClientContext.services.opportunities_email_service import OpportunitiesEmai
 from ClientContext.services.opportunities_generation_service import OpportunitiesGenerationService
 from ClientContext.services.market_intelligence_enrichment_service import MarketIntelligenceEnrichmentService
 from ClientContext.services.retry_client_context import RetryClientContext
-from ClientContext.services.weekly_context_email_service import (
-    WeeklyContextEmailService,
-)
+from ClientContext.services.weekly_context_email_service import WeeklyContextEmailService
 from ClientContext.services.weekly_context_service import WeeklyContextService
 
 
@@ -188,9 +188,13 @@ def generate_single_client_context(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        user_data = User.objects.get(
-            id=user_id,
-        )
+        try:
+            user_data = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         serialized_user = UserSerializer(user_data).data
 
@@ -468,7 +472,10 @@ def enrich_and_send_opportunities_email(request):
             # Send opportunities emails with enriched data
             email_service = OpportunitiesEmailService()
             email_result = loop.run_until_complete(
-                email_service.mail_opportunities()
+                email_service.mail_opportunities(
+                    batch_number=batch_number,
+                    batch_size=batch_size
+                )
             )
 
             AuditService.log_system_operation(
