@@ -30,7 +30,7 @@ class MarketIntelligenceEmailService:
         """Busca usuários e seus dados de contexto para envio."""
         return await sync_to_async(list)(
             ClientContext.objects.filter(
-                weekly_context_error=None,
+                weekly_context_error__isnull=True,  # Filtro correto para NULL
             ).select_related('user').values(
                 'id', 'user__id', 'user__email', 'user__first_name',
                 'market_panorama', 'market_tendencies', 'market_challenges', 'market_sources',
