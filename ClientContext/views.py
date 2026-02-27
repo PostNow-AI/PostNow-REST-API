@@ -17,6 +17,7 @@ from ClientContext.models import ClientContext
 from ClientContext.services.context_enrichment_service import ContextEnrichmentService
 from ClientContext.services.market_intelligence_email_service import MarketIntelligenceEmailService
 from ClientContext.services.opportunities_email_service import OpportunitiesEmailService
+from ClientContext.services.opportunities_generation_service import OpportunitiesGenerationService
 from ClientContext.services.retry_client_context import RetryClientContext
 from ClientContext.services.weekly_context_email_service import (
     WeeklyContextEmailService,
@@ -253,6 +254,74 @@ def retry_generate_client_context(request):
 @api_view(['GET'])
 @authentication_classes([])
 @permission_classes([AllowAny])
+def generate_opportunities(request):
+    """
+    Generate content opportunities from context data (Phase 1b).
+
+    SUNDAY - After context generation
+    Transforms raw context into ranked opportunities for Monday email.
+
+    Query params:
+        batch: Batch number for processing (default: 1)
+    """
+    try:
+        batch_number = int(request.GET.get('batch', 1))
+        batch_size = 5  # Process 5 users per batch
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        AuditService.log_system_operation(
+            user=None,
+            action='opportunities_generation_started',
+            status='info',
+            resource_type='OpportunitiesGeneration',
+            details={'batch': batch_number}
+        )
+
+        try:
+            service = OpportunitiesGenerationService()
+            result = loop.run_until_complete(
+                service.generate_all_users_opportunities(
+                    batch_number=batch_number,
+                    batch_size=batch_size
+                )
+            )
+
+            AuditService.log_system_operation(
+                user=None,
+                action='opportunities_generation_completed',
+                status='success' if result['status'] == 'completed' else 'partial',
+                resource_type='OpportunitiesGeneration',
+                details=result
+            )
+
+            return Response(result, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            AuditService.log_system_operation(
+                user=None,
+                action='opportunities_generation_failed',
+                status='error',
+                resource_type='OpportunitiesGeneration',
+                details={'error': str(e)}
+            )
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        finally:
+            loop.close()
+
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def send_weekly_context_email(request):
     """
     [DISABLED] This endpoint has been replaced by:
@@ -277,8 +346,7 @@ def send_weekly_context_email(request):
             '/client-context/send-market-intelligence-email/ (Wednesday)',
             '/client-context/enrich-and-send-opportunities-email/ (Monday)',
         ]
-    }, status=status.HTTP_410_GONE
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    }, status=status.HTTP_410_GONE)
 
 
 @csrf_exempt
