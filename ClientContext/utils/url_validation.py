@@ -56,6 +56,9 @@ async def validate_url_permissive_async(url: str) -> bool:
             return False
 
         # Try HEAD request first (faster)
+        # Nota: ssl=False é usado para evitar falsos negativos em sites com
+        # certificados auto-assinados ou expirados. O risco é aceitável pois
+        # apenas validamos acessibilidade, não transmitimos dados sensíveis.
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.head(
@@ -63,7 +66,7 @@ async def validate_url_permissive_async(url: str) -> bool:
                     timeout=aiohttp.ClientTimeout(total=VALIDATION_TIMEOUT),
                     headers={'User-Agent': USER_AGENT},
                     allow_redirects=True,
-                    ssl=False  # Don't fail on SSL issues
+                    ssl=False  # Risco aceito: apenas validação de acessibilidade
                 ) as response:
                     # Accept 2xx and 3xx status codes
                     if response.status < 400:

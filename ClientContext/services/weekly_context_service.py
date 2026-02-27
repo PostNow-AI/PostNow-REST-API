@@ -86,14 +86,14 @@ class WeeklyContextService:
                 User.objects.filter(
                     usersubscription__status='active',
                     is_active=True
-                ).distinct().values('id', 'email', 'username')[offset:]
+                ).distinct().order_by('id').values('id', 'email', 'username')[offset:]
             )
 
         return list(
             User.objects.filter(
                 usersubscription__status='active',
                 is_active=True
-            ).distinct().values('id', 'email', 'username')[offset:offset + limit]
+            ).distinct().order_by('id').values('id', 'email', 'username')[offset:offset + limit]
         )
 
     async def process_single_user(self, user_data: dict) -> Dict[str, Any]:

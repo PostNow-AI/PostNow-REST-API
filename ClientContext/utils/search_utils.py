@@ -91,8 +91,9 @@ async def fetch_and_filter_sources(
         # Validate and collect top sources
         validated_sources = await _validate_sources(scored_sources, used_url_keys)
 
+        # Log sem expor dados sensíveis do usuário
         logger.info(
-            f"[ENRICHMENT] Query '{query[:50]}...' -> "
+            f"[ENRICHMENT] Search completed -> "
             f"{len(results)} raw, {len(scored_sources)} scored, "
             f"{len(validated_sources)} validated"
         )

@@ -285,9 +285,6 @@ class ContextEnrichmentService:
         Returns:
             List of context dicts
         """
-        from django.db.models import F
-        from django.db.models.functions import Coalesce
-
         queryset = ClientContext.objects.filter(
             weekly_context_error__isnull=True,
             context_enrichment_status__in=['pending', 'failed'],

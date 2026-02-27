@@ -123,7 +123,14 @@ def generate_client_context(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def manual_generate_client_context(request):
-    """Generate client context view."""
+    """Generate client context view (manual trigger for all users)."""
+
+    # Validar token de autenticação
+    if not _validate_batch_token(request):
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
 
     try:
 

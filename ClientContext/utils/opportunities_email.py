@@ -3,7 +3,15 @@ Template do e-mail de Oportunidades de Conteúdo (Segunda-feira).
 Contém apenas as oportunidades enriquecidas da Fase 2.
 Estilo visual unificado com o e-mail de Inteligência de Mercado.
 """
+import html
 import os
+
+
+def _escape(text) -> str:
+    """Sanitiza texto para prevenir XSS."""
+    if text is None:
+        return ''
+    return html.escape(str(text))
 
 # Estilo unificado PostNow
 STYLES = {
@@ -82,12 +90,14 @@ def _generate_cta(url: str) -> str:
 
 def _generate_opportunity_item(item: dict, colors: dict, index: int) -> str:
     """Item de oportunidade formatado."""
-    titulo = item.get('titulo_ideia', '')
-    descricao = item.get('descricao', '')
+    # Sanitizar todos os campos de texto para prevenir XSS
+    titulo = _escape(item.get('titulo_ideia', ''))
+    descricao = _escape(item.get('descricao', ''))
     score = item.get('score', 0)
     url_fonte = item.get('url_fonte', '')
     enriched_sources = item.get('enriched_sources', [])
-    enriched_analysis = item.get('enriched_analysis', '')
+    # Sanitizar e limpar quebras de linha excessivas no analysis
+    enriched_analysis = _escape(item.get('enriched_analysis', '')).replace('\n\n\n', '\n\n')
 
     separator = 'border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 16px;' if index > 0 else ''
 
@@ -179,8 +189,9 @@ def generate_opportunities_email_template(tendencies_data: dict, user_data: dict
     Generate HTML email template for weekly opportunities report.
     Sent on Mondays with enriched content opportunities.
     """
-    business_name = user_data.get('business_name', 'Sua Empresa')
-    user_name = user_data.get('user_name', user_data.get('user__first_name', 'Usuário'))
+    # Sanitizar dados do usuário para prevenir XSS
+    business_name = _escape(user_data.get('business_name', 'Sua Empresa'))
+    user_name = _escape(user_data.get('user_name', user_data.get('user__first_name', 'Usuário')))
     frontend_url = os.getenv('FRONTEND_URL', 'https://app.postnow.com.br')
 
     opportunities_html = _generate_opportunities_html(tendencies_data)

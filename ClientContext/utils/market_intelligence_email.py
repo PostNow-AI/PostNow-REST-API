@@ -3,7 +3,15 @@ Template de e-mail para Inteligência de Mercado (Quarta-feira).
 
 Este é um template SEPARADO do weekly_context.py.
 """
+import html
 import os
+
+
+def _escape(text) -> str:
+    """Sanitiza texto para prevenir XSS."""
+    if text is None:
+        return ''
+    return html.escape(str(text))
 
 
 def generate_market_intelligence_email(context_data: dict, user_data: dict) -> str:
@@ -17,33 +25,34 @@ def generate_market_intelligence_email(context_data: dict, user_data: dict) -> s
     Returns:
         HTML do e-mail
     """
-    user_name = user_data.get('user_name', user_data.get('user__first_name', 'Usuário'))
-    business_name = user_data.get('business_name', 'Sua Empresa')
+    # Sanitizar dados do usuário para prevenir XSS
+    user_name = _escape(user_data.get('user_name', user_data.get('user__first_name', 'Usuário')))
+    business_name = _escape(user_data.get('business_name', 'Sua Empresa'))
     frontend_url = os.getenv('FRONTEND_URL', 'https://app.postnow.com.br')
 
-    # Extrair dados
-    market_panorama = context_data.get('market_panorama', '')
-    market_tendencies = context_data.get('market_tendencies', [])
-    market_challenges = context_data.get('market_challenges', [])
+    # Extrair e sanitizar dados para prevenir XSS
+    market_panorama = _escape(context_data.get('market_panorama', ''))
+    market_tendencies = [_escape(t) for t in (context_data.get('market_tendencies') or [])]
+    market_challenges = [_escape(c) for c in (context_data.get('market_challenges') or [])]
 
-    competition_main = context_data.get('competition_main', [])
-    competition_strategies = context_data.get('competition_strategies', '')
-    competition_opportunities = context_data.get('competition_opportunities', '')
+    competition_main = context_data.get('competition_main', [])  # Sanitizado em _format_competitor
+    competition_strategies = _escape(context_data.get('competition_strategies', ''))
+    competition_opportunities = _escape(context_data.get('competition_opportunities', ''))
 
-    audience_profile = context_data.get('target_audience_profile', '')
-    audience_behaviors = context_data.get('target_audience_behaviors', '')
-    audience_interests = context_data.get('target_audience_interests', [])
+    audience_profile = _escape(context_data.get('target_audience_profile', ''))
+    audience_behaviors = _escape(context_data.get('target_audience_behaviors', ''))
+    audience_interests = [_escape(i) for i in (context_data.get('target_audience_interests') or [])]
 
-    popular_themes = context_data.get('tendencies_popular_themes', [])
-    hashtags = context_data.get('tendencies_hashtags', [])
-    keywords = context_data.get('tendencies_keywords', [])
+    popular_themes = [_escape(t) for t in (context_data.get('tendencies_popular_themes') or [])]
+    hashtags = [_escape(h) for h in (context_data.get('tendencies_hashtags') or [])]
+    keywords = [_escape(k) for k in (context_data.get('tendencies_keywords') or [])]
 
-    relevant_dates = context_data.get('seasonal_relevant_dates', [])
-    local_events = context_data.get('seasonal_local_events', [])
+    relevant_dates = context_data.get('seasonal_relevant_dates', [])  # Sanitizado em _format_date
+    local_events = context_data.get('seasonal_local_events', [])  # Sanitizado em _format_date
 
-    brand_presence = context_data.get('brand_online_presence', '')
-    brand_reputation = context_data.get('brand_reputation', '')
-    brand_style = context_data.get('brand_communication_style', '')
+    brand_presence = _escape(context_data.get('brand_online_presence', ''))
+    brand_reputation = _escape(context_data.get('brand_reputation', ''))
+    brand_style = _escape(context_data.get('brand_communication_style', ''))
 
     # Extrair fontes enriquecidas
     market_sources = context_data.get('market_sources', [])
@@ -415,25 +424,25 @@ def _generate_calendar_section(dates: list, events: list, sources: list = None) 
 
 
 def _format_competitor(c) -> str:
-    """Formata um competidor (string ou dict)."""
+    """Formata um competidor (string ou dict) com sanitização XSS."""
     if isinstance(c, dict):
-        name = c.get('name', str(c))
-        followers = c.get('followers', '')
+        name = _escape(c.get('name', str(c)))
+        followers = _escape(c.get('followers', ''))
         if followers:
             return f"{name} ({followers})"
         return name
-    return str(c)
+    return _escape(str(c))
 
 
 def _format_date(d) -> str:
-    """Formata uma data/evento (string ou dict)."""
+    """Formata uma data/evento (string ou dict) com sanitização XSS."""
     if isinstance(d, dict):
-        date = d.get('date', '')
-        event = d.get('event', '')
+        date = _escape(d.get('date', ''))
+        event = _escape(d.get('event', ''))
         if date and event:
             return f"{date} - {event}"
-        return event or date or str(d)
-    return str(d)
+        return event or date or _escape(str(d))
+    return _escape(str(d))
 
 
 def _generate_brand_section(presence: str, reputation: str, style: str, sources: list = None) -> str:
