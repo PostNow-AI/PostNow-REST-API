@@ -253,7 +253,12 @@ def retry_generate_client_context(request):
 @authentication_classes([])
 @permission_classes([AllowAny])
 def send_weekly_context_email(request):
-    """Send weekly context email view."""
+    """
+    [DEPRECATED] Use send_market_intelligence_email instead.
+
+    This endpoint is kept for backward compatibility.
+    Will be removed in v2.0.0.
+    """
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
