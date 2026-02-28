@@ -215,6 +215,7 @@ def generate_post_idea(request):
     try:
         post_data = serializer.validated_data
         include_image = post_data.get('include_image', False)
+        style_id = post_data.get('style_id', None)
 
         context = ClientContext.objects.filter(user=user).first()
         serializer = ClientContextSerializer(context)
@@ -225,7 +226,8 @@ def generate_post_idea(request):
         prompt_service = AIPromptService()
         s3_service = S3Service()
 
-        prompt_service.set_user(request.user)
+        # Pass style_id to prompt service for specific visual style selection
+        prompt_service.set_user(request.user, style_id=style_id)
 
         prompt = prompt_service.build_standalone_post_prompt(post_data, context_data)
 

@@ -45,14 +45,26 @@ logger = logging.getLogger(__name__)
 class AIPromptService:
     def __init__(self):
         self.user = None
+        self.style_id = None
 
-    def set_user(self, user) -> None:
-        """Set the user for whom the prompts will be generated."""
+    def set_user(self, user, style_id: int = None) -> None:
+        """
+        Set the user for whom the prompts will be generated.
+
+        Args:
+            user: The user to generate prompts for.
+            style_id: Optional specific visual style ID to use instead of random selection.
+        """
         self.user = user
+        self.style_id = style_id
+
+    def _get_profile_data(self) -> dict:
+        """Get creator profile data with optional style_id override."""
+        return get_creator_profile_data(self.user, self.style_id)
 
     def build_context_prompts(self) -> list[str]:
         """Build context prompts based on the user's creator profile."""
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
 
         return [
             """
@@ -141,7 +153,7 @@ class AIPromptService:
 
     def build_content_prompts(self, context: dict, posts_quantity: str) -> list[str]:
         """Build content generation prompts based on the user's creator profile."""
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
 
         return [
             """
@@ -213,7 +225,7 @@ class AIPromptService:
 
     def build_feed_prompts(self, context: dict) -> list[str]:
         """Build feed generation prompts based on the user's creator profile."""
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
 
         formatted_context = format_weekly_context_output(context)
         return [
@@ -345,7 +357,7 @@ class AIPromptService:
 
     def build_campaign_prompts(self, post_text_feed: dict) -> list[str]:
         """Build campaign generation prompts based on the user's creator profile."""
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
         return [
             """
             Você é um estrategista de conteúdo e redator de marketing digital especializado em redes sociais. Sua função é criar 1 roteiro diário de videos de stories e 1 roteiro para video de Reels para o Instagram totalmente personalizados e criativos para esta empresa. Baseie o conteúdo dos roteiros no conteúdo do post de Feed enviado, sempre respeitando o tom de voz da marca. Seja criativo e crie conteúdo engajador, utilizando o método AIDA. Usar também como referência a jornada do herói.""",
@@ -407,7 +419,7 @@ class AIPromptService:
 
     def build_standalone_post_prompt(self, post_data: dict, context: dict) -> list[str]:
         """Build campaign generation prompts based on the user's creator profile."""
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
         formatted_context = format_weekly_context_output(context)
         return [
             """
@@ -541,7 +553,7 @@ class AIPromptService:
 
     def regenerate_standalone_post_prompt(self, post_data: dict, custom_prompt: str, context: dict) -> list[str]:
         """Build campaign generation prompts based on the user's creator profile."""
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
         formatted_context = format_weekly_context_output(context)
 
         return [
@@ -688,7 +700,7 @@ class AIPromptService:
 
     def semantic_analysis_prompt(self, post_text: str) -> list[str]:
         """Prompt for semantic analysis of user input."""
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
 
         return [
             """
@@ -738,7 +750,7 @@ class AIPromptService:
 
     def image_generation_prompt(self, semantic_analysis: dict) -> list[str]:
         """Prompt for AI image generation based on semantic analysis."""
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
 
         def get_visual_style_info():
             visual_style = profile_data.get('visual_style', '')
@@ -819,7 +831,7 @@ class AIPromptService:
         Returns:
             Lista de prompts para análise histórica
         """
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
 
         name = post_data.get('name', '')
         objective = post_data.get('objective', '')
@@ -880,7 +892,7 @@ class AIPromptService:
         Returns:
             Lista de prompts para geração automática
         """
-        profile_data = get_creator_profile_data(self.user)
+        profile_data = self._get_profile_data()
 
         analysis_json = analysis_data if analysis_data else {
             "historical_analysis": "",

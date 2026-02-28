@@ -5,6 +5,7 @@ Estilo visual unificado com o e-mail de Inteligência de Mercado.
 """
 import html
 import os
+import urllib.parse
 
 
 def _escape(text) -> str:
@@ -88,7 +89,7 @@ def _generate_cta(url: str) -> str:
     '''
 
 
-def _generate_opportunity_item(item: dict, colors: dict, index: int) -> str:
+def _generate_opportunity_item(item: dict, colors: dict, index: int, category_key: str) -> str:
     """Item de oportunidade formatado."""
     # Sanitizar todos os campos de texto para prevenir XSS
     titulo = _escape(item.get('titulo_ideia', ''))
@@ -124,6 +125,19 @@ def _generate_opportunity_item(item: dict, colors: dict, index: int) -> str:
         </div>
         '''
 
+    # Create Content Button - URL with encoded parameters
+    frontend_url = os.getenv('FRONTEND_URL', 'https://app.postnow.com.br')
+    titulo_encoded = urllib.parse.quote(item.get('titulo_ideia', ''))
+    create_url = f"{frontend_url}/create?topic={titulo_encoded}&category={category_key}&score={score}"
+
+    create_button_html = f'''
+        <div style="margin-top: 12px;">
+            <a href="{create_url}" target="_blank" style="display: inline-block; background-color: {colors['border']}; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 600;">
+                ✨ Criar este Conteúdo
+            </a>
+        </div>
+    '''
+
     return f'''
     <div style="{separator}">
         <table role="presentation" style="width: 100%; border-collapse: collapse;">
@@ -141,6 +155,7 @@ def _generate_opportunity_item(item: dict, colors: dict, index: int) -> str:
         <div style="margin-top: 10px;">
             {sources_html}
         </div>
+        {create_button_html}
     </div>
     '''
 
@@ -164,7 +179,7 @@ def _generate_opportunities_html(tendencies_data: dict) -> str:
 
         items_html = ''
         for i, item in enumerate(items[:3]):
-            items_html += _generate_opportunity_item(item, colors, i)
+            items_html += _generate_opportunity_item(item, colors, i, category_key)
 
         html_parts.append(f'''
         <table role="presentation" style="width: 100%; margin-bottom: 20px; border: 1px solid {colors['border']}20; border-radius: 12px; overflow: hidden;">

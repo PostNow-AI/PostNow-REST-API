@@ -137,6 +137,13 @@ class PostGenerationRequestSerializer(serializers.Serializer):
         help_text="Se deve gerar imagem automaticamente para o post"
     )
 
+    # Visual style selection (optional - if not provided, random style is used)
+    style_id = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        help_text="ID do estilo visual específico (se não fornecido, usa aleatório)"
+    )
+
     def validate(self, data):
         """Validate the request data."""
         # Only require objective and type
