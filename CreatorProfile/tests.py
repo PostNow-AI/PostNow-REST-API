@@ -635,11 +635,16 @@ class CreatorProfileServiceTest(TestCase):
 
         self.assertEqual(updated.visual_style_ids, [])
 
+        # Reload from DB to verify persistence
+        profile.refresh_from_db()
+        self.assertEqual(profile.visual_style_ids, [])
+
     def test_update_profile_data_strips_string_values(self):
         """Verify string values are stripped before saving."""
         from CreatorProfile.services import CreatorProfileService
 
-        profile = CreatorProfile.objects.create(user=self.user)
+        # Create profile (side-effect needed for update)
+        CreatorProfile.objects.create(user=self.user)
 
         # Update with whitespace-padded values
         updated = CreatorProfileService.update_profile_data(
