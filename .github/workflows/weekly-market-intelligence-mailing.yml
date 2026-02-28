@@ -1,0 +1,78 @@
+name: Weekly Market Intelligence Email (Wednesday)
+
+on:
+  schedule:
+    # Every Wednesday at 10:00 AM UTC (7:00 AM BRT)
+    - cron: '0 10 * * 3'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to run against'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      batch:
+        description: 'Batch number to process'
+        required: false
+        default: '1'
+        type: string
+
+env:
+  API_BASE_URL: ${{ secrets.API_BASE_URL }}
+
+jobs:
+  send-market-intelligence-email:
+    name: Send Market Intelligence Email (Batch ${{ matrix.batch }})
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    strategy:
+      max-parallel: 2
+      matrix:
+        batch: [1, 2, 3, 4, 5]
+
+    steps:
+      - name: Send Market Intelligence Email - Batch ${{ matrix.batch }}
+        run: |
+          echo "Sending market intelligence email - Batch ${{ matrix.batch }}..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            "${{ env.API_BASE_URL }}/client-context/send-market-intelligence-email/?batch=${{ matrix.batch }}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response: $BODY"
+          echo "HTTP Code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Failed to send market intelligence email for batch ${{ matrix.batch }}"
+            exit 1
+          fi
+
+          echo "Market intelligence email sent successfully for batch ${{ matrix.batch }}!"
+
+      - name: Wait between batches
+        if: matrix.batch != 5
+        run: sleep 60
+
+  notify-completion:
+    name: Notify Completion
+    runs-on: ubuntu-latest
+    needs: send-market-intelligence-email
+    if: always()
+
+    steps:
+      - name: Check Results
+        run: |
+          if [ "${{ needs.send-market-intelligence-email.result }}" == "success" ]; then
+            echo "All batches completed successfully!"
+          else
+            echo "Some batches failed. Check logs for details."
+            exit 1
+          fi

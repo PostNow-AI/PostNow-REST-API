@@ -11,8 +11,18 @@ urlpatterns = [
          name='manual_generate_weekly_context'),
     path('retry-generate-weekly-context/', views.retry_generate_client_context,
          name='retry_generate_weekly_context'),
+    # Sunday Phase 1b: Generate opportunities from context
+    path('generate-opportunities/', views.generate_opportunities,
+         name='generate_opportunities'),
+    # DEPRECATED: Use send-market-intelligence-email instead (will be removed in v2.0.0)
     path('send-weekly-context-email/', views.send_weekly_context_email,
          name='send_weekly_context_email'),
+    # Monday: Opportunities email (enriched)
+    path('enrich-and-send-opportunities-email/', views.enrich_and_send_opportunities_email,
+         name='enrich_and_send_opportunities_email'),
+    # Wednesday: Market Intelligence email
+    path('send-market-intelligence-email/', views.send_market_intelligence_email,
+         name='send_market_intelligence_email'),
     path('generate-single-client-context/', views.generate_single_client_context,
          name='generate_single_client_context'),
 ]
