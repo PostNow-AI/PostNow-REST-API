@@ -439,3 +439,216 @@ class OnboardingTempDataAPITest(APITestCase):
         response = self.client.post('/api/v1/creator-profile/onboarding/link-data/', {}, format='json')
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class CreatorProfileStepTrackingTest(TestCase):
+    """
+    Tests for step tracking fix - verifies step_3_completed is no longer used.
+
+    Bug fixed: step_3_completed was removed from the model in migration 0005,
+    but code still referenced it, causing inconsistent behavior.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser_tracking',
+            email='tracking@example.com',
+            password='testpass123'
+        )
+
+    def test_model_does_not_have_step_3_completed_field(self):
+        """Verify step_3_completed is not a model field (was removed in migration 0005)."""
+        field_names = [field.name for field in CreatorProfile._meta.get_fields()]
+
+        self.assertIn('step_1_completed', field_names)
+        self.assertIn('step_2_completed', field_names)
+        self.assertNotIn('step_3_completed', field_names)
+
+    def test_onboarding_completes_with_only_two_steps(self):
+        """Verify onboarding completes when step_1 and step_2 are done (no step_3 needed)."""
+        profile = CreatorProfile.objects.create(
+            user=self.user,
+            # Step 1 fields
+            business_name="Test Business",
+            specialization="Technology",
+            business_description="A detailed business description for testing purposes.",
+            # Step 2 fields
+            voice_tone="Professional",
+            color_1="#FF6B6B"
+        )
+
+        self.assertTrue(profile.step_1_completed)
+        self.assertTrue(profile.step_2_completed)
+        self.assertTrue(profile.onboarding_completed)
+        self.assertEqual(profile.current_step, 3)  # 3 means "completed"
+
+    def test_step_1_completion_tracked_correctly(self):
+        """Verify step_1_completed is calculated based on business_name, specialization, description."""
+        profile = CreatorProfile.objects.create(user=self.user)
+
+        # Initially not completed
+        self.assertFalse(profile.step_1_completed)
+        self.assertEqual(profile.current_step, 1)
+
+        # Add required fields
+        profile.business_name = "Test Business"
+        profile.specialization = "Tech"
+        profile.business_description = "Description"
+        profile.save()
+
+        self.assertTrue(profile.step_1_completed)
+        self.assertEqual(profile.current_step, 2)
+
+    def test_step_2_completion_tracked_correctly(self):
+        """Verify step_2_completed is calculated based on voice_tone and at least one color."""
+        profile = CreatorProfile.objects.create(
+            user=self.user,
+            business_name="Test",
+            specialization="Tech",
+            business_description="Description"
+        )
+
+        # Step 1 complete, step 2 not yet
+        self.assertTrue(profile.step_1_completed)
+        self.assertFalse(profile.step_2_completed)  # No voice_tone yet
+
+        # Add step 2 fields
+        profile.voice_tone = "Professional"
+        profile.save()
+
+        # Now step 2 should be complete (colors are auto-assigned)
+        self.assertTrue(profile.step_2_completed)
+        self.assertTrue(profile.onboarding_completed)
+
+    def test_current_step_returns_correct_values(self):
+        """Verify current_step property returns 1, 2, or 3 correctly."""
+        profile = CreatorProfile.objects.create(user=self.user)
+
+        # No data - step 1
+        self.assertEqual(profile.current_step, 1)
+
+        # Step 1 complete - returns step 2
+        profile.business_name = "Test"
+        profile.specialization = "Tech"
+        profile.business_description = "Desc"
+        profile.save()
+        self.assertEqual(profile.current_step, 2)
+
+        # Step 2 complete - returns 3 (completed)
+        profile.voice_tone = "Professional"
+        profile.save()
+        self.assertEqual(profile.current_step, 3)
+
+    def test_profile_loaded_from_db_has_no_step_3_attribute(self):
+        """Verify profile loaded fresh from DB doesn't have step_3_completed attribute."""
+        profile = CreatorProfile.objects.create(
+            user=self.user,
+            business_name="Test",
+            specialization="Tech",
+            business_description="Desc",
+            voice_tone="Professional",
+            color_1="#FF6B6B"
+        )
+
+        # Clear cache and reload from database
+        profile_id = profile.id
+        del profile
+
+        fresh_profile = CreatorProfile.objects.get(id=profile_id)
+
+        # Should not have step_3_completed as a persisted attribute
+        self.assertFalse(hasattr(fresh_profile, 'step_3_completed'))
+
+        # But should still work correctly
+        self.assertTrue(fresh_profile.step_1_completed)
+        self.assertTrue(fresh_profile.step_2_completed)
+        self.assertTrue(fresh_profile.onboarding_completed)
+
+
+class CreatorProfileServiceTest(TestCase):
+    """
+    Tests for CreatorProfileService - validates service methods work correctly.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser_service',
+            email='service@example.com',
+            password='testpass123'
+        )
+
+    def test_complete_profile_updates_all_flags(self):
+        """Verify complete_profile sets all step flags correctly."""
+        from CreatorProfile.services import CreatorProfileService
+
+        # Create profile with incomplete status
+        profile = CreatorProfile.objects.create(
+            user=self.user,
+            step_1_completed=False,
+            step_2_completed=False,
+            onboarding_completed=False
+        )
+
+        # Complete the profile
+        result = CreatorProfileService.complete_profile(self.user)
+
+        self.assertTrue(result)
+
+        # Reload and verify
+        profile.refresh_from_db()
+        self.assertTrue(profile.step_1_completed)
+        self.assertTrue(profile.step_2_completed)
+        self.assertTrue(profile.onboarding_completed)
+
+    def test_update_profile_data_handles_visual_style_ids(self):
+        """Verify visual_style_ids is saved correctly as JSONField."""
+        from CreatorProfile.services import CreatorProfileService
+
+        profile = CreatorProfile.objects.create(user=self.user)
+
+        # Update with visual_style_ids
+        updated = CreatorProfileService.update_profile_data(
+            self.user,
+            {'visual_style_ids': [1, 2, 3]}
+        )
+
+        self.assertEqual(updated.visual_style_ids, [1, 2, 3])
+
+        # Reload from DB to verify persistence
+        profile.refresh_from_db()
+        self.assertEqual(profile.visual_style_ids, [1, 2, 3])
+
+    def test_update_profile_data_handles_empty_visual_style_ids(self):
+        """Verify empty visual_style_ids is handled correctly."""
+        from CreatorProfile.services import CreatorProfileService
+
+        profile = CreatorProfile.objects.create(
+            user=self.user,
+            visual_style_ids=[1, 2, 3]
+        )
+
+        # Update with empty list
+        updated = CreatorProfileService.update_profile_data(
+            self.user,
+            {'visual_style_ids': []}
+        )
+
+        self.assertEqual(updated.visual_style_ids, [])
+
+    def test_update_profile_data_strips_string_values(self):
+        """Verify string values are stripped before saving."""
+        from CreatorProfile.services import CreatorProfileService
+
+        profile = CreatorProfile.objects.create(user=self.user)
+
+        # Update with whitespace-padded values
+        updated = CreatorProfileService.update_profile_data(
+            self.user,
+            {
+                'business_name': '  Test Business  ',
+                'voice_tone': '  Professional  '
+            }
+        )
+
+        self.assertEqual(updated.business_name, 'Test Business')
+        self.assertEqual(updated.voice_tone, 'Professional')

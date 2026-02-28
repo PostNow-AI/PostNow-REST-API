@@ -70,8 +70,6 @@ class CreatorProfileService:
             return True
         except CreatorProfile.DoesNotExist:
             return False
-        except CreatorProfile.DoesNotExist:
-            return False
 
 
 class SuggestionService:

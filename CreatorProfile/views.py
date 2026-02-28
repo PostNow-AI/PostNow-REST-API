@@ -62,19 +62,19 @@ class Step1BusinessView(generics.RetrieveUpdateAPIView):
             instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
 
-        # Update the profile with step 2 data
+        # Update the profile with step 1 data
         updated_profile = CreatorProfileService.update_profile_data(
             request.user, serializer.validated_data
         )
 
-        # Log profile step 2 completion
+        # Log profile step 1 completion
         AuditService.log_profile_operation(
             user=request.user,
             action='profile_updated',
             status='success',
             details={
-                'step': 2,
-                'step_completed': updated_profile.step_2_completed,
+                'step': 1,
+                'step_completed': updated_profile.step_1_completed,
                 'current_step': updated_profile.current_step
             }
         )
@@ -82,7 +82,7 @@ class Step1BusinessView(generics.RetrieveUpdateAPIView):
         response_serializer = CreatorProfileSerializer(updated_profile)
         return Response({
             'message': 'Dados do negócio salvos com sucesso!',
-            'step_completed': updated_profile.step_2_completed,
+            'step_completed': updated_profile.step_1_completed,
             'current_step': updated_profile.current_step,
             'profile': response_serializer.data
         })
@@ -110,12 +110,12 @@ class Step2BrandingView(generics.RetrieveUpdateAPIView):
             instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
 
-        # Update the profile with step 3 data
+        # Update the profile with step 2 data
         updated_profile = CreatorProfileService.update_profile_data(
             request.user, serializer.validated_data
         )
 
-        # Log profile step 3 completion and onboarding status
+        # Log profile step 2 completion and onboarding status
         action = 'profile_updated'
         if updated_profile.onboarding_completed:
             action = 'profile_created'  # First time completion
@@ -125,8 +125,8 @@ class Step2BrandingView(generics.RetrieveUpdateAPIView):
             action=action,
             status='success',
             details={
-                'step': 3,
-                'step_completed': updated_profile.step_3_completed,
+                'step': 2,
+                'step_completed': updated_profile.step_2_completed,
                 'current_step': updated_profile.current_step,
                 'onboarding_completed': updated_profile.onboarding_completed
             }
@@ -135,7 +135,7 @@ class Step2BrandingView(generics.RetrieveUpdateAPIView):
         response_serializer = CreatorProfileSerializer(updated_profile)
         return Response({
             'message': 'Dados de marca salvos com sucesso!' if not updated_profile.onboarding_completed else 'Onboarding completado com sucesso!',
-            'step_completed': updated_profile.step_3_completed,
+            'step_completed': updated_profile.step_2_completed,
             'current_step': updated_profile.current_step,
             'onboarding_completed': updated_profile.onboarding_completed,
             'profile': response_serializer.data
