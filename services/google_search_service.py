@@ -13,7 +13,7 @@ For our use case (enrichment):
 import os
 import time
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 import requests
 

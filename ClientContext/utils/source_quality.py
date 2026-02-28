@@ -2,7 +2,6 @@
 Source quality scoring and filtering.
 Used by search_utils.py to filter and rank search results.
 """
-import re
 from urllib.parse import urlparse
 
 # Denied domains (low quality, paywalls, etc.)

@@ -171,8 +171,9 @@ class ContextEnrichmentService:
             if client_context:
                 try:
                     await self._update_enrichment_status(client_context, 'failed', str(e))
-                except Exception:
-                    pass
+                except Exception as status_error:
+                    # Ignore status update failures - main error already logged
+                    logger.warning(f"Failed to update enrichment status for user {user.id}: {status_error}")
             return {
                 'user_id': user.id,
                 'status': 'failed',

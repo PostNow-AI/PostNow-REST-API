@@ -2,10 +2,7 @@
 URL validation utilities.
 Checks if URLs are valid and accessible (not 404, soft-404, etc.)
 """
-import asyncio
 import logging
-import re
-from typing import Optional
 from urllib.parse import urlparse
 
 import aiohttp

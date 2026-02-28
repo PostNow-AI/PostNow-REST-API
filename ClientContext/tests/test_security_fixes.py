@@ -3,10 +3,9 @@ Testes para correções de segurança (análises 8-10).
 """
 import html
 import re
-import secrets
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase, RequestFactory
+from django.test import TestCase
 
 
 class TestTimingAttackPrevention(TestCase):

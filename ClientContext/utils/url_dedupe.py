@@ -2,7 +2,6 @@
 URL deduplication utilities.
 Used to prevent duplicate sources in enrichment results.
 """
-import re
 from urllib.parse import urlparse, parse_qs, urlencode
 
 
