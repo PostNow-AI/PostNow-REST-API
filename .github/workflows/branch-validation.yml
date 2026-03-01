@@ -1,0 +1,70 @@
+name: Branch Name Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches-ignore:
+      - main
+      - devel
+
+jobs:
+  validate-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get branch name
+        id: branch-name
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BRANCH="${{ github.head_ref }}"
+          else
+            BRANCH="${GITHUB_REF#refs/heads/}"
+          fi
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Validate branch name
+        run: |
+          BRANCH="${{ steps.branch-name.outputs.branch }}"
+
+          # Valid patterns:
+          # - feature/* - New features
+          # - fix/* - Bug fixes
+          # - docs/* - Documentation
+          # - refactor/* - Code refactoring
+          # - test/* - Tests
+          # - chore/* - Maintenance
+          # - hotfix/* - Urgent fixes
+
+          VALID_PATTERN="^(feature|fix|docs|refactor|test|chore|hotfix)/.+$"
+
+          if [[ ! "$BRANCH" =~ $VALID_PATTERN ]]; then
+            echo "::error::Invalid branch name: $BRANCH"
+            echo ""
+            echo "Branch name must follow the pattern: type/description"
+            echo ""
+            echo "Valid types:"
+            echo "  - feature/* - New features"
+            echo "  - fix/*     - Bug fixes"
+            echo "  - docs/*    - Documentation changes"
+            echo "  - refactor/*- Code refactoring"
+            echo "  - test/*    - Test additions/changes"
+            echo "  - chore/*   - Maintenance tasks"
+            echo "  - hotfix/*  - Urgent production fixes"
+            echo ""
+            echo "Examples:"
+            echo "  - feature/user-authentication"
+            echo "  - fix/login-validation-bug"
+            echo "  - docs/update-readme"
+            echo ""
+            exit 1
+          fi
+
+          echo "✅ Branch name '$BRANCH' is valid!"
+
+      - name: Check for feat/* (deprecated)
+        run: |
+          BRANCH="${{ steps.branch-name.outputs.branch }}"
+
+          if [[ "$BRANCH" =~ ^feat/ ]]; then
+            echo "::warning::Branch uses deprecated 'feat/' prefix. Please use 'feature/' instead."
+          fi
