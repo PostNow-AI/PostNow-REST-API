@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     'ClientContext',
     'Analytics',
     'OnboardingCampaign',
+    'SocialMediaIntegration',
 ]
 
 SITE_ID = 3

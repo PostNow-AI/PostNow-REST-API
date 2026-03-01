@@ -1,0 +1,107 @@
+name: Instagram Publish Scheduler
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'publish'
+        type: choice
+        options:
+          - publish
+          - retry
+          - stats
+
+jobs:
+  publish-scheduled:
+    runs-on: ubuntu-latest
+    environment: Production
+    if: github.event_name == 'schedule' || github.event.inputs.action == 'publish'
+
+    steps:
+      - name: Process Scheduled Posts
+        run: |
+          echo "Processing scheduled Instagram posts..."
+          RESPONSE=$(curl -X GET \
+            "${{ secrets.VERCEL_API_URL }}/api/v1/social/cron/publish-scheduled/" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 120 \
+            --retry 2 \
+            --retry-delay 5 \
+            -w "\nHTTP Status: %{http_code}" \
+            -s -S)
+
+          echo "$RESPONSE"
+
+          # Extract HTTP status code
+          HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP Status:" | awk '{print $3}')
+
+          # Check if successful (2xx status codes)
+          if [[ "$HTTP_CODE" =~ ^2 ]]; then
+            echo "Instagram publish scheduler completed successfully"
+
+            # Parse JSON response for summary
+            PROCESSED=$(echo "$RESPONSE" | grep -oP '"processed":\s*\K\d+' || echo "0")
+            SUCCESSFUL=$(echo "$RESPONSE" | grep -oP '"successful":\s*\K\d+' || echo "0")
+            FAILED=$(echo "$RESPONSE" | grep -oP '"failed":\s*\K\d+' || echo "0")
+
+            echo "Summary: $PROCESSED processed, $SUCCESSFUL successful, $FAILED failed"
+            exit 0
+          else
+            echo "Instagram publish scheduler failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+  retry-failed:
+    runs-on: ubuntu-latest
+    environment: Production
+    if: github.event.inputs.action == 'retry'
+
+    steps:
+      - name: Retry Failed Posts
+        run: |
+          echo "Retrying failed Instagram posts..."
+          RESPONSE=$(curl -X GET \
+            "${{ secrets.VERCEL_API_URL }}/api/v1/social/cron/retry-failed/" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 120 \
+            --retry 2 \
+            --retry-delay 5 \
+            -w "\nHTTP Status: %{http_code}" \
+            -s -S)
+
+          echo "$RESPONSE"
+
+          HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP Status:" | awk '{print $3}')
+
+          if [[ "$HTTP_CODE" =~ ^2 ]]; then
+            echo "Retry completed successfully"
+            exit 0
+          else
+            echo "Retry failed with status $HTTP_CODE"
+            exit 1
+          fi
+
+  get-stats:
+    runs-on: ubuntu-latest
+    environment: Production
+    if: github.event.inputs.action == 'stats'
+
+    steps:
+      - name: Get Publishing Stats
+        run: |
+          echo "Getting Instagram publishing stats..."
+          RESPONSE=$(curl -X GET \
+            "${{ secrets.VERCEL_API_URL }}/api/v1/social/cron/stats/" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --max-time 30 \
+            -s -S)
+
+          echo "$RESPONSE" | jq '.' 2>/dev/null || echo "$RESPONSE"
