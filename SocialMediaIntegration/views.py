@@ -459,13 +459,15 @@ class ScheduledPostStatsView(APIView):
 # ============================================================
 
 @csrf_exempt
-@require_http_methods(['GET', 'POST'])
+@require_http_methods(['POST'])
 def cron_publish_scheduled(request):
     """
     Cron endpoint to process scheduled posts.
 
     Called by GitHub Actions every 5 minutes.
     Requires CRON_SECRET for authentication.
+
+    Note: POST-only to comply with REST standards (state-modifying operation).
     """
     # Verify cron secret
     auth_header = request.headers.get('Authorization', '')
@@ -498,12 +500,14 @@ def cron_publish_scheduled(request):
 
 
 @csrf_exempt
-@require_http_methods(['GET', 'POST'])
+@require_http_methods(['POST'])
 def cron_retry_failed(request):
     """
     Cron endpoint to retry failed posts.
 
     Called by GitHub Actions.
+
+    Note: POST-only to comply with REST standards (state-modifying operation).
     """
     auth_header = request.headers.get('Authorization', '')
     expected = f"Bearer {settings.CRON_SECRET}"
