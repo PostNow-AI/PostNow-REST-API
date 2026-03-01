@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import List, Optional
 
-from django.db import transaction
-from django.db.models import Q
+from django.db import models, transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
 from ..models import (
@@ -217,7 +217,7 @@ class ScheduledPostProcessor:
         return list(ScheduledPost.objects.filter(
             status=ScheduledPostStatus.FAILED,
             next_retry_at__lte=now,
-            retry_count__lt=models.F('max_retries'),
+            retry_count__lt=F('max_retries'),
             instagram_account__status='connected'
         ).select_related(
             'instagram_account',
@@ -336,7 +336,3 @@ class ScheduledPostProcessor:
                 retry_count__lt=models.F('max_retries')
             ).count(),
         }
-
-
-# Import at module level to fix _get_retry_posts
-from django.db import models

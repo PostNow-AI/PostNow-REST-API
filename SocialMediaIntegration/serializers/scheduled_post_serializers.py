@@ -4,6 +4,7 @@ Scheduled Post Serializers
 Serializers for scheduled posts and publishing logs.
 """
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from IdeaBank.serializers import PostIdeaSerializer
@@ -151,6 +152,17 @@ class ScheduledPostCreateSerializer(serializers.ModelSerializer):
         if len(value) > 10:
             raise serializers.ValidationError(
                 "O carrossel permite no máximo 10 itens."
+            )
+        return value
+
+    def validate_scheduled_for(self, value):
+        """Validate scheduled_for is in the future."""
+        now = timezone.now()
+        # Allow a 5-minute buffer for form submission delay
+        min_time = now - timezone.timedelta(minutes=5)
+        if value < min_time:
+            raise serializers.ValidationError(
+                "A data de agendamento deve estar no futuro."
             )
         return value
 
