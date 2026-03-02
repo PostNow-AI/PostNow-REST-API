@@ -6,9 +6,253 @@ Este documento define o processo padronizado para garantir PRs de qualidade ante
 
 ---
 
-## Índice
+## ⚠️ IMPORTANTE: Escolha o Checklist pelo Tipo de Branch
 
-- [Checklist Rápido](#checklist-rápido)
+| Tipo de Branch | Checklist a usar | Documentação |
+|----------------|------------------|--------------|
+| `fix/` | [Checklist FIX](#checklist-fix-bugfix) | ❌ Não criar (atualizar existente se necessário) |
+| `feat/` | [Checklist FEAT](#checklist-feat-feature) | ✅ Doc da funcionalidade (não do PR) |
+| `hotfix/` | [Checklist HOTFIX](#checklist-hotfix-urgente) | ❌ Não criar |
+| `refactor/` | [Checklist REFACTOR](#checklist-refactor) | ❌ Não criar |
+| `docs/` | [Checklist DOCS](#checklist-docs) | N/A (é a própria mudança) |
+| `chore/` | [Checklist CHORE](#checklist-chore) | ❌ Não criar |
+
+---
+
+## Checklist FIX (Bugfix)
+
+**Use para:** Correções de bugs, ajustes de comportamento
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CHECKLIST FIX - BUGFIX                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ BRANCH & COMMITS                                                │
+│ [ ] Branch: fix/<descricao>                                     │
+│ [ ] Commit: fix(escopo): descrição                              │
+│                                                                 │
+│ CÓDIGO                                                          │
+│ [ ] Apenas o código necessário foi alterado                     │
+│ [ ] Sem bare excepts                                            │
+│ [ ] Sem prints de debug                                         │
+│ [ ] Sem imports não utilizados                                  │
+│                                                                 │
+│ TESTES                                                          │
+│ [ ] python -m flake8 .                                          │
+│ [ ] python manage.py test                                       │
+│ [ ] Bug específico foi testado manualmente                      │
+│                                                                 │
+│ INTEGRAÇÃO                                                      │
+│ [ ] Branch atualizada com devel                                 │
+│ [ ] Sem conflitos                                               │
+│                                                                 │
+│ PR                                                              │
+│ [ ] Template preenchido                                         │
+│ [ ] Self-review feito                                           │
+│                                                                 │
+│ DOCUMENTAÇÃO                                                    │
+│ [ ] ❌ NÃO criar doc nova (ENTREGA_*.md)                        │
+│ [ ] Se necessário, atualizar doc EXISTENTE da funcionalidade    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Checklist FEAT (Feature)
+
+**Use para:** Novas funcionalidades, novos endpoints, novas telas
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                   CHECKLIST FEAT - FEATURE                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ BRANCH & COMMITS                                                │
+│ [ ] Branch: feat/<descricao>                                    │
+│ [ ] Commits: feat(escopo): descrição                            │
+│ [ ] Commits pequenos e frequentes                               │
+│                                                                 │
+│ CÓDIGO                                                          │
+│ [ ] Funções < 50 linhas                                         │
+│ [ ] Lógica complexa em services/ dedicados                      │
+│ [ ] Funções auxiliares em utils/                                │
+│ [ ] Sem bare excepts (usar Exception + logger)                  │
+│ [ ] Sem imports não utilizados                                  │
+│ [ ] Sem prints de debug                                         │
+│ [ ] Type hints em funções públicas                              │
+│                                                                 │
+│ PERFORMANCE                                                     │
+│ [ ] Queries otimizadas (select_related/prefetch_related)        │
+│ [ ] Sem N+1 queries                                             │
+│                                                                 │
+│ SEGURANÇA                                                       │
+│ [ ] Sem secrets hardcoded                                       │
+│ [ ] Permissions adequadas nas views                             │
+│ [ ] Validação de input do usuário                               │
+│                                                                 │
+│ TESTES                                                          │
+│ [ ] python -m flake8 .                                          │
+│ [ ] python -m black . --check                                   │
+│ [ ] python manage.py test                                       │
+│ [ ] Testes unitários para nova funcionalidade                   │
+│                                                                 │
+│ INTEGRAÇÃO                                                      │
+│ [ ] Branch atualizada com devel                                 │
+│ [ ] Sem conflitos de merge                                      │
+│ [ ] Migrations não conflitam                                    │
+│                                                                 │
+│ PR                                                              │
+│ [ ] Template preenchido                                         │
+│ [ ] PRs relacionadas linkadas (frontend)                        │
+│ [ ] Self-review feito                                           │
+│                                                                 │
+│ DOCUMENTAÇÃO                                                    │
+│ [ ] Doc da FUNCIONALIDADE (não do PR)                           │
+│ [ ] Ex: CONTEXT_EMAIL.md, não ENTREGA_PR40.md                   │
+│                                                                 │
+│ PÓS-PUSH                                                        │
+│ [ ] Vercel Preview funcionando                                  │
+│ [ ] CodeQL/GitGuardian sem alertas                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Checklist HOTFIX (Urgente)
+
+**Use para:** Correções urgentes em produção
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                  CHECKLIST HOTFIX - URGENTE                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ BRANCH & COMMITS                                                │
+│ [ ] Branch: hotfix/<descricao>                                  │
+│ [ ] Commit: fix(escopo): descrição                              │
+│                                                                 │
+│ CÓDIGO (mínimo necessário)                                      │
+│ [ ] Apenas a correção, nada mais                                │
+│ [ ] Sem bare excepts                                            │
+│                                                                 │
+│ TESTES                                                          │
+│ [ ] Teste manual do fix                                         │
+│ [ ] python manage.py test (se possível)                         │
+│                                                                 │
+│ PR                                                              │
+│ [ ] Marcar como URGENTE                                         │
+│ [ ] Descrever o problema e a solução                            │
+│                                                                 │
+│ DOCUMENTAÇÃO                                                    │
+│ [ ] ❌ NÃO criar doc                                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Checklist REFACTOR
+
+**Use para:** Refatoração sem mudança de comportamento
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CHECKLIST REFACTOR                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ BRANCH & COMMITS                                                │
+│ [ ] Branch: refactor/<descricao>                                │
+│ [ ] Commit: refactor(escopo): descrição                         │
+│                                                                 │
+│ CÓDIGO                                                          │
+│ [ ] Comportamento NÃO mudou (só estrutura)                      │
+│ [ ] Funções < 50 linhas                                         │
+│ [ ] Lógica em services/utils apropriados                        │
+│ [ ] Sem bare excepts                                            │
+│ [ ] Sem imports não utilizados                                  │
+│                                                                 │
+│ TESTES                                                          │
+│ [ ] python -m flake8 .                                          │
+│ [ ] python manage.py test (TODOS devem passar)                  │
+│ [ ] Nenhum teste quebrou                                        │
+│                                                                 │
+│ INTEGRAÇÃO                                                      │
+│ [ ] Branch atualizada com devel                                 │
+│ [ ] Sem conflitos                                               │
+│                                                                 │
+│ PR                                                              │
+│ [ ] Template preenchido                                         │
+│ [ ] Self-review feito                                           │
+│                                                                 │
+│ DOCUMENTAÇÃO                                                    │
+│ [ ] ❌ NÃO criar doc nova                                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Checklist DOCS
+
+**Use para:** Apenas documentação
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      CHECKLIST DOCS                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ BRANCH & COMMITS                                                │
+│ [ ] Branch: docs/<descricao>                                    │
+│ [ ] Commit: docs(escopo): descrição                             │
+│                                                                 │
+│ CONTEÚDO                                                        │
+│ [ ] Markdown válido                                             │
+│ [ ] Links funcionando                                           │
+│ [ ] Texto em português                                          │
+│                                                                 │
+│ PR                                                              │
+│ [ ] Template preenchido                                         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Checklist CHORE
+
+**Use para:** Manutenção, dependências, configs
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      CHECKLIST CHORE                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│ BRANCH & COMMITS                                                │
+│ [ ] Branch: chore/<descricao>                                   │
+│ [ ] Commit: chore(escopo): descrição                            │
+│                                                                 │
+│ VERIFICAÇÕES                                                    │
+│ [ ] Build funciona                                              │
+│ [ ] Testes passam                                               │
+│ [ ] Sem vulnerabilidades novas (npm audit / pip audit)          │
+│                                                                 │
+│ PR                                                              │
+│ [ ] Template preenchido                                         │
+│ [ ] Listar dependências alteradas                               │
+│                                                                 │
+│ DOCUMENTAÇÃO                                                    │
+│ [ ] ❌ NÃO criar doc                                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Índice - Detalhes por Fase
+
 - [Fase 1: Branch](#fase-1-branch)
 - [Fase 2: Commits](#fase-2-commits)
 - [Fase 3: Código](#fase-3-código)
@@ -21,72 +265,6 @@ Este documento define o processo padronizado para garantir PRs de qualidade ante
 - [Comandos Úteis](#comandos-úteis)
 - [Padrões Django (Cursor Rules)](#padrões-django-cursor-rules)
 - [Feedbacks Recorrentes do CTO](#feedbacks-recorrentes-do-cto)
-
----
-
-## Checklist Rápido
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│              PRÉ-PR CHECKLIST POSTNOW - BACKEND                 │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│ BRANCH                                                          │
-│ [ ] Criada de devel atualizado                                  │
-│ [ ] Nomenclatura: feat/, fix/, hotfix/, docs/, refactor/, chore/│
-│                                                                 │
-│ COMMITS                                                         │
-│ [ ] Conventional Commits: tipo(escopo): descrição               │
-│ [ ] Commits pequenos e frequentes                               │
-│                                                                 │
-│ CÓDIGO                                                          │
-│ [ ] Funções < 50 linhas                                         │
-│ [ ] Lógica complexa em services/ dedicados                      │
-│ [ ] Funções auxiliares em utils/                                │
-│ [ ] Sem bare excepts (usar Exception + logger)                  │
-│ [ ] Sem imports não utilizados                                  │
-│ [ ] Sem prints de debug                                         │
-│ [ ] Sem código comentado                                        │
-│ [ ] Type hints em funções públicas                              │
-│                                                                 │
-│ PERFORMANCE                                                     │
-│ [ ] Queries otimizadas (select_related/prefetch_related)        │
-│ [ ] Sem N+1 queries                                             │
-│ [ ] Transações atômicas onde necessário                         │
-│                                                                 │
-│ SEGURANÇA                                                       │
-│ [ ] Sem secrets hardcoded                                       │
-│ [ ] Variáveis sensíveis em .env                                 │
-│ [ ] Permissions adequadas nas views                             │
-│ [ ] Validação de input do usuário                               │
-│                                                                 │
-│ TESTES LOCAIS                                                   │
-│ [ ] python -m flake8 .                                          │
-│ [ ] python -m black . --check                                   │
-│ [ ] python manage.py test                                       │
-│ [ ] Verificar bare excepts                                      │
-│                                                                 │
-│ INTEGRAÇÃO                                                      │
-│ [ ] Branch atualizada com devel                                 │
-│ [ ] Sem conflitos de merge                                      │
-│ [ ] Migrations não conflitam                                    │
-│                                                                 │
-│ PR                                                              │
-│ [ ] Template preenchido                                         │
-│ [ ] PRs relacionadas linkadas (frontend)                        │
-│ [ ] Self-review feito                                           │
-│                                                                 │
-│ PÓS-PUSH                                                        │
-│ [ ] Vercel Preview funcionando                                  │
-│ [ ] CodeQL/GitGuardian sem alertas                              │
-│ [ ] github-code-quality passou                                  │
-│                                                                 │
-│ PÓS-MERGE (se release)                                          │
-│ [ ] Tag criada (vX.X.X)                                         │
-│ [ ] Release notes geradas                                       │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
