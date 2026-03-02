@@ -690,7 +690,7 @@ class UserNameEdgeCasesTestCase(TestCase):
         self.assertEqual(profile_data['user_name'], 'Empreendedor')
 
     def test_user_name_strips_whitespace(self):
-        """Teste: user_name considera string com espaços como vazia."""
+        """Teste: user_name trata whitespace como vazio e usa fallback."""
         from services.get_creator_profile_data import get_creator_profile_data
 
         user = User.objects.create_user(
@@ -702,16 +702,14 @@ class UserNameEdgeCasesTestCase(TestCase):
 
         CreatorProfile.objects.create(
             user=user,
-            business_name='   ',  # Only whitespace - should be considered empty
+            business_name='   ',  # Only whitespace - should be treated as empty
             specialization='Tech'
         )
 
         profile_data = get_creator_profile_data(user)
 
-        # business_name is '   ' which is truthy, so it will be used
-        # This test documents current behavior - whitespace IS used
-        # If we want to strip, we'd need to change the code
-        self.assertIn(profile_data['user_name'], ['   ', 'ValidName'])
+        # Whitespace-only business_name should fall back to first_name
+        self.assertEqual(profile_data['user_name'], 'ValidName')
 
     def test_user_name_uses_username_without_at_sign(self):
         """Teste: user_name usa username inteiro se não tiver @."""
