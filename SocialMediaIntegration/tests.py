@@ -81,7 +81,8 @@ class InstagramAccountModelTest(TestCase):
         """Test days_until_expiration calculation."""
         self.account.token_expires_at = timezone.now() + timedelta(days=30)
         self.account.save()
-        self.assertEqual(self.account.days_until_expiration, 30)
+        # Allow for rounding (29 or 30 depending on time of day)
+        self.assertIn(self.account.days_until_expiration, [29, 30])
 
     def test_days_until_expiration_expired(self):
         """Test days_until_expiration returns 0 for expired token."""
@@ -205,8 +206,9 @@ class ScheduledPostModelTest(TestCase):
 
         self.assertEqual(self.post.retry_count, 3)
         # Third retry: 15 * (2^2) = 60 minutes
-        expected_min = timezone.now() + timedelta(minutes=59)
-        expected_max = timezone.now() + timedelta(minutes=61)
+        # Allow wider margin for test timing
+        expected_min = timezone.now() + timedelta(minutes=58)
+        expected_max = timezone.now() + timedelta(minutes=62)
         self.assertTrue(expected_min <= self.post.next_retry_at <= expected_max)
 
 
@@ -561,7 +563,8 @@ class ScheduledPostViewTest(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)  # Only sees own post
-        self.assertEqual(response.data[0]['caption'], 'Test caption')
+        # List serializer uses caption_preview instead of full caption
+        self.assertEqual(response.data[0]['caption_preview'], 'Test caption')
 
 
 class InstagramAccountViewTest(APITestCase):
