@@ -57,6 +57,11 @@ def _validate_batch_number(batch_str: str) -> int:
 
 from ClientContext.models import ClientContext
 from ClientContext.services.context_enrichment_service import ContextEnrichmentService
+from ClientContext.utils.context_helpers import (
+    check_step_result,
+    build_context_data,
+    build_full_context_data,
+)
 from ClientContext.services.market_intelligence_email_service import MarketIntelligenceEmailService
 from ClientContext.services.opportunities_email_service import OpportunitiesEmailService
 from ClientContext.services.opportunities_generation_service import OpportunitiesGenerationService
@@ -181,53 +186,6 @@ def manual_generate_client_context(request):
         )
 
 
-def _check_step_result(result: dict, step_name: str) -> bool:
-    """Verifica se o resultado de uma etapa indica sucesso."""
-    if not isinstance(result, dict):
-        return True  # Assume sucesso se não for dict
-    status_value = result.get('status', 'success')
-    return status_value not in ('failed', 'error')
-
-
-def _build_context_data(client_context: ClientContext) -> dict:
-    """Constrói dict de contexto a partir do modelo."""
-    return {
-        'market_panorama': client_context.market_panorama,
-        'market_tendencies': client_context.market_tendencies,
-        'market_challenges': client_context.market_challenges,
-        'competition_main': client_context.competition_main,
-        'competition_strategies': client_context.competition_strategies,
-        'competition_opportunities': client_context.competition_opportunities,
-        'target_audience_profile': client_context.target_audience_profile,
-        'target_audience_behaviors': client_context.target_audience_behaviors,
-        'target_audience_interests': client_context.target_audience_interests,
-        'tendencies_popular_themes': client_context.tendencies_popular_themes,
-        'tendencies_hashtags': client_context.tendencies_hashtags,
-        'tendencies_keywords': client_context.tendencies_keywords,
-        'tendencies_data': client_context.tendencies_data,
-    }
-
-
-def _build_full_context_data(client_context: ClientContext) -> dict:
-    """Constrói dict completo de contexto para e-mail de inteligência de mercado."""
-    return {
-        'market_panorama': client_context.market_panorama,
-        'market_tendencies': client_context.market_tendencies,
-        'market_challenges': client_context.market_challenges,
-        'competition_main': client_context.competition_main,
-        'competition_strategies': client_context.competition_strategies,
-        'competition_opportunities': client_context.competition_opportunities,
-        'target_audience_profile': client_context.target_audience_profile,
-        'target_audience_behaviors': client_context.target_audience_behaviors,
-        'target_audience_interests': client_context.target_audience_interests,
-        'seasonal_relevant_dates': client_context.seasonal_relevant_dates,
-        'seasonal_local_events': client_context.seasonal_local_events,
-        'brand_online_presence': client_context.brand_online_presence,
-        'brand_reputation': client_context.brand_reputation,
-        'brand_communication_style': client_context.brand_communication_style,
-    }
-
-
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def generate_single_client_context(request):
@@ -300,7 +258,7 @@ def generate_single_client_context(request):
             step_results['context'] = context_result if isinstance(context_result, dict) else {'status': 'success'}
 
             # Validate Step 1 result
-            if not _check_step_result(context_result, 'context'):
+            if not check_step_result(context_result, 'context'):
                 failed_steps.append('context')
                 logger.error(f"Context generation failed for user {user_id}: {context_result}")
 
@@ -320,7 +278,7 @@ def generate_single_client_context(request):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            context_data = _build_context_data(client_context)
+            context_data = build_context_data(client_context)
 
             # Step 2: Generate opportunities (continue even if step 1 had issues)
             opportunities_service = OpportunitiesGenerationService()
@@ -329,7 +287,7 @@ def generate_single_client_context(request):
             )
             step_results['opportunities'] = opportunities_result
 
-            if not _check_step_result(opportunities_result, 'opportunities'):
+            if not check_step_result(opportunities_result, 'opportunities'):
                 failed_steps.append('opportunities')
                 logger.warning(f"Opportunities generation failed for user {user_id}")
 
@@ -344,7 +302,7 @@ def generate_single_client_context(request):
             )
             step_results['enrichment'] = enrichment_result
 
-            if not _check_step_result(enrichment_result, 'enrichment'):
+            if not check_step_result(enrichment_result, 'enrichment'):
                 failed_steps.append('enrichment')
                 logger.warning(f"Enrichment failed for user {user_id}")
 
@@ -365,7 +323,7 @@ def generate_single_client_context(request):
                 logger.warning(f"Opportunities email failed for user {user_id}")
 
             # Step 5: Send Market Intelligence email
-            full_context_data = _build_full_context_data(client_context)
+            full_context_data = build_full_context_data(client_context)
             market_email_service = MarketIntelligenceEmailService()
             market_email_result = loop.run_until_complete(
                 market_email_service.send_to_user(user, full_context_data)
