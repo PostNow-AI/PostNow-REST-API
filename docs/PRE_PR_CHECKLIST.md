@@ -6,6 +6,33 @@ Este documento define o processo padronizado para garantir PRs de qualidade ante
 
 ---
 
+## 🥇 REGRA DE OURO (Verificar ANTES de tudo)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      🥇 REGRA DE OURO                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Para CADA tarefa nova, SEMPRE criar branch nova a partir       │
+│  da branch base ATUALIZADA:                                     │
+│                                                                 │
+│  git checkout devel                                             │
+│  git pull origin devel                                          │
+│  git checkout -b <tipo>/<descricao>                             │
+│                                                                 │
+│  ⚠️  NUNCA reutilizar branch antiga                             │
+│  ⚠️  NUNCA criar branch sem antes fazer pull                    │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Para IAs:** Antes de iniciar qualquer tarefa, verificar:
+1. `git branch` - Em qual branch estamos?
+2. `git pull origin devel` - Branch base está atualizada?
+3. Se for tarefa nova → criar branch nova com `git checkout -b <tipo>/<descricao>`
+
+---
+
 ## ⚠️ IMPORTANTE: Escolha o Checklist pelo Tipo de Branch
 
 | Tipo de Branch | Checklist a usar | Documentação |
