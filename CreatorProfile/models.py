@@ -243,8 +243,6 @@ class CreatorProfile(models.Model):
             any([self.color_1, self.color_2, self.color_3, self.color_4, self.color_5])
         )
 
-        self.step_3_completed = self.step_2_completed  # No additional step for now
-
         # Update overall onboarding status
         was_completed = self.onboarding_completed
         self.onboarding_completed = (
