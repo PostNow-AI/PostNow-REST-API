@@ -4,7 +4,6 @@ import os
 import secrets
 
 from AuditSystem.services import AuditService
-from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.views.decorators.csrf import csrf_exempt
 from IdeaBank.serializers import UserSerializer
@@ -67,7 +66,6 @@ from ClientContext.services.opportunities_email_service import OpportunitiesEmai
 from ClientContext.services.opportunities_generation_service import OpportunitiesGenerationService
 from ClientContext.services.market_intelligence_enrichment_service import MarketIntelligenceEnrichmentService
 from ClientContext.services.retry_client_context import RetryClientContext
-from ClientContext.services.weekly_context_email_service import WeeklyContextEmailService
 from ClientContext.services.weekly_context_service import WeeklyContextService
 
 

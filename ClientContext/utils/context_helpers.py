@@ -3,8 +3,6 @@ Helper functions for ClientContext views.
 
 Extracted from views.py to follow SOLID principles.
 """
-from typing import Any
-
 from ClientContext.models import ClientContext
 
 
