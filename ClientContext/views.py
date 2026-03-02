@@ -177,10 +177,19 @@ def manual_generate_client_context(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def generate_single_client_context(request):
-    """Generate single client context view."""
+    """
+    Generate context, opportunities and send emails for authenticated user.
 
+    This endpoint performs the complete flow:
+    1. Generate base context (WeeklyContextService)
+    2. Generate ranked opportunities (OpportunitiesGenerationService)
+    3. Enrich with external sources (ContextEnrichmentService)
+    4. Send Opportunities email (OpportunitiesEmailService)
+    5. Send Market Intelligence email (MarketIntelligenceEmailService)
+    """
     try:
-        user_id = request.user.id
+        user = request.user
+        user_id = user.id
 
         if not user_id:
             return Response(
@@ -188,65 +197,138 @@ def generate_single_client_context(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            user_data = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            return Response(
-                {'error': 'User not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        serialized_user = UserSerializer(user_data).data
+        serialized_user = UserSerializer(user).data
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
         AuditService.log_system_operation(
-            user=None,
-            action='weekly_context_generation_started',
+            user=user,
+            action='single_context_generation_started',
             status='info',
-            resource_type='WeeklyContextGeneration',
+            resource_type='SingleContextGeneration',
         )
 
         try:
+            # Step 1: Generate base context
             context_service = WeeklyContextService()
-            result = loop.run_until_complete(
-                context_service.process_single_user(
-                    user_data=serialized_user)
+            context_result = loop.run_until_complete(
+                context_service.process_single_user(user_data=serialized_user)
             )
-            mail_context_service = WeeklyContextEmailService()
 
-            context_data = ClientContext.objects.filter(
-                user_id=user_id
-            ).select_related('user').values(
-                'id', 'user__id', 'user__email', 'user__first_name', 'market_panorama', 'market_tendencies', 'market_challenges', 'market_sources', 'competition_main', 'competition_strategies', 'competition_opportunities', 'competition_sources', 'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources', 'tendencies_popular_themes', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources', 'tendencies_data', 'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources', 'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources', 'created_at', 'updated_at', 'user_id', 'weekly_context_error', 'weekly_context_error_date', 'context_enrichment_status', 'context_enrichment_date', 'context_enrichment_error'
-            )
-            
-            if context_data.exists():
-                loop.run_until_complete(mail_context_service.send_weekly_context_email(
-                    user_data, context_data[0])
+            # Get the generated context
+            try:
+                client_context = ClientContext.objects.get(user_id=user_id)
+            except ClientContext.DoesNotExist:
+                return Response(
+                    {'error': 'Context generation failed - no context created'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            AuditService.log_system_operation(
-                user=None,
-                action='weekly_context_generation_completed',
-                status='success',
-                resource_type='WeeklyContextGeneration',
+            # Prepare context_data dict for services
+            context_data = {
+                'market_panorama': client_context.market_panorama,
+                'market_tendencies': client_context.market_tendencies,
+                'market_challenges': client_context.market_challenges,
+                'competition_main': client_context.competition_main,
+                'competition_strategies': client_context.competition_strategies,
+                'competition_opportunities': client_context.competition_opportunities,
+                'target_audience_profile': client_context.target_audience_profile,
+                'target_audience_behaviors': client_context.target_audience_behaviors,
+                'target_audience_interests': client_context.target_audience_interests,
+                'tendencies_popular_themes': client_context.tendencies_popular_themes,
+                'tendencies_hashtags': client_context.tendencies_hashtags,
+                'tendencies_keywords': client_context.tendencies_keywords,
+                'tendencies_data': client_context.tendencies_data,
+            }
+
+            # Step 2: Generate opportunities
+            opportunities_service = OpportunitiesGenerationService()
+            opportunities_result = loop.run_until_complete(
+                opportunities_service.generate_user_opportunities(user, context_data)
             )
-            return Response(result, status=status.HTTP_200_OK)
+
+            # Reload context to get updated tendencies_data
+            client_context.refresh_from_db()
+            context_data['tendencies_data'] = client_context.tendencies_data
+
+            # Step 3: Enrich opportunities
+            enrichment_service = ContextEnrichmentService()
+            enrichment_result = loop.run_until_complete(
+                enrichment_service.enrich_user_context(user, context_data)
+            )
+
+            # Reload context to get enriched data
+            client_context.refresh_from_db()
+            context_data['tendencies_data'] = client_context.tendencies_data
+
+            # Step 4: Send Opportunities email
+            opportunities_email_service = OpportunitiesEmailService()
+            opportunities_email_result = loop.run_until_complete(
+                opportunities_email_service.send_to_user(user, context_data)
+            )
+
+            # Step 5: Send Market Intelligence email
+            full_context_data = {
+                'market_panorama': client_context.market_panorama,
+                'market_tendencies': client_context.market_tendencies,
+                'market_challenges': client_context.market_challenges,
+                'competition_main': client_context.competition_main,
+                'competition_strategies': client_context.competition_strategies,
+                'competition_opportunities': client_context.competition_opportunities,
+                'target_audience_profile': client_context.target_audience_profile,
+                'target_audience_behaviors': client_context.target_audience_behaviors,
+                'target_audience_interests': client_context.target_audience_interests,
+                'seasonal_relevant_dates': client_context.seasonal_relevant_dates,
+                'seasonal_local_events': client_context.seasonal_local_events,
+                'brand_online_presence': client_context.brand_online_presence,
+                'brand_reputation': client_context.brand_reputation,
+                'brand_communication_style': client_context.brand_communication_style,
+            }
+            market_email_service = MarketIntelligenceEmailService()
+            market_email_result = loop.run_until_complete(
+                market_email_service.send_to_user(user, full_context_data)
+            )
+
+            AuditService.log_system_operation(
+                user=user,
+                action='single_context_generation_completed',
+                status='success',
+                resource_type='SingleContextGeneration',
+                details={
+                    'context': context_result.get('status') if isinstance(context_result, dict) else 'success',
+                    'opportunities': opportunities_result.get('status', 'unknown'),
+                    'enrichment': enrichment_result.get('status', 'unknown'),
+                    'opportunities_email': opportunities_email_result.get('status', 'unknown'),
+                    'market_email': market_email_result.get('status', 'unknown'),
+                }
+            )
+
+            return Response({
+                'status': 'success',
+                'message': 'Context generated and emails sent successfully',
+                'details': {
+                    'context': context_result.get('status') if isinstance(context_result, dict) else 'success',
+                    'opportunities': opportunities_result.get('status', 'unknown'),
+                    'enrichment': enrichment_result.get('status', 'unknown'),
+                    'opportunities_email': opportunities_email_result.get('status', 'unknown'),
+                    'market_email': market_email_result.get('status', 'unknown'),
+                }
+            }, status=status.HTTP_200_OK)
+
         finally:
             loop.close()
 
     except Exception as e:
         AuditService.log_system_operation(
-            user=None,
-            action='weekly_context_generation_failed',
+            user=request.user if hasattr(request, 'user') else None,
+            action='single_context_generation_failed',
             status='error',
-            resource_type='WeeklyContextGeneration',
-            details=str(e)
+            resource_type='SingleContextGeneration',
+            details={'error': str(e)}
         )
         return Response(
-            {'error': f'Failed to generate weekly context: {str(e)}'},
+            {'error': f'Failed to generate context: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 

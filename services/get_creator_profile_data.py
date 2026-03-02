@@ -13,7 +13,12 @@ def get_creator_profile_data(user: User) -> dict:
     profile = CreatorProfile.objects.filter(user=user).first()
     if not profile:
         raise CreatorProfile.DoesNotExist
+
+    # Use business_name for email greeting, fallback to first_name or username
+    greeting_name = profile.business_name or user.first_name or user.username.split('@')[0]
+
     profile_data = {
+        "user_name": greeting_name,
         "business_name": profile.business_name,
         "business_phone": profile.business_phone,
         "business_website": profile.business_website,
