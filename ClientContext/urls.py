@@ -25,4 +25,7 @@ urlpatterns = [
          name='send_market_intelligence_email'),
     path('generate-single-client-context/', views.generate_single_client_context,
          name='generate_single_client_context'),
+    # Frontend: Get user opportunities for navigation
+    path('opportunities/', views.get_user_opportunities,
+         name='get_user_opportunities'),
 ]

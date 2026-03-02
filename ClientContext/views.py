@@ -512,6 +512,60 @@ def enrich_and_send_opportunities_email(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_user_opportunities(request):
+    """
+    Get all content opportunities for the authenticated user.
+
+    Used by the CreateFromOpportunity frontend feature to enable
+    navigation between opportunities.
+
+    Returns opportunities sorted by score (highest first).
+    """
+    try:
+        context = ClientContext.objects.filter(user=request.user).first()
+
+        if not context or not context.tendencies_data:
+            return Response({
+                'opportunities': [],
+                'total': 0
+            }, status=status.HTTP_200_OK)
+
+        opportunities = []
+
+        for category_key, category_data in context.tendencies_data.items():
+            if not isinstance(category_data, dict):
+                continue
+
+            items = category_data.get('items', [])
+            category_title = category_data.get('titulo', category_key)
+
+            for item in items:
+                opportunities.append({
+                    'topic': item.get('titulo_ideia', ''),
+                    'description': item.get('descricao', ''),
+                    'score': item.get('score', 0),
+                    'category': category_key,
+                    'category_title': category_title,
+                    'url_fonte': item.get('url_fonte', ''),
+                    'enriched_analysis': item.get('enriched_analysis', ''),
+                })
+
+        # Sort by score descending
+        opportunities.sort(key=lambda x: x['score'], reverse=True)
+
+        return Response({
+            'opportunities': opportunities,
+            'total': len(opportunities)
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @csrf_exempt
 @api_view(['GET'])
 @authentication_classes([])
