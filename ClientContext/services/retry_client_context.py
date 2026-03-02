@@ -34,7 +34,7 @@ class RetryClientContext:
                     usersubscription__status='active',
                     is_active=True,
                     client_context__weekly_context_error__isnull=False
-                ).distinct().values('id', 'email', 'username')[offset:]
+                ).distinct().order_by('id').values('id', 'email', 'username')[offset:]
             )
 
         return list(
@@ -42,7 +42,7 @@ class RetryClientContext:
                 usersubscription__status='active',
                 is_active=True,
                 client_context__weekly_context_error__isnull=False
-            ).distinct().values('id', 'email', 'username')[offset:offset + limit]
+            ).distinct().order_by('id').values('id', 'email', 'username')[offset:offset + limit]
         )
 
     async def process_all_users_context(self, batch_number: int = 1, batch_size: int = 0) -> Dict[str, Any]:

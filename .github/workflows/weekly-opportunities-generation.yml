@@ -1,0 +1,78 @@
+name: Weekly Opportunities Generation (Sunday Phase 1b)
+
+on:
+  schedule:
+    # Every Sunday at 09:00 AM UTC (06:00 AM BRT) - 3 hours after context generation
+    - cron: '0 9 * * 0'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to run against'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      batch:
+        description: 'Batch number to process'
+        required: false
+        default: '1'
+        type: string
+
+env:
+  API_BASE_URL: ${{ secrets.API_BASE_URL }}
+
+jobs:
+  generate-opportunities:
+    name: Generate Opportunities (Batch ${{ matrix.batch }})
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    strategy:
+      max-parallel: 2
+      matrix:
+        batch: [1, 2, 3, 4, 5]
+
+    steps:
+      - name: Generate Opportunities - Batch ${{ matrix.batch }}
+        run: |
+          echo "Generating opportunities - Batch ${{ matrix.batch }}..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X GET \
+            "${{ env.API_BASE_URL }}/client-context/generate-opportunities/?batch=${{ matrix.batch }}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "Response: $BODY"
+          echo "HTTP Code: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Failed to generate opportunities for batch ${{ matrix.batch }}"
+            exit 1
+          fi
+
+          echo "Opportunities generated successfully for batch ${{ matrix.batch }}!"
+
+      - name: Wait between batches
+        if: matrix.batch != 5
+        run: sleep 60
+
+  notify-completion:
+    name: Notify Completion
+    runs-on: ubuntu-latest
+    needs: generate-opportunities
+    if: always()
+
+    steps:
+      - name: Check Results
+        run: |
+          if [ "${{ needs.generate-opportunities.result }}" == "success" ]; then
+            echo "All batches completed successfully!"
+          else
+            echo "Some batches failed. Check logs for details."
+            exit 1
+          fi

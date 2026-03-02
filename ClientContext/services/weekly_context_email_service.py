@@ -22,7 +22,7 @@ class WeeklyContextEmailService:
         """Fetch users and their weekly context data to be mailed."""
         return await sync_to_async(list)(
             ClientContext.objects.filter(
-                weekly_context_error=None,
+                weekly_context_error__isnull=True,  # Filtro correto para NULL
             ).select_related('user').values(
                 'id', 'user__id', 'user__email', 'user__first_name', 'market_panorama', 'market_tendencies',
                 'market_challenges', 'market_sources', 'competition_main', 'competition_strategies',
@@ -51,12 +51,23 @@ class WeeklyContextEmailService:
             user_id = context['user__id']
             users_context[user_id].append(context)
 
+        # Pre-fetch all users in a single query to avoid N+1
+        user_ids = list(users_context.keys())
+        users_queryset = await sync_to_async(list)(
+            User.objects.filter(id__in=user_ids)
+        )
+        users_by_id = {user.id: user for user in users_queryset}
+
         processed = 0
         failed = 0
 
         for user_id in users_context.keys():
             try:
-                user = await sync_to_async(User.objects.get)(id=user_id)
+                user = users_by_id.get(user_id)
+                if not user:
+                    logger.error(f"User {user_id} not found")
+                    failed += 1
+                    continue
                 # Assuming one context per user
                 context_data = users_context[user_id][0]
                 await self.send_weekly_context_email(user, context_data)
