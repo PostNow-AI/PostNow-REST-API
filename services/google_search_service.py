@@ -69,6 +69,7 @@ class GoogleSearchService:
                 'num': min(num_results, 10),  # Google CSE max is 10
                 'lr': 'lang_pt',  # Portuguese language
                 'gl': 'br',  # Brazil geolocation
+                'dateRestrict': 'm3',  # Only results from last 3 months
             }
 
             response = requests.get(
