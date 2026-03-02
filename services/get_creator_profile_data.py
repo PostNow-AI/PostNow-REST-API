@@ -14,8 +14,14 @@ def get_creator_profile_data(user: User) -> dict:
     if not profile:
         raise CreatorProfile.DoesNotExist
 
-    # Use business_name for email greeting, fallback to first_name or username
-    greeting_name = profile.business_name or user.first_name or user.username.split('@')[0]
+    # Use business_name for email greeting, with safe fallbacks
+    # Priority: business_name > first_name > username prefix > 'Empreendedor'
+    greeting_name = (
+        profile.business_name or
+        user.first_name or
+        (user.username.split('@')[0] if user.username else None) or
+        'Empreendedor'
+    )
 
     profile_data = {
         "user_name": greeting_name,

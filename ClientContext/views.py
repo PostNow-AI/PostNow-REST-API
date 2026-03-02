@@ -1,9 +1,11 @@
 import asyncio
+import logging
 import os
 import secrets
 
 from AuditSystem.services import AuditService
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.views.decorators.csrf import csrf_exempt
 from IdeaBank.serializers import UserSerializer
 from rest_framework import permissions, status
@@ -15,8 +17,13 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+logger = logging.getLogger(__name__)
+
 # Token secreto para endpoints de batch (definido no GitHub Secrets como CRON_SECRET)
 BATCH_API_TOKEN = os.getenv('CRON_SECRET', '')
+
+# Rate limiting para geração de contexto individual
+SINGLE_CONTEXT_RATE_LIMIT_SECONDS = 300  # 5 minutos
 
 # Limites de validação
 MAX_BATCH_NUMBER = 100
@@ -174,6 +181,53 @@ def manual_generate_client_context(request):
         )
 
 
+def _check_step_result(result: dict, step_name: str) -> bool:
+    """Verifica se o resultado de uma etapa indica sucesso."""
+    if not isinstance(result, dict):
+        return True  # Assume sucesso se não for dict
+    status_value = result.get('status', 'success')
+    return status_value not in ('failed', 'error')
+
+
+def _build_context_data(client_context: ClientContext) -> dict:
+    """Constrói dict de contexto a partir do modelo."""
+    return {
+        'market_panorama': client_context.market_panorama,
+        'market_tendencies': client_context.market_tendencies,
+        'market_challenges': client_context.market_challenges,
+        'competition_main': client_context.competition_main,
+        'competition_strategies': client_context.competition_strategies,
+        'competition_opportunities': client_context.competition_opportunities,
+        'target_audience_profile': client_context.target_audience_profile,
+        'target_audience_behaviors': client_context.target_audience_behaviors,
+        'target_audience_interests': client_context.target_audience_interests,
+        'tendencies_popular_themes': client_context.tendencies_popular_themes,
+        'tendencies_hashtags': client_context.tendencies_hashtags,
+        'tendencies_keywords': client_context.tendencies_keywords,
+        'tendencies_data': client_context.tendencies_data,
+    }
+
+
+def _build_full_context_data(client_context: ClientContext) -> dict:
+    """Constrói dict completo de contexto para e-mail de inteligência de mercado."""
+    return {
+        'market_panorama': client_context.market_panorama,
+        'market_tendencies': client_context.market_tendencies,
+        'market_challenges': client_context.market_challenges,
+        'competition_main': client_context.competition_main,
+        'competition_strategies': client_context.competition_strategies,
+        'competition_opportunities': client_context.competition_opportunities,
+        'target_audience_profile': client_context.target_audience_profile,
+        'target_audience_behaviors': client_context.target_audience_behaviors,
+        'target_audience_interests': client_context.target_audience_interests,
+        'seasonal_relevant_dates': client_context.seasonal_relevant_dates,
+        'seasonal_local_events': client_context.seasonal_local_events,
+        'brand_online_presence': client_context.brand_online_presence,
+        'brand_reputation': client_context.brand_reputation,
+        'brand_communication_style': client_context.brand_communication_style,
+    }
+
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def generate_single_client_context(request):
@@ -186,17 +240,45 @@ def generate_single_client_context(request):
     3. Enrich with external sources (ContextEnrichmentService)
     4. Send Opportunities email (OpportunitiesEmailService)
     5. Send Market Intelligence email (MarketIntelligenceEmailService)
+
+    Rate limited to 1 request per 5 minutes per user.
     """
+    user = request.user
+    user_id = user.id
+
+    if not user_id:
+        return Response(
+            {'error': 'User ID is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Rate limiting: 1 request per 5 minutes
+    cache_key = f'single_context_gen_{user_id}'
+    if cache.get(cache_key):
+        logger.warning(f"Rate limit hit for user {user_id}")
+        return Response(
+            {
+                'error': 'Rate limit exceeded',
+                'message': 'Please wait 5 minutes before generating context again',
+                'retry_after_seconds': SINGLE_CONTEXT_RATE_LIMIT_SECONDS
+            },
+            status=status.HTTP_429_TOO_MANY_REQUESTS
+        )
+
+    # Set rate limit lock
+    cache.set(cache_key, True, timeout=SINGLE_CONTEXT_RATE_LIMIT_SECONDS)
+
+    # Track results for each step
+    step_results = {
+        'context': {'status': 'pending'},
+        'opportunities': {'status': 'pending'},
+        'enrichment': {'status': 'pending'},
+        'opportunities_email': {'status': 'pending'},
+        'market_email': {'status': 'pending'},
+    }
+    failed_steps = []
+
     try:
-        user = request.user
-        user_id = user.id
-
-        if not user_id:
-            return Response(
-                {'error': 'User ID is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         serialized_user = UserSerializer(user).data
 
         loop = asyncio.new_event_loop()
@@ -215,38 +297,41 @@ def generate_single_client_context(request):
             context_result = loop.run_until_complete(
                 context_service.process_single_user(user_data=serialized_user)
             )
+            step_results['context'] = context_result if isinstance(context_result, dict) else {'status': 'success'}
+
+            # Validate Step 1 result
+            if not _check_step_result(context_result, 'context'):
+                failed_steps.append('context')
+                logger.error(f"Context generation failed for user {user_id}: {context_result}")
 
             # Get the generated context
             try:
                 client_context = ClientContext.objects.get(user_id=user_id)
             except ClientContext.DoesNotExist:
+                # Clear rate limit on critical failure
+                cache.delete(cache_key)
                 return Response(
-                    {'error': 'Context generation failed - no context created'},
+                    {
+                        'status': 'failed',
+                        'error': 'Context generation failed - no context created',
+                        'failed_step': 'context',
+                        'details': step_results
+                    },
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            # Prepare context_data dict for services
-            context_data = {
-                'market_panorama': client_context.market_panorama,
-                'market_tendencies': client_context.market_tendencies,
-                'market_challenges': client_context.market_challenges,
-                'competition_main': client_context.competition_main,
-                'competition_strategies': client_context.competition_strategies,
-                'competition_opportunities': client_context.competition_opportunities,
-                'target_audience_profile': client_context.target_audience_profile,
-                'target_audience_behaviors': client_context.target_audience_behaviors,
-                'target_audience_interests': client_context.target_audience_interests,
-                'tendencies_popular_themes': client_context.tendencies_popular_themes,
-                'tendencies_hashtags': client_context.tendencies_hashtags,
-                'tendencies_keywords': client_context.tendencies_keywords,
-                'tendencies_data': client_context.tendencies_data,
-            }
+            context_data = _build_context_data(client_context)
 
-            # Step 2: Generate opportunities
+            # Step 2: Generate opportunities (continue even if step 1 had issues)
             opportunities_service = OpportunitiesGenerationService()
             opportunities_result = loop.run_until_complete(
                 opportunities_service.generate_user_opportunities(user, context_data)
             )
+            step_results['opportunities'] = opportunities_result
+
+            if not _check_step_result(opportunities_result, 'opportunities'):
+                failed_steps.append('opportunities')
+                logger.warning(f"Opportunities generation failed for user {user_id}")
 
             # Reload context to get updated tendencies_data
             client_context.refresh_from_db()
@@ -257,6 +342,11 @@ def generate_single_client_context(request):
             enrichment_result = loop.run_until_complete(
                 enrichment_service.enrich_user_context(user, context_data)
             )
+            step_results['enrichment'] = enrichment_result
+
+            if not _check_step_result(enrichment_result, 'enrichment'):
+                failed_steps.append('enrichment')
+                logger.warning(f"Enrichment failed for user {user_id}")
 
             # Reload context to get enriched data
             client_context.refresh_from_db()
@@ -267,68 +357,83 @@ def generate_single_client_context(request):
             opportunities_email_result = loop.run_until_complete(
                 opportunities_email_service.send_to_user(user, context_data)
             )
+            step_results['opportunities_email'] = opportunities_email_result
+
+            opp_email_success = opportunities_email_result.get('status') in ('success', 'sent', 'skipped')
+            if not opp_email_success:
+                failed_steps.append('opportunities_email')
+                logger.warning(f"Opportunities email failed for user {user_id}")
 
             # Step 5: Send Market Intelligence email
-            full_context_data = {
-                'market_panorama': client_context.market_panorama,
-                'market_tendencies': client_context.market_tendencies,
-                'market_challenges': client_context.market_challenges,
-                'competition_main': client_context.competition_main,
-                'competition_strategies': client_context.competition_strategies,
-                'competition_opportunities': client_context.competition_opportunities,
-                'target_audience_profile': client_context.target_audience_profile,
-                'target_audience_behaviors': client_context.target_audience_behaviors,
-                'target_audience_interests': client_context.target_audience_interests,
-                'seasonal_relevant_dates': client_context.seasonal_relevant_dates,
-                'seasonal_local_events': client_context.seasonal_local_events,
-                'brand_online_presence': client_context.brand_online_presence,
-                'brand_reputation': client_context.brand_reputation,
-                'brand_communication_style': client_context.brand_communication_style,
-            }
+            full_context_data = _build_full_context_data(client_context)
             market_email_service = MarketIntelligenceEmailService()
             market_email_result = loop.run_until_complete(
                 market_email_service.send_to_user(user, full_context_data)
             )
+            step_results['market_email'] = market_email_result
+
+            market_email_success = market_email_result.get('status') in ('success', 'sent', 'skipped')
+            if not market_email_success:
+                failed_steps.append('market_email')
+                logger.warning(f"Market intelligence email failed for user {user_id}")
+
+            # Determine overall status
+            if not failed_steps:
+                overall_status = 'success'
+                message = 'Context generated and emails sent successfully'
+                http_status = status.HTTP_200_OK
+            elif len(failed_steps) == len(step_results):
+                overall_status = 'failed'
+                message = 'All steps failed'
+                http_status = status.HTTP_500_INTERNAL_SERVER_ERROR
+            else:
+                overall_status = 'partial_success'
+                message = f'Completed with failures in: {", ".join(failed_steps)}'
+                http_status = status.HTTP_200_OK  # Still 200 for partial success
 
             AuditService.log_system_operation(
                 user=user,
                 action='single_context_generation_completed',
-                status='success',
+                status=overall_status,
                 resource_type='SingleContextGeneration',
                 details={
-                    'context': context_result.get('status') if isinstance(context_result, dict) else 'success',
-                    'opportunities': opportunities_result.get('status', 'unknown'),
-                    'enrichment': enrichment_result.get('status', 'unknown'),
-                    'opportunities_email': opportunities_email_result.get('status', 'unknown'),
-                    'market_email': market_email_result.get('status', 'unknown'),
+                    'step_results': {k: v.get('status', 'unknown') for k, v in step_results.items()},
+                    'failed_steps': failed_steps,
                 }
             )
 
             return Response({
-                'status': 'success',
-                'message': 'Context generated and emails sent successfully',
-                'details': {
-                    'context': context_result.get('status') if isinstance(context_result, dict) else 'success',
-                    'opportunities': opportunities_result.get('status', 'unknown'),
-                    'enrichment': enrichment_result.get('status', 'unknown'),
-                    'opportunities_email': opportunities_email_result.get('status', 'unknown'),
-                    'market_email': market_email_result.get('status', 'unknown'),
-                }
-            }, status=status.HTTP_200_OK)
+                'status': overall_status,
+                'message': message,
+                'failed_steps': failed_steps if failed_steps else None,
+                'emails_sent': {
+                    'opportunities': opp_email_success,
+                    'market_intelligence': market_email_success,
+                },
+                'details': {k: v.get('status', 'unknown') for k, v in step_results.items()},
+            }, status=http_status)
 
         finally:
             loop.close()
 
     except Exception as e:
+        # Clear rate limit on unexpected failure so user can retry
+        cache.delete(cache_key)
+
+        logger.exception(f"Unexpected error in generate_single_client_context for user {user_id}")
         AuditService.log_system_operation(
             user=request.user if hasattr(request, 'user') else None,
             action='single_context_generation_failed',
             status='error',
             resource_type='SingleContextGeneration',
-            details={'error': str(e)}
+            details={'error': str(e), 'step_results': step_results}
         )
         return Response(
-            {'error': f'Failed to generate context: {str(e)}'},
+            {
+                'status': 'failed',
+                'error': f'Failed to generate context: {str(e)}',
+                'details': {k: v.get('status', 'unknown') for k, v in step_results.items()},
+            },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
