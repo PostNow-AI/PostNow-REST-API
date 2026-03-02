@@ -11,6 +11,9 @@ from .views import (
     InstagramAccountListView,
     InstagramAccountDetailView,
     InstagramAccountDisconnectView,
+    # Instagram OAuth
+    InstagramConnectView,
+    InstagramCallbackView,
     # Scheduled Posts
     ScheduledPostListView,
     ScheduledPostDetailView,
@@ -28,6 +31,20 @@ from .views import (
 app_name = 'social'
 
 urlpatterns = [
+    # ============================================================
+    # Instagram OAuth Endpoints
+    # ============================================================
+    path(
+        'instagram/connect/',
+        InstagramConnectView.as_view(),
+        name='instagram-connect'
+    ),
+    path(
+        'instagram/callback/',
+        InstagramCallbackView.as_view(),
+        name='instagram-callback'
+    ),
+
     # ============================================================
     # Instagram Account Endpoints
     # ============================================================

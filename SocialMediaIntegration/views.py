@@ -564,3 +564,274 @@ def cron_stats(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+# ============================================================
+# Instagram OAuth Views
+# ============================================================
+
+class InstagramConnectView(APIView):
+    """
+    GET: Generate Instagram OAuth authorization URL.
+    Initiates the connection process with Meta OAuth.
+
+    In MOCK mode (INSTAGRAM_MOCK_MODE=true), returns a fake OAuth URL
+    that redirects directly to the callback with a test code.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Generate authorization URL for Instagram OAuth"""
+        import os
+        import secrets
+
+        # Check for mock mode
+        mock_mode = os.getenv('INSTAGRAM_MOCK_MODE', 'false').lower() == 'true'
+        redirect_uri = os.getenv('META_REDIRECT_URI', 'http://localhost:5173/auth/instagram/callback')
+
+        if mock_mode:
+            # In mock mode, redirect directly to callback with a fake code
+            mock_code = 'MOCK_AUTH_CODE_FOR_TESTING'
+            mock_url = f"{redirect_uri}?code={mock_code}&state=mock_state"
+
+            logger.info(f"Instagram OAuth (MOCK MODE) initiated for user {request.user.id}")
+
+            return Response({
+                'url': mock_url,
+                'state': 'mock_state',
+                'mock_mode': True,
+                'message': 'Modo de teste ativo - redirecionando para callback simulado'
+            })
+
+        # Get Meta App credentials from environment
+        app_id = os.getenv('META_APP_ID')
+
+        if not app_id:
+            return Response({
+                'error': 'META_APP_ID not configured',
+                'message': 'Configuração do Meta App não encontrada. Ative INSTAGRAM_MOCK_MODE=true para testar.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Generate state token for CSRF protection
+        state = secrets.token_urlsafe(32)
+
+        # Store state in session for validation
+        request.session['instagram_oauth_state'] = state
+        request.session['instagram_oauth_user_id'] = request.user.id
+
+        # Build OAuth URL
+        # Instagram Basic Display API scopes
+        scopes = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish'
+
+        oauth_url = (
+            f"https://www.facebook.com/v18.0/dialog/oauth"
+            f"?client_id={app_id}"
+            f"&redirect_uri={redirect_uri}"
+            f"&scope={scopes}"
+            f"&response_type=code"
+            f"&state={state}"
+        )
+
+        logger.info(f"Instagram OAuth initiated for user {request.user.id}")
+
+        return Response({
+            'url': oauth_url,
+            'state': state,
+            'message': 'Redirecione para a URL para conectar o Instagram'
+        })
+
+
+class InstagramCallbackView(APIView):
+    """
+    POST: Process OAuth callback from Meta.
+    Exchanges authorization code for access token.
+
+    In MOCK mode (INSTAGRAM_MOCK_MODE=true), creates a fake Instagram
+    account for testing purposes.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Process OAuth callback with authorization code"""
+        import os
+        import requests
+
+        code = request.data.get('code')
+        if not code:
+            return Response({
+                'error': 'Missing authorization code',
+                'message': 'Código de autorização não fornecido'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check for mock mode
+        mock_mode = os.getenv('INSTAGRAM_MOCK_MODE', 'false').lower() == 'true'
+
+        if mock_mode and code == 'MOCK_AUTH_CODE_FOR_TESTING':
+            # Create a mock Instagram account for testing
+            mock_ig_user_id = f"mock_{request.user.id}_17841400000000000"
+
+            account, created = InstagramAccount.objects.update_or_create(
+                user=request.user,
+                instagram_user_id=mock_ig_user_id,
+                defaults={
+                    'instagram_username': f'postnow_test_{request.user.id}',
+                    'instagram_name': f'PostNow Test Account',
+                    'profile_picture_url': 'https://via.placeholder.com/150',
+                    'facebook_page_id': 'mock_page_123456789',
+                    'facebook_page_name': 'PostNow Test Page',
+                    'access_token': 'MOCK_ACCESS_TOKEN_FOR_TESTING',
+                    'token_expires_at': timezone.now() + timedelta(days=60),
+                    'status': 'connected',
+                }
+            )
+
+            logger.info(f"Instagram MOCK account {'created' if created else 'updated'} for user {request.user.id}")
+
+            AuditService.log_account_operation(
+                user=request.user,
+                action='instagram_connected_mock',
+                status='success',
+                details={'username': account.instagram_username, 'account_id': account.id, 'mock_mode': True}
+            )
+
+            serializer = InstagramAccountSerializer(account)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        # Get Meta App credentials
+        app_id = os.getenv('META_APP_ID')
+        app_secret = os.getenv('META_APP_SECRET')
+        redirect_uri = os.getenv('META_REDIRECT_URI', 'http://localhost:5173/auth/instagram/callback')
+
+        if not app_id or not app_secret:
+            return Response({
+                'error': 'Meta App credentials not configured',
+                'message': 'Credenciais do Meta App não configuradas. Ative INSTAGRAM_MOCK_MODE=true para testar.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            # Exchange code for access token
+            token_url = 'https://graph.facebook.com/v18.0/oauth/access_token'
+            token_response = requests.get(token_url, params={
+                'client_id': app_id,
+                'client_secret': app_secret,
+                'redirect_uri': redirect_uri,
+                'code': code
+            })
+
+            if token_response.status_code != 200:
+                logger.error(f"Token exchange failed: {token_response.text}")
+                return Response({
+                    'error': 'Token exchange failed',
+                    'message': 'Falha ao trocar código por token',
+                    'details': token_response.json()
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            token_data = token_response.json()
+            access_token = token_data.get('access_token')
+
+            # Get Instagram Business Account
+            # First, get Facebook Pages
+            pages_url = f'https://graph.facebook.com/v18.0/me/accounts'
+            pages_response = requests.get(pages_url, params={
+                'access_token': access_token
+            })
+
+            if pages_response.status_code != 200:
+                return Response({
+                    'error': 'Failed to get Facebook pages',
+                    'message': 'Falha ao obter páginas do Facebook'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            pages_data = pages_response.json()
+            pages = pages_data.get('data', [])
+
+            if not pages:
+                return Response({
+                    'error': 'No Facebook pages found',
+                    'message': 'Nenhuma página do Facebook encontrada. Conecte uma página ao seu Instagram Business.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Get Instagram Business Account from first page
+            page = pages[0]
+            page_id = page['id']
+            page_access_token = page['access_token']
+            page_name = page.get('name', '')
+
+            ig_account_url = f'https://graph.facebook.com/v18.0/{page_id}'
+            ig_response = requests.get(ig_account_url, params={
+                'fields': 'instagram_business_account',
+                'access_token': page_access_token
+            })
+
+            if ig_response.status_code != 200:
+                return Response({
+                    'error': 'Failed to get Instagram account',
+                    'message': 'Falha ao obter conta do Instagram'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            ig_data = ig_response.json()
+            ig_account = ig_data.get('instagram_business_account')
+
+            if not ig_account:
+                return Response({
+                    'error': 'No Instagram Business account',
+                    'message': 'Nenhuma conta Instagram Business conectada à página do Facebook'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            ig_user_id = ig_account['id']
+
+            # Get Instagram profile info
+            profile_url = f'https://graph.facebook.com/v18.0/{ig_user_id}'
+            profile_response = requests.get(profile_url, params={
+                'fields': 'username,name,profile_picture_url',
+                'access_token': page_access_token
+            })
+
+            profile_data = profile_response.json()
+            username = profile_data.get('username', '')
+            name = profile_data.get('name', '')
+            profile_picture = profile_data.get('profile_picture_url', '')
+
+            # Create or update Instagram account
+            account, created = InstagramAccount.objects.update_or_create(
+                user=request.user,
+                instagram_user_id=ig_user_id,
+                defaults={
+                    'instagram_username': username,
+                    'instagram_name': name,
+                    'profile_picture_url': profile_picture,
+                    'facebook_page_id': page_id,
+                    'facebook_page_name': page_name,
+                    'access_token': page_access_token,  # In production, encrypt this!
+                    'token_expires_at': timezone.now() + timedelta(days=60),
+                    'status': 'connected',
+                }
+            )
+
+            logger.info(f"Instagram account {'created' if created else 'updated'}: @{username} for user {request.user.id}")
+
+            # Log audit
+            AuditService.log_generic(
+                user=request.user,
+                action='instagram_connected',
+                status='success',
+                details={'username': username, 'account_id': account.id}
+            )
+
+            # Return serialized account
+            serializer = InstagramAccountSerializer(account)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except requests.RequestException as e:
+            logger.exception("Instagram OAuth request failed")
+            return Response({
+                'error': 'OAuth request failed',
+                'message': f'Erro na requisição OAuth: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        except Exception as e:
+            logger.exception("Instagram OAuth callback failed")
+            return Response({
+                'error': str(e),
+                'message': 'Erro ao processar callback do Instagram'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
