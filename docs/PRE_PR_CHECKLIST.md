@@ -664,28 +664,121 @@ class MinhaView(APIView):
 
 ## Segurança
 
-### Checklist de Segurança
+### Checklist de Segurança (Pré-PR)
 
 ```
 [ ] Sem secrets hardcoded no código
 [ ] Variáveis sensíveis em .env (não commitado)
 [ ] .env.example atualizado com novas variáveis
-[ ] Permissions adequadas nas views
-[ ] Validação de input do usuário
+[ ] Permissions adequadas nas views (IsAuthenticated, etc)
+[ ] Validação de input do usuário (serializers)
 [ ] Sanitização de dados antes de salvar
-[ ] CORS configurado corretamente
 [ ] Rate limiting em endpoints públicos
+[ ] Endpoint de cron protegido com CRON_SECRET
 ```
 
-### Variáveis de Ambiente
+### O que JÁ está implementado (usar!)
+
+| Proteção | Como usar | Onde |
+|----------|-----------|------|
+| **Rate Limiting** | Cache-based, 5min cooldown | `ClientContext/views.py` |
+| **Timing Attack Prevention** | `secrets.compare_digest()` | Validação de tokens |
+| **XSS Prevention** | `html.escape()` | Templates de email |
+| **Header Injection Prevention** | Sanitização de subject | Serviços de email |
+| **CORS** | `CORS_ALLOWED_ORIGINS` | `settings.py` |
+| **CSRF** | Middleware ativo | `settings.py` |
+| **JWT Auth** | `simplejwt` | Todas as views |
+| **AuditSystem** | Logging automático | App `AuditSystem` |
+| **Input Validation** | 20+ validators | `serializers.py` |
+
+### Padrões de Segurança Obrigatórios
+
+#### 1. Validação de Token (Timing Safe)
+
+```python
+import secrets
+
+# CORRETO - previne timing attacks
+if secrets.compare_digest(provided_token, expected_token):
+    # token válido
+
+# ERRADO - vulnerável a timing attacks
+if provided_token == expected_token:
+    # token válido
+```
+
+#### 2. Sanitização de Output (XSS)
+
+```python
+import html
+
+# CORRETO - previne XSS
+safe_text = html.escape(user_input)
+
+# ERRADO - vulnerável a XSS
+unsafe_text = user_input
+```
+
+#### 3. Rate Limiting
+
+```python
+from django.core.cache import cache
+
+RATE_LIMIT_SECONDS = 300  # 5 minutos
+
+def check_rate_limit(user_id: int) -> bool:
+    cache_key = f"rate_limit_{user_id}"
+    if cache.get(cache_key):
+        return False  # Bloqueado
+    cache.set(cache_key, True, timeout=RATE_LIMIT_SECONDS)
+    return True  # Permitido
+```
+
+#### 4. Proteção de Endpoints Cron
+
+```python
+import os
+
+def verify_cron_secret(request) -> bool:
+    expected = os.environ.get('CRON_SECRET')
+    provided = request.headers.get('X-Cron-Secret')
+    return secrets.compare_digest(provided or '', expected or '')
+```
+
+#### 5. Variáveis de Ambiente
 
 ```python
 # CORRETO
 import os
 API_KEY = os.environ.get('API_KEY')
+SECRET_KEY = os.environ.get('SECRET_KEY')
 
-# ERRADO
+# ERRADO - NUNCA fazer isso
 API_KEY = 'sk-1234567890abcdef'
+SECRET_KEY = 'hardcoded-secret'
+```
+
+### Verificações Automáticas
+
+| Check | O que detecta | Bloqueia PR? |
+|-------|---------------|--------------|
+| **GitGuardian** | Secrets expostos | **Sim** |
+| **CodeQL** | Vulnerabilidades de código | **Sim** (crítico) |
+| **github-code-quality** | Bare excepts, imports não usados | **Sim** |
+
+### OWASP Top 10 - Checklist
+
+```
+[ ] A01 - Broken Access Control → Permissions em todas as views
+[ ] A02 - Cryptographic Failures → Secrets em .env, HTTPS only
+[ ] A03 - Injection → Usar ORM, nunca raw SQL
+[ ] A04 - Insecure Design → Validação em serializers
+[ ] A05 - Security Misconfiguration → DEBUG=False em prod
+[ ] A06 - Vulnerable Components → Manter deps atualizadas
+[ ] A07 - Auth Failures → JWT + rate limiting
+[ ] A08 - Data Integrity → Validação de input
+[ ] A09 - Security Logging → AuditSystem ativo
+[ ] A10 - SSRF → Validar URLs antes de fetch
 ```
 
 ---
