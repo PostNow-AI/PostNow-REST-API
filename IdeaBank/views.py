@@ -335,6 +335,12 @@ def generate_post_idea(request):
 
         return Response({
             'message': 'Post e ideia gerados com sucesso!',
+            'post': {
+                'id': post.id,
+                'name': post.name,
+                'content': post_content.strip(),
+                'image_url': image_url if include_image else None,
+            }
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:

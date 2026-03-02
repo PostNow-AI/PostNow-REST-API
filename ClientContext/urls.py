@@ -5,6 +5,9 @@ from . import views
 app_name = 'client_context'
 
 urlpatterns = [
+    # User opportunities endpoint (for /create page navigation)
+    path('opportunities/', views.get_user_opportunities,
+         name='get_user_opportunities'),
     path('generate-weekly-context/', views.generate_client_context,
          name='generate_weekly_context'),
     path('manual-generate-weekly-context/', views.manual_generate_client_context,
