@@ -88,6 +88,12 @@ class TrendsDiscoveryService:
             }
         }
 
+        # Validar sector
+        if not sector or not sector.strip():
+            logger.warning("Empty sector provided, returning empty trends")
+            result['discovery_metadata']['error'] = 'empty_sector'
+            return result
+
         # 1. Buscar tendências gerais do Brasil
         general_trends = self._discover_general_trends()
         result['general_trends'] = general_trends
@@ -153,58 +159,66 @@ class TrendsDiscoveryService:
         Returns:
             Lista de tendências do setor validadas
         """
-        validated_trends = []
-
         try:
-            # Buscar queries relacionadas ao setor
             related_queries = self.google_trends.get_related_queries(
                 keyword=sector,
                 timeframe='today 3-m',
                 geo='BR'
             )
 
-            # Processar queries em crescimento (mais relevantes)
-            rising_queries = related_queries.get('rising', [])
-            for query_data in rising_queries[:MAX_TRENDS_PER_CATEGORY]:
-                query = query_data.get('query', '')
-                if not query:
-                    continue
+            # Processar queries em crescimento primeiro
+            validated_trends = self._process_queries_to_trends(
+                queries=related_queries.get('rising', []),
+                sector=sector,
+                existing_trends=[]
+            )
 
-                validated = self._validate_trend_with_sources(
-                    topic=query,
-                    context_keywords=[sector],
-                    growth_score=query_data.get('value', 0)
-                )
-                if validated:
-                    validated_trends.append(validated)
-
-            # Se não temos suficientes, pegar das top queries também
+            # Completar com top queries se necessário
             if len(validated_trends) < MAX_TRENDS_PER_CATEGORY:
-                top_queries = related_queries.get('top', [])
-                for query_data in top_queries:
-                    if len(validated_trends) >= MAX_TRENDS_PER_CATEGORY:
-                        break
-
-                    query = query_data.get('query', '')
-                    if not query:
-                        continue
-
-                    # Verificar se já não está na lista
-                    if any(t.get('topic') == query for t in validated_trends):
-                        continue
-
-                    validated = self._validate_trend_with_sources(
-                        topic=query,
-                        context_keywords=[sector],
-                        growth_score=query_data.get('value', 0)
+                validated_trends.extend(
+                    self._process_queries_to_trends(
+                        queries=related_queries.get('top', []),
+                        sector=sector,
+                        existing_trends=validated_trends,
+                        max_count=MAX_TRENDS_PER_CATEGORY - len(validated_trends)
                     )
-                    if validated:
-                        validated_trends.append(validated)
+                )
+
+            return validated_trends
 
         except Exception as e:
             logger.error(f"Error discovering sector trends for '{sector}': {e}")
+            return []
 
-        return validated_trends
+    def _process_queries_to_trends(
+        self,
+        queries: List[Dict],
+        sector: str,
+        existing_trends: List[Dict],
+        max_count: int = MAX_TRENDS_PER_CATEGORY
+    ) -> List[Dict[str, Any]]:
+        """Processa lista de queries e retorna tendências validadas."""
+        validated = []
+        existing_topics = {t.get('topic') for t in existing_trends}
+
+        for query_data in queries[:max_count * 2]:  # Processar mais para compensar filtros
+            if len(validated) >= max_count:
+                break
+
+            query = query_data.get('query', '')
+            if not query or query in existing_topics:
+                continue
+
+            trend = self._validate_trend_with_sources(
+                topic=query,
+                context_keywords=[sector],
+                growth_score=query_data.get('value', 0)
+            )
+            if trend:
+                validated.append(trend)
+                existing_topics.add(query)
+
+        return validated
 
     def _discover_rising_topics(self, sector: str) -> List[Dict[str, Any]]:
         """
@@ -377,9 +391,6 @@ class TrendsDiscoveryService:
         """
         Enriquece uma oportunidade com dados de tendências descobertas.
 
-        Verifica se a oportunidade está alinhada com tendências reais
-        e ajusta seu score baseado em dados verificáveis.
-
         Args:
             opportunity: Oportunidade gerada pela IA
             discovered_trends: Tendências descobertas para o setor
@@ -387,11 +398,23 @@ class TrendsDiscoveryService:
         Returns:
             Oportunidade enriquecida com dados de tendências
         """
-        title = opportunity.get('titulo_ideia', '')
-        title_lower = title.lower()
+        title_lower = opportunity.get('titulo_ideia', '').lower()
+        matching_trend = self._find_matching_trend(title_lower, discovered_trends)
 
-        # Verificar se a oportunidade está alinhada com alguma tendência
-        matching_trend = None
+        enriched = opportunity.copy()
+        if matching_trend:
+            self._apply_trend_bonus(enriched, matching_trend)
+        else:
+            self._apply_trend_penalty(enriched)
+
+        return enriched
+
+    def _find_matching_trend(
+        self,
+        title_lower: str,
+        discovered_trends: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Encontra tendência que corresponde ao título."""
         all_trends = (
             discovered_trends.get('general_trends', []) +
             discovered_trends.get('sector_trends', []) +
@@ -401,28 +424,23 @@ class TrendsDiscoveryService:
         for trend in all_trends:
             trend_topic = trend.get('topic', '').lower()
             if trend_topic and trend_topic in title_lower:
-                matching_trend = trend
-                break
+                return trend
+        return None
 
-        enriched = opportunity.copy()
+    def _apply_trend_bonus(self, enriched: Dict, matching_trend: Dict) -> None:
+        """Aplica bonus por estar alinhada com tendência verificada."""
+        enriched['trend_validated'] = True
+        enriched['trend_sources'] = matching_trend.get('sources', [])
+        enriched['trend_relevance_score'] = matching_trend.get('relevance_score', 0)
 
-        if matching_trend:
-            # Oportunidade alinhada com tendência real
-            enriched['trend_validated'] = True
-            enriched['trend_sources'] = matching_trend.get('sources', [])
-            enriched['trend_relevance_score'] = matching_trend.get('relevance_score', 0)
+        current_score = enriched.get('score', 50)
+        bonus = min(matching_trend.get('relevance_score', 0) // 5, 10)
+        enriched['score'] = min(current_score + bonus, 100)
 
-            # Bonus no score por estar alinhada com tendência verificada
-            current_score = enriched.get('score', 50)
-            bonus = min(matching_trend.get('relevance_score', 0) // 5, 10)
-            enriched['score'] = min(current_score + bonus, 100)
-        else:
-            # Oportunidade não alinhada - penalizar levemente
-            enriched['trend_validated'] = False
-            enriched['trend_sources'] = []
+    def _apply_trend_penalty(self, enriched: Dict) -> None:
+        """Aplica penalidade por não ter tendência verificada."""
+        enriched['trend_validated'] = False
+        enriched['trend_sources'] = []
 
-            # Penalidade leve por não ter tendência verificada
-            current_score = enriched.get('score', 50)
-            enriched['score'] = max(current_score - 5, 0)
-
-        return enriched
+        current_score = enriched.get('score', 50)
+        enriched['score'] = max(current_score - 5, 0)

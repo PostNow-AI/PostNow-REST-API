@@ -15,7 +15,7 @@ Uso:
 """
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from pytrends.request import TrendReq
 from pytrends.exceptions import TooManyRequestsError
@@ -54,12 +54,12 @@ class GoogleTrendsService:
     def pytrends(self) -> TrendReq:
         """Lazy initialization do cliente pytrends."""
         if self._pytrends is None:
+            # Nota: Não usar retries/backoff_factor pois causam incompatibilidade
+            # com versões mais recentes do urllib3 (method_whitelist deprecated)
             self._pytrends = TrendReq(
                 hl=self.language,
                 tz=self.timezone_offset,
                 timeout=(10, 25),  # (connect, read) timeout
-                retries=2,
-                backoff_factor=0.1,
             )
         return self._pytrends
 
@@ -72,7 +72,7 @@ class GoogleTrendsService:
             time.sleep(sleep_time)
         GoogleTrendsService._last_request_time = time.time()
 
-    def _execute_with_retry(self, func: callable, *args, **kwargs) -> Any:
+    def _execute_with_retry(self, func: Callable, *args, **kwargs) -> Any:
         """
         Executa uma função com retry em caso de rate limiting.
 
