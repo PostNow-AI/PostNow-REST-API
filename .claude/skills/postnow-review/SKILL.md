@@ -1,6 +1,8 @@
 ---
 name: postnow-review
 description: Revisa código seguindo padrões do CTO PostNow (MatheusBlanco). Use ANTES de criar PRs para evitar revisões.
+context: fork
+agent: Explore
 allowed-tools: Read, Grep, Glob
 ---
 
@@ -8,79 +10,61 @@ allowed-tools: Read, Grep, Glob
 
 Reviso o código seguindo os padrões do CTO para evitar feedback nos PRs.
 
-## Como usar
+## Arquivos a revisar
 
-```
-/postnow-review [arquivo ou diretório]
-```
+$ARGUMENTS
 
-Exemplos:
-- `/postnow-review` - Revisa arquivos modificados (git diff)
-- `/postnow-review views.py` - Revisa arquivo específico
-- `/postnow-review app/` - Revisa diretório
+Se nenhum arquivo foi especificado, analiso os arquivos modificados no git.
 
-## O que verifico
+## Checklist de Verificação
 
-### 1. Organização de Código
-- [ ] Funções em views.py têm < 50 linhas?
-- [ ] Funções auxiliares estão em `utils/`?
-- [ ] Lógica de negócio está em `services/`?
-- [ ] Views são enxutas (recebe, processa, retorna)?
+Leia o arquivo [checklist.md](checklist.md) para ver todos os itens.
 
-### 2. Padrões Django
-- [ ] Import do User: `from django.contrib.auth.models import User`?
-- [ ] URLs são semânticas (não genéricas como `/api/data/`)?
+### Resumo do checklist:
 
-### 3. Código Limpo
-- [ ] Imports não utilizados removidos?
-- [ ] Sem `except: pass` sem comentário?
-- [ ] Imports organizados (stdlib, django, third-party, local)?
+1. **Organização de Código**
+   - Funções em views.py têm < 50 linhas?
+   - Funções auxiliares estão em `utils/`?
+   - Lógica de negócio está em `services/`?
 
-### 4. Documentação
-- [ ] Não criou doc por PR/bugfix?
-- [ ] Atualizou doc existente ao invés de criar novo?
+2. **Padrões Django**
+   - Import do User: `from django.contrib.auth.models import User`?
+   - URLs são semânticas?
 
-## Processo de Review
+3. **Código Limpo**
+   - Imports não utilizados removidos?
+   - Sem `except: pass` sem comentário?
+   - Imports organizados?
 
-1. Identifico os arquivos a revisar (modificados ou especificados)
+4. **Documentação**
+   - Não criou doc por PR/bugfix?
+
+## Processo
+
+1. Identifico os arquivos a revisar
 2. Leio cada arquivo
 3. Verifico cada item do checklist
-4. Reporto problemas encontrados com:
-   - Arquivo e linha
+4. Reporto problemas com:
+   - Arquivo e linha exata
    - Problema específico
-   - Sugestão de correção
-5. Sugiro uso de outras skills quando aplicável:
-   - `/postnow-extract` para mover funções
-   - `/postnow-imports` para corrigir imports
-
-## Exemplo de Output
-
-```
-## Review: app/views.py
-
-### Problemas encontrados
-
-1. **Linha 45-120**: Função `create_post` muito grande (75 linhas)
-   - Extrair lógica para `services/post_service.py`
-   - Use: `/postnow-extract create_post services`
-
-2. **Linha 12**: Import do User incorreto
-   - Atual: `from django.conf import settings`
-   - Correto: `from django.contrib.auth.models import User`
-   - Use: `/postnow-imports app/views.py`
-
-3. **Linha 30-42**: Função auxiliar `format_date` em views
-   - Mover para `utils/date_utils.py`
-   - Use: `/postnow-extract format_date utils`
-
-### Checklist
-- [x] URLs semânticas
-- [ ] Funções < 50 linhas (1 violação)
-- [ ] Helpers em utils (1 violação)
-- [ ] Import User correto (1 violação)
-```
+   - Comando para corrigir (ex: `/postnow-extract func utils`)
 
 ## Referência
 
-Consulte as regras completas em:
-`/postnow-review/../cto-standards/rules.md`
+Regras completas em [../cto-standards/rules.md](../cto-standards/rules.md)
+
+## Output esperado
+
+```markdown
+## Review: [arquivo]
+
+### Problemas encontrados
+
+1. **Linha X**: [problema]
+   - Correção: [sugestão]
+   - Comando: `/postnow-extract [func] [destino]`
+
+### Checklist
+- [x] URLs semânticas
+- [ ] Funções < 50 linhas (N violações)
+```
