@@ -1,9 +1,6 @@
 from decimal import Decimal
 
-import stripe
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -81,46 +78,6 @@ class CreditService:
 
             if not active_subscription:
                 return False
-
-            # Para assinaturas com Stripe, verificar status no Stripe (source of truth)
-            if active_subscription.stripe_subscription_id:
-                cache_key = f"stripe_sub_status:{active_subscription.stripe_subscription_id}"
-                cached_status = cache.get(cache_key)
-                
-                # If cached, use cached status
-                if cached_status is not None:
-                    if cached_status == 'inactive':
-                        active_subscription.status = 'expired'
-                        active_subscription.end_date = timezone.now()
-                        active_subscription.save()
-                        return False
-                    # cached_status == 'active', continue with normal flow
-                else:
-                    # No cache, check Stripe API
-                    try:
-                        stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
-                        stripe_sub = stripe.Subscription.retrieve(
-                            active_subscription.stripe_subscription_id
-                        )
-                        
-                        # Check if Stripe subscription is actually inactive
-                        if stripe_sub.status in ['canceled', 'incomplete_expired', 'past_due', 'unpaid']:
-                            # Stripe says it's cancelled - update local status
-                            active_subscription.status = 'expired'
-                            active_subscription.end_date = timezone.now()
-                            active_subscription.save()
-                            
-                            # Cache inactive status for 5 minutes
-                            cache.set(cache_key, 'inactive', 300)
-                            return False
-                        
-                        # Stripe subscription is active - cache this result
-                        cache.set(cache_key, 'active', 300)  # Cache for 5 minutes
-                        
-                    except stripe.error.StripeError as e:
-                        # If Stripe API fails, log and continue with local validation
-                        print(f"[STRIPE API ERROR] Failed to validate subscription {active_subscription.stripe_subscription_id}: {str(e)}")
-                        # Don't cache errors, allow retry on next validation
 
             # For lifetime subscriptions or if Stripe check passed, validate subscription is active
             # Note: end_date is now only metadata (shows when cancelled), not used for validation
@@ -242,19 +199,19 @@ class CreditService:
         elif plan_interval == 'quarterly':
             # Reset a cada 3 meses
             months_diff = (current_time.year - last_reset.year) * \
-                12 + (current_time.month - last_reset.month)
+                          12 + (current_time.month - last_reset.month)
             return months_diff >= 3
 
         elif plan_interval == 'semester':
             # Reset a cada 6 meses
             months_diff = (current_time.year - last_reset.year) * \
-                12 + (current_time.month - last_reset.month)
+                          12 + (current_time.month - last_reset.month)
             return months_diff >= 6
 
         elif plan_interval == 'yearly':
             # Reset anual - verifica se passou um ano completo
             months_diff = (current_time.year - last_reset.year) * \
-                12 + (current_time.month - last_reset.month)
+                          12 + (current_time.month - last_reset.month)
             return months_diff >= 12
 
         # Default: reset mensal para casos não cobertos
@@ -365,7 +322,7 @@ class CreditService:
         # Atualiza uso mensal se for crédito mensal
         if user_credits.monthly_credits_allocated > 0:
             remaining_monthly = user_credits.monthly_credits_allocated - \
-                user_credits.monthly_credits_used
+                                user_credits.monthly_credits_used
             if remaining_monthly >= amount:
                 user_credits.monthly_credits_used += amount
 
@@ -571,12 +528,12 @@ class CreditService:
             user=user,
             payment_requires_action=True
         ).first()
-        
+
         if pending_sub:
             time_pending = None
             if pending_sub.payment_pending_since:
                 time_pending = timezone.now() - pending_sub.payment_pending_since
-            
+
             return {
                 'has_pending_payment': True,
                 'subscription_id': pending_sub.id,
@@ -588,7 +545,7 @@ class CreditService:
                 'can_use_system': False,
                 'required_action': 'complete_payment'
             }
-        
+
         return {
             'has_pending_payment': False,
             'can_use_system': True
