@@ -50,9 +50,18 @@ class AIPromptService:
         """Set the user for whom the prompts will be generated."""
         self.user = user
 
-    def build_context_prompts(self) -> list[str]:
-        """Build context prompts based on the user's creator profile."""
+    def build_context_prompts(self, discovered_trends: dict = None) -> list[str]:
+        """Build context prompts based on the user's creator profile.
+
+        Args:
+            discovered_trends: Tendências pré-descobertas via Google Trends (opcional).
+                              Quando fornecido, a IA deve PRIORIZAR essas tendências
+                              em vez de "inventar" novas.
+        """
         profile_data = get_creator_profile_data(self.user)
+
+        # Formatar tendências descobertas para inclusão no prompt
+        trends_section = self._format_discovered_trends_for_prompt(discovered_trends)
 
         return [
             """
@@ -61,7 +70,6 @@ class AIPromptService:
             🏢 DADOS DO ONBOARDING DA EMPRESA
             - Nome da empresa: {profile_data['business_name']}
             - Site da empresa: {profile_data['business_website']}
-            - Nome da empresa: {profile_data['business_website']}
 
             - Descrição do negócio: {profile_data['business_description']}
             - Setor / nicho de mercado: {profile_data['specialization']}
@@ -70,7 +78,7 @@ class AIPromptService:
             - Interesses do público: {profile_data['target_interests']}
             - Concorrentes conhecidos: {profile_data['main_competitors']}
             - Perfis de referência: {profile_data['reference_profiles']}
-
+{trends_section}
             ============================================================
             📌 TAREFA
             Realizar pesquisa online (via web.search) e gerar um
@@ -82,6 +90,8 @@ class AIPromptService:
             3. Se algo não for encontrado → escrever: "sem dados disponíveis".
             4. Priorizar fontes brasileiras se a localização for {profile_data['business_location']} (BR).
             5. Manter linguagem neutra, objetiva e sem opiniões.
+            6. IMPORTANTE: Na seção "tendencias", PRIORIZE os temas já validados
+               fornecidos acima (se houver). Use as fontes já validadas.
 
             ============================================================
 
@@ -122,7 +132,7 @@ class AIPromptService:
                 "datas_relevantes": ["Data 1", "Data 2"],
                 "eventos_locais": ["Evento 1", "Evento 2"],
                 "fontes": ["URL 1", "URL 2"]
-              }},          
+              }},
 
               "marca": {{
                 "presenca_online": "Resumo factual das aparições online.",
@@ -138,6 +148,68 @@ class AIPromptService:
             ============================================================
 
             """]
+
+    def _format_discovered_trends_for_prompt(self, discovered_trends: dict = None) -> str:
+        """
+        Formata tendências descobertas para inclusão no prompt.
+
+        Args:
+            discovered_trends: Dict com tendências do TrendsDiscoveryService
+
+        Returns:
+            String formatada para inclusão no prompt, ou string vazia se não houver tendências
+        """
+        if not discovered_trends or discovered_trends.get('validated_count', 0) == 0:
+            return ""
+
+        sections = []
+        sections.append("""
+            ============================================================
+            📊 TENDÊNCIAS PRÉ-VALIDADAS (Google Trends + fontes verificadas)
+            IMPORTANTE: Use PRIORITARIAMENTE estas tendências na seção "tendencias"
+            do output. Elas já foram validadas com fontes reais.
+            ============================================================""")
+
+        # Tendências gerais do Brasil
+        general_trends = discovered_trends.get('general_trends', [])
+        if general_trends:
+            sections.append("\n            🌍 TENDÊNCIAS GERAIS DO BRASIL:")
+            for trend in general_trends[:5]:
+                topic = trend.get('topic', '')
+                sources = trend.get('sources', [])
+                relevance = trend.get('relevance_score', 0)
+                sections.append(f"            - {topic} (relevância: {relevance}/100)")
+                if sources:
+                    source_urls = [s.get('url', '') for s in sources[:2] if s.get('url')]
+                    if source_urls:
+                        sections.append(f"              Fontes: {', '.join(source_urls)}")
+
+        # Tendências específicas do setor
+        sector_trends = discovered_trends.get('sector_trends', [])
+        if sector_trends:
+            sections.append("\n            🎯 TENDÊNCIAS DO SETOR:")
+            for trend in sector_trends[:5]:
+                topic = trend.get('topic', '')
+                sources = trend.get('sources', [])
+                relevance = trend.get('relevance_score', 0)
+                sections.append(f"            - {topic} (relevância: {relevance}/100)")
+                if sources:
+                    source_urls = [s.get('url', '') for s in sources[:2] if s.get('url')]
+                    if source_urls:
+                        sections.append(f"              Fontes: {', '.join(source_urls)}")
+
+        # Tópicos em crescimento
+        rising_topics = discovered_trends.get('rising_topics', [])
+        if rising_topics:
+            sections.append("\n            📈 TÓPICOS EM CRESCIMENTO:")
+            for trend in rising_topics[:5]:
+                topic = trend.get('topic', '')
+                growth = trend.get('growth_score', 0)
+                sections.append(f"            - {topic} (crescimento: +{growth}%)")
+
+        sections.append("")  # Linha em branco no final
+
+        return '\n'.join(sections)
 
     def build_content_prompts(self, context: dict, posts_quantity: str) -> list[str]:
         """Build content generation prompts based on the user's creator profile."""
