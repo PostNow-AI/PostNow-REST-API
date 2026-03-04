@@ -55,8 +55,9 @@ class AIPromptService:
 
         Args:
             discovered_trends: Tendências pré-descobertas via Google Trends (opcional).
-                              Quando fornecido, a IA deve PRIORIZAR essas tendências
-                              em vez de "inventar" novas.
+                              Quando fornecido, a IA DEVE usar EXCLUSIVAMENTE essas
+                              tendências - NÃO pode inventar ou sugerir outras.
+                              Isso garante que todo conteúdo seja baseado em dados reais.
         """
         profile_data = get_creator_profile_data(self.user)
 
@@ -90,8 +91,12 @@ class AIPromptService:
             3. Se algo não for encontrado → escrever: "sem dados disponíveis".
             4. Priorizar fontes brasileiras se a localização for {profile_data['business_location']} (BR).
             5. Manter linguagem neutra, objetiva e sem opiniões.
-            6. IMPORTANTE: Na seção "tendencias", PRIORIZE os temas já validados
-               fornecidos acima (se houver). Use as fontes já validadas.
+            6. REGRA CRÍTICA - TENDÊNCIAS:
+               - Se tendências pré-validadas foram fornecidas acima, você DEVE usar
+                 SOMENTE essas tendências na seção "tendencias" do output.
+               - NÃO invente temas novos. Use APENAS os temas da lista fornecida.
+               - As fontes já estão validadas - use-as diretamente.
+               - Se não houver tendências pré-validadas, pesquise normalmente.
 
             ============================================================
 
@@ -122,7 +127,10 @@ class AIPromptService:
               }},
 
               "tendencias": {{
-                "temas_populares": ["Tema 1", "Tema 2"],
+                "temas_populares": [
+                  {{"tema": "Tema 1", "trend_source": "tendência original da lista"}},
+                  {{"tema": "Tema 2", "trend_source": "tendência original da lista"}}
+                ],
                 "hashtags": ["#hashtag1", "#hashtag2"],
                 "palavras_chave": ["keyword1", "keyword2"],
                 "fontes": ["URL 1", "URL 2"]
@@ -166,8 +174,14 @@ class AIPromptService:
         sections.append("""
             ============================================================
             📊 TENDÊNCIAS PRÉ-VALIDADAS (Google Trends + fontes verificadas)
-            IMPORTANTE: Use PRIORITARIAMENTE estas tendências na seção "tendencias"
-            do output. Elas já foram validadas com fontes reais.
+
+            ⚠️ REGRA OBRIGATÓRIA - LEIA COM ATENÇÃO:
+            Você DEVE usar EXCLUSIVAMENTE as tendências listadas abaixo.
+            NÃO invente ou sugira temas que não estejam nesta lista.
+            Cada item da seção "tendencias" DEVE vir desta lista.
+            Se precisar de mais temas, adapte os existentes ao contexto do setor.
+
+            PROIBIDO: Criar temas novos que não estão na lista abaixo.
             ============================================================""")
 
         # Tendências gerais do Brasil
@@ -206,6 +220,42 @@ class AIPromptService:
                 topic = trend.get('topic', '')
                 growth = trend.get('growth_score', 0)
                 sections.append(f"            - {topic} (crescimento: +{growth}%)")
+
+        # Few-shot examples para guiar a IA
+        sections.append("""
+            ============================================================
+            📚 EXEMPLOS DE COMO USAR AS TENDÊNCIAS (Few-shot):
+
+            EXEMPLO 1:
+            Tendência fornecida: "IA generativa empresas"
+            Setor do usuário: "Marketing Digital"
+            Resultado esperado:
+            {
+              "tema": "IA generativa no marketing digital",
+              "trend_source": "IA generativa empresas"
+            }
+
+            EXEMPLO 2:
+            Tendência fornecida: "ChatGPT"
+            Setor do usuário: "Recursos Humanos"
+            Resultado esperado:
+            {
+              "tema": "ChatGPT para recrutamento e seleção",
+              "trend_source": "ChatGPT"
+            }
+
+            EXEMPLO 3:
+            Tendência fornecida: "automação processos"
+            Setor do usuário: "E-commerce"
+            Resultado esperado:
+            {
+              "tema": "Automação de atendimento no e-commerce",
+              "trend_source": "automação processos"
+            }
+
+            REGRA: Sempre adapte a tendência ao setor do usuário, mas o
+            "trend_source" DEVE ser exatamente uma das tendências listadas acima.
+            ============================================================""")
 
         sections.append("")  # Linha em branco no final
 

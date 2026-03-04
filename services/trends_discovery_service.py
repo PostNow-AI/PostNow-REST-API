@@ -444,3 +444,77 @@ class TrendsDiscoveryService:
 
         current_score = enriched.get('score', 50)
         enriched['score'] = max(current_score - 5, 0)
+
+    def validate_trend_sources(
+        self,
+        generated_trends: List[Dict[str, Any]],
+        discovered_trends: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Valida se os trend_sources gerados pela IA correspondem às tendências reais.
+
+        Args:
+            generated_trends: Lista de temas gerados pela IA com trend_source
+            discovered_trends: Tendências originais do Google Trends
+
+        Returns:
+            Dict com estatísticas de validação e lista de temas validados/inválidos
+        """
+        # Coletar todos os tópicos válidos
+        valid_topics = self._get_all_trend_topics(discovered_trends)
+        valid_topics_lower = {t.lower() for t in valid_topics}
+
+        validated = []
+        invalid = []
+
+        for trend in generated_trends:
+            trend_source = trend.get('trend_source', '').lower()
+            tema = trend.get('tema', '')
+
+            # Verificar se o trend_source está na lista de tendências válidas
+            is_valid = any(
+                trend_source in valid_topic or valid_topic in trend_source
+                for valid_topic in valid_topics_lower
+            )
+
+            if is_valid:
+                validated.append({'tema': tema, 'trend_source': trend_source})
+            else:
+                invalid.append({
+                    'tema': tema,
+                    'trend_source': trend_source,
+                    'reason': 'trend_source não encontrado nas tendências fornecidas'
+                })
+                logger.warning(
+                    f"Trend source inválido: '{trend_source}' não está nas tendências"
+                )
+
+        validation_rate = len(validated) / len(generated_trends) if generated_trends else 0
+
+        return {
+            'total': len(generated_trends),
+            'validated_count': len(validated),
+            'invalid_count': len(invalid),
+            'validation_rate': round(validation_rate * 100, 1),
+            'validated': validated,
+            'invalid': invalid,
+            'passed': validation_rate >= 0.8  # 80% mínimo
+        }
+
+    def _get_all_trend_topics(self, discovered_trends: Dict[str, Any]) -> List[str]:
+        """Extrai todos os tópicos de tendências em uma lista."""
+        topics = []
+
+        for trend in discovered_trends.get('general_trends', []):
+            if trend.get('topic'):
+                topics.append(trend['topic'])
+
+        for trend in discovered_trends.get('sector_trends', []):
+            if trend.get('topic'):
+                topics.append(trend['topic'])
+
+        for trend in discovered_trends.get('rising_topics', []):
+            if trend.get('topic'):
+                topics.append(trend['topic'])
+
+        return topics
