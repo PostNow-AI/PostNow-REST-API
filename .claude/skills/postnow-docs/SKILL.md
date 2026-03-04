@@ -3,6 +3,7 @@ name: postnow-docs
 description: Atualiza documentação existente. NÃO cria docs por PR/bugfix. Use para manter docs organizados.
 argument-hint: <funcionalidade>
 disable-model-invocation: true
+allowed-tools: Read, Edit, Write, Grep, Glob
 ---
 
 # PostNow Docs

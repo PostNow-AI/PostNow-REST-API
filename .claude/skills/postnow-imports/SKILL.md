@@ -2,6 +2,8 @@
 name: postnow-imports
 description: Corrige imports Django e remove não utilizados. Use para organizar imports conforme padrões.
 argument-hint: [arquivo.py]
+disable-model-invocation: true
+allowed-tools: Read, Edit, Grep, Glob
 ---
 
 # PostNow Imports

@@ -1,6 +1,7 @@
 ---
 name: postnow-review
 description: Revisa código seguindo padrões do CTO PostNow (MatheusBlanco). Use ANTES de criar PRs para evitar revisões.
+argument-hint: [arquivo ou diretório]
 context: fork
 agent: Explore
 allowed-tools: Read, Grep, Glob
@@ -14,7 +15,15 @@ Reviso o código seguindo os padrões do CTO para evitar feedback nos PRs.
 
 $ARGUMENTS
 
-Se nenhum arquivo foi especificado, analiso os arquivos modificados no git.
+Se nenhum arquivo foi especificado, analiso os arquivos modificados listados abaixo.
+
+## Contexto Git (automático)
+
+**Arquivos modificados:**
+!`git diff --name-only 2>/dev/null || echo "Nenhum arquivo modificado"`
+
+**Branch atual:**
+!`git branch --show-current 2>/dev/null || echo "N/A"`
 
 ## Checklist de Verificação
 

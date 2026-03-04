@@ -3,6 +3,7 @@ name: postnow-extract
 description: Extrai funções de views para utils ou services. Use quando CTO pedir para mover código.
 argument-hint: <função> <destino: utils|services>
 disable-model-invocation: true
+allowed-tools: Read, Edit, Write, Grep, Glob
 ---
 
 # PostNow Extract
