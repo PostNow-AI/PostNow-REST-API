@@ -21,7 +21,7 @@ on:
         type: string
 
 env:
-  API_BASE_URL: ${{ secrets.VERCEL_API_URL }}
+  API_BASE_URL: ${{ secrets.API_BASE_URL }}
 
 jobs:
   generate-opportunities:
