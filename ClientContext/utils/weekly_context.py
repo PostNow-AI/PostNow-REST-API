@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 
 def generate_weekly_context_email_template(context_data, user_data):
