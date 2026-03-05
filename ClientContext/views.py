@@ -3,10 +3,8 @@ import logging
 import os
 import secrets
 
-from AuditSystem.services import AuditService
 from django.core.cache import cache
 from django.views.decorators.csrf import csrf_exempt
-from IdeaBank.serializers import UserSerializer
 from rest_framework import permissions, status
 from rest_framework.decorators import (
     api_view,
@@ -15,6 +13,10 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
+from AuditSystem.services import AuditService
+from IdeaBank.serializers import UserSerializer
+from IdeaBank.services.weekly_feed_creation import WeeklyFeedCreationService
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,7 @@ def _validate_batch_number(batch_str: str) -> int:
         return batch
     except (ValueError, TypeError):
         return 1
+
 
 from ClientContext.models import ClientContext
 from ClientContext.services.context_enrichment_service import ContextEnrichmentService
@@ -357,6 +360,10 @@ def generate_single_client_context(request):
                     'failed_steps': failed_steps,
                 }
             )
+
+            weekly_feed_creation = WeeklyFeedCreationService()
+
+            loop.run_until_complete(weekly_feed_creation.process_single_user(serialized_user))
 
             return Response({
                 'status': overall_status,
