@@ -24,12 +24,11 @@ class AiService:
         self.image_models = [
             'gemini-3.1-flash-image-preview',
             'gemini-3.1-flash-image-preview',
-            'gemini-2.5-flash-image',
-            'gemini-2.5-flash-image',
-            'gemini-2.5-flash-image',
-            'gemini-2.5-flash-image',
             'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview', ]
+            'gemini-3-pro-image-preview',
+            'gemini-3-pro-image-preview',
+            'gemini-3-pro-image-preview',
+        ]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
         self.client = genai.Client(api_key=self.api_key)
         self.generate_text_config = types.GenerateContentConfig(
