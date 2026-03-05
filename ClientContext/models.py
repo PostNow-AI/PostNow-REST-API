@@ -61,6 +61,10 @@ class ClientContext(models.Model):
     # Nota: Sem default para evitar confusão entre NULL e {} nas queries
     tendencies_data = models.JSONField(blank=True, null=True)
 
+    # Tendências descobertas e validadas (Fase 0 - antes da geração de contexto)
+    # Armazena tendências reais do Google Trends validadas com fontes
+    discovered_trends = models.JSONField(blank=True, null=True)
+
     # Status do enriquecimento (Fase 2)
     ENRICHMENT_STATUS_CHOICES = [
         ('pending', 'Pending'),
