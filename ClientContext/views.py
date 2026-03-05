@@ -2,10 +2,8 @@ import asyncio
 import os
 import secrets
 
-from AuditSystem.services import AuditService
 from django.contrib.auth.models import User
 from django.views.decorators.csrf import csrf_exempt
-from IdeaBank.serializers import UserSerializer
 from rest_framework import permissions, status
 from rest_framework.decorators import (
     api_view,
@@ -14,6 +12,10 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
+from AuditSystem.services import AuditService
+from IdeaBank.serializers import UserSerializer
+from IdeaBank.services.weekly_feed_creation import WeeklyFeedCreationService
 
 # Token secreto para endpoints de batch (definido no GitHub Secrets como CRON_SECRET)
 BATCH_API_TOKEN = os.getenv('CRON_SECRET', '')
@@ -47,6 +49,7 @@ def _validate_batch_number(batch_str: str) -> int:
         return batch
     except (ValueError, TypeError):
         return 1
+
 
 from ClientContext.models import ClientContext
 from ClientContext.services.context_enrichment_service import ContextEnrichmentService
@@ -219,9 +222,17 @@ def generate_single_client_context(request):
             context_data = ClientContext.objects.filter(
                 user_id=user_id
             ).select_related('user').values(
-                'id', 'user__id', 'user__email', 'user__first_name', 'market_panorama', 'market_tendencies', 'market_challenges', 'market_sources', 'competition_main', 'competition_strategies', 'competition_opportunities', 'competition_sources', 'target_audience_profile', 'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources', 'tendencies_popular_themes', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources', 'tendencies_data', 'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources', 'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources', 'created_at', 'updated_at', 'user_id', 'weekly_context_error', 'weekly_context_error_date', 'context_enrichment_status', 'context_enrichment_date', 'context_enrichment_error'
+                'id', 'user__id', 'user__email', 'user__first_name', 'market_panorama', 'market_tendencies',
+                'market_challenges', 'market_sources', 'competition_main', 'competition_strategies',
+                'competition_opportunities', 'competition_sources', 'target_audience_profile',
+                'target_audience_behaviors', 'target_audience_interests', 'target_audience_sources',
+                'tendencies_popular_themes', 'tendencies_hashtags', 'tendencies_keywords', 'tendencies_sources',
+                'tendencies_data', 'seasonal_relevant_dates', 'seasonal_local_events', 'seasonal_sources',
+                'brand_online_presence', 'brand_reputation', 'brand_communication_style', 'brand_sources', 'created_at',
+                'updated_at', 'user_id', 'weekly_context_error', 'weekly_context_error_date',
+                'context_enrichment_status', 'context_enrichment_date', 'context_enrichment_error'
             )
-            
+
             if context_data.exists():
                 loop.run_until_complete(mail_context_service.send_weekly_context_email(
                     user_data, context_data[0])
@@ -233,6 +244,11 @@ def generate_single_client_context(request):
                 status='success',
                 resource_type='WeeklyContextGeneration',
             )
+
+            weekly_feed_creation = WeeklyFeedCreationService()
+
+            loop.run_until_complete(weekly_feed_creation.process_single_user(serialized_user))
+
             return Response(result, status=status.HTTP_200_OK)
         finally:
             loop.close()
