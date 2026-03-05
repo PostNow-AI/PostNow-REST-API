@@ -3,35 +3,11 @@ Template do e-mail de Oportunidades de Conteúdo (Segunda-feira).
 Contém apenas as oportunidades enriquecidas da Fase 2.
 Estilo visual unificado com o e-mail de Inteligência de Mercado.
 """
-import html
 import os
 from datetime import datetime
 
-
-def _escape(text) -> str:
-    """Sanitiza texto para prevenir XSS."""
-    if text is None:
-        return ''
-    return html.escape(str(text))
-
-
-def _get_user_name(user_data: dict) -> str:
-    """
-    Extrai o nome do usuário de forma robusta, tentando múltiplas chaves.
-    """
-    # Tentar várias chaves possíveis em ordem de prioridade
-    name = (
-        user_data.get('greeting_name') or
-        user_data.get('user_name') or
-        user_data.get('user__first_name') or
-        user_data.get('first_name') or
-        user_data.get('name') or
-        ''
-    )
-    # Se ainda vazio ou None, usar fallback
-    if not name or name.strip() == '':
-        return 'Usuário'
-    return _escape(name.strip())
+from ClientContext.utils.email_helpers import escape_html as _escape
+from ClientContext.utils.email_helpers import get_user_name as _get_user_name
 
 
 # Estilo unificado PostNow

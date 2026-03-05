@@ -590,7 +590,7 @@ Eles já foram validados com fontes reais.
                         item['trend_validated'] = False
             return tendencies_data
 
-        # Coletar todos os tópicos de tendências
+        # Coletar todos os tópicos de tendências indexados por topic
         all_trend_topics = []
         for trend_list in ['general_trends', 'sector_trends', 'rising_topics']:
             trends = discovered_trends.get(trend_list, [])
@@ -613,12 +613,11 @@ Eles já foram validados com fontes reais.
                 description = item.get('descricao', '').lower()
                 content = f"{title} {description}"
 
-                # Verificar se está alinhada com alguma tendência
-                matching_trend = None
-                for trend in all_trend_topics:
-                    if trend['topic'] in content:
-                        matching_trend = trend
-                        break
+                # Verificar se está alinhada com alguma tendência (O(n) substring check)
+                matching_trend = next(
+                    (t for t in all_trend_topics if t['topic'] in content),
+                    None
+                )
 
                 current_score = item.get('score', 50)
 

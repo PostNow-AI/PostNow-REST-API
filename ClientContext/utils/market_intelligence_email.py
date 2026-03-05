@@ -3,49 +3,12 @@ Template de e-mail para Inteligência de Mercado (Quarta-feira).
 
 Este é um template SEPARADO do weekly_context.py.
 """
-import html
 import os
 from datetime import datetime
 
-
-def _escape(text) -> str:
-    """Sanitiza texto para prevenir XSS."""
-    if text is None:
-        return ''
-    return html.escape(str(text))
-
-
-def _format_list_as_text(data) -> str:
-    """
-    Converte uma lista Python em texto legível.
-    Se for string, retorna escapada. Se for lista, junta com ponto e vírgula.
-    """
-    if data is None:
-        return ''
-    if isinstance(data, list):
-        # Filtra itens vazios e junta com ponto e vírgula
-        items = [_escape(str(item).strip()) for item in data if item]
-        return '; '.join(items) if items else ''
-    return _escape(str(data))
-
-
-def _get_user_name(user_data: dict) -> str:
-    """
-    Extrai o nome do usuário de forma robusta, tentando múltiplas chaves.
-    """
-    # Tentar várias chaves possíveis em ordem de prioridade
-    name = (
-        user_data.get('greeting_name') or
-        user_data.get('user_name') or
-        user_data.get('user__first_name') or
-        user_data.get('first_name') or
-        user_data.get('name') or
-        ''
-    )
-    # Se ainda vazio ou None, usar fallback
-    if not name or name.strip() == '':
-        return 'Usuário'
-    return _escape(name.strip())
+from ClientContext.utils.email_helpers import escape_html as _escape
+from ClientContext.utils.email_helpers import format_list_as_text as _format_list_as_text
+from ClientContext.utils.email_helpers import get_user_name as _get_user_name
 
 
 def generate_market_intelligence_email(context_data: dict, user_data: dict) -> str:
