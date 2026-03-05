@@ -452,7 +452,7 @@ def _generate_html_report(report):
                                             Este é um relatório automático gerado pelo sistema PostNow.
                                         </p>
                                         <p style="margin: 0; color: #6a7282; font-size: 12px; font-weight: 500;">
-                                            © 2025 PostNow. Monitoramento e auditoria do sistema.
+                                            © """ + str(date.today().year) + """ PostNow. Monitoramento e auditoria do sistema.
                                         </p>
                                     </td>
                                 </tr>
