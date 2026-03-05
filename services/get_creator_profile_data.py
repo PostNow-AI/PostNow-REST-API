@@ -13,7 +13,26 @@ def get_creator_profile_data(user: User) -> dict:
     profile = CreatorProfile.objects.filter(user=user).first()
     if not profile:
         raise CreatorProfile.DoesNotExist
+
+    # Use business_name for email greeting, with safe fallbacks
+    # Priority: business_name > first_name > username prefix > 'Empreendedor'
+    # Note: strip() handles whitespace-only strings (e.g., "   " becomes "")
+    def _get_stripped(value):
+        """Return stripped value or None if empty/whitespace."""
+        if value and isinstance(value, str):
+            stripped = value.strip()
+            return stripped if stripped else None
+        return None
+
+    greeting_name = (
+        _get_stripped(profile.business_name) or
+        _get_stripped(user.first_name) or
+        _get_stripped(user.username.split('@')[0] if user.username else None) or
+        'Empreendedor'
+    )
+
     profile_data = {
+        "user_name": greeting_name,
         "business_name": profile.business_name,
         "business_phone": profile.business_phone,
         "business_website": profile.business_website,
