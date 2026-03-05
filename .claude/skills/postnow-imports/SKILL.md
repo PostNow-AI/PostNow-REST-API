@@ -19,6 +19,14 @@ Exemplos:
 - `/postnow-imports app/`
 - `/postnow-imports` (arquivos modificados no git)
 
+## Contexto Git (automático)
+
+**Arquivos Python modificados:**
+!`git diff --name-only 2>/dev/null | grep "\.py$" || echo "Nenhum arquivo .py modificado"`
+
+**Branch atual:**
+!`git branch --show-current 2>/dev/null || echo "N/A"`
+
 ## O que corrijo
 
 ### 1. Import do User

@@ -17,6 +17,17 @@ Extraio funções de views.py para o local apropriado seguindo padrões do CTO.
 
 Exemplo: `/postnow-extract format_date utils`
 
+## Contexto do Projeto (automático)
+
+**Arquivos views.py existentes:**
+!`find . -name "views.py" -not -path "./.git/*" 2>/dev/null | head -10`
+
+**Estrutura utils/ existente:**
+!`find . -type d -name "utils" -not -path "./.git/*" 2>/dev/null | head -5`
+
+**Estrutura services/ existente:**
+!`find . -type d -name "services" -not -path "./.git/*" 2>/dev/null | head -5`
+
 ## Quando usar cada destino
 
 ### `utils/` - Funções auxiliares

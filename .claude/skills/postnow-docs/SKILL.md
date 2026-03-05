@@ -30,6 +30,14 @@ Exemplo: `/postnow-docs authentication`
 - Manter documentação concisa
 - Só criar novo doc para feature completamente nova
 
+## Contexto do Projeto (automático)
+
+**Documentação existente:**
+!`ls -la docs/*.md 2>/dev/null | awk '{print $NF}' | head -15 || echo "Nenhum doc encontrado"`
+
+**README principal:**
+!`ls README.md 2>/dev/null && echo "Existe" || echo "Não existe"`
+
 ## Processo
 
 1. **Busco** documentação existente para `$ARGUMENTS`:
