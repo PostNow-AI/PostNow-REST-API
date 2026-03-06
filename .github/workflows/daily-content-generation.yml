@@ -8,6 +8,7 @@ on:
 jobs:
   generate-content:
     runs-on: ubuntu-latest
+    environment: Production # <-- Add this line
     timeout-minutes: 360   # optional: overall job cap (6h here)
 
     strategy:
@@ -20,7 +21,6 @@ jobs:
         run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/daily-content-generation/?batch=${{ matrix.batch }}"
 
       - name: Wait for staggered execution
-        timeout-minutes: 150
         run: |
           DELAY=$(( (${{ matrix.batch }} - 1) * 420 ))
           echo "Waiting $DELAY seconds before executing batch ${{ matrix.batch }}"
