@@ -23,10 +23,11 @@ class AiService:
             'gemini-3-pro-preview', ]
         self.image_models = [
             'gemini-3.1-flash-image-preview',
+            'gemini-3-pro-image-preview',
+            'gemini-2.5-flash-image',
             'gemini-3.1-flash-image-preview',
             'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview',
+            'gemini-2.5-flash-image',
             'gemini-3-pro-image-preview',
         ]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
@@ -115,7 +116,7 @@ class AiService:
                 models=self.image_models,
                 generate_function=lambda model: self._try_generate_image(
                     model, prompt_list, image_attachment, effective_config),
-                max_retries=2
+                max_retries=1
             )
             self._deduct_credits(
                 user=user, model=model, operation='image_generation',
