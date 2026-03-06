@@ -42,8 +42,8 @@ jobs:
         run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/ideabank/cron/daily-content-generation/?batch=${{ matrix.batch }}"
       - name: Wait for staggered execution
         run: |
-          # Stagger the batches by 5 minutes each
-          DELAY=$(( (${{ matrix.batch }} - 1) * 300 ))
+          # Stagger the batches by 7 minutes each
+          DELAY=$(( (${{ matrix.batch }} - 1) * 420 ))
           echo "Waiting $DELAY seconds before executing batch ${{ matrix.batch }}"
           sleep $DELAY
 
