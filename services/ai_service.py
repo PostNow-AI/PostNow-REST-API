@@ -63,7 +63,7 @@ class AiService:
                 models=self.models,
                 generate_function=lambda model: self._try_generate_text(
                     model, prompt_list, effective_config),
-                max_retries=3
+                max_retries=2
             )
             self._deduct_credits(
                 user=user, model=model, operation='text_generation',
@@ -115,7 +115,7 @@ class AiService:
                 models=self.image_models,
                 generate_function=lambda model: self._try_generate_image(
                     model, prompt_list, image_attachment, effective_config),
-                max_retries=3
+                max_retries=2
             )
             self._deduct_credits(
                 user=user, model=model, operation='image_generation',
