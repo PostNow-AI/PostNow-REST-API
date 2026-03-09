@@ -1,283 +1,207 @@
-# PR #34: Two-Phase Context Enrichment System
+# Sistema de Enrichment de Contexto
 
-**Data:** 2026-02-27
-**Autor:** Claude Code + Equipe
-**Status:** Pronto para Produção
-
----
-
-## Resumo Executivo
-
-Este PR implementa um sistema de enriquecimento de contexto em duas fases, substituindo o e-mail semanal único por dois e-mails especializados:
-
-- **Segunda-feira:** E-mail de Oportunidades de Conteúdo (enriquecido)
-- **Quarta-feira:** E-mail de Inteligência de Mercado (enriquecido)
-
-### Métricas do PR
-
-| Métrica | Valor |
-|---------|-------|
-| Commits | 21 |
-| Arquivos modificados | 37 |
-| Linhas adicionadas | +5.527 |
-| Testes automatizados | 57 |
-| Rodadas de análise de qualidade | 10 |
+**Última atualização:** 2026-03-09
+**Status:** Produção
 
 ---
 
-## Arquitetura
+## Visão Geral
 
-```
-DOMINGO (Fase 1)
-├── 06:00 UTC - WeeklyContextService
-│   └── Gera contexto semanal com Gemini AI
-│   └── Salva em ClientContext
-│
-└── 09:00 UTC - OpportunitiesGenerationService (Fase 1b)
-    └── Transforma contexto em oportunidades ranqueadas
-    └── Salva em tendencies_data
+Sistema de enriquecimento de contexto em duas fases que gera e-mails semanais com oportunidades de conteúdo e inteligência de mercado.
 
-SEGUNDA-FEIRA (Fase 2a)
-└── 10:00 UTC - Oportunidades
-    ├── ContextEnrichmentService
-    │   └── Busca fontes via Google Custom Search
-    │   └── Gera análise aprofundada com AI
-    └── OpportunitiesEmailService
-        └── Envia e-mail com oportunidades enriquecidas
+### Cronograma Semanal
 
-QUARTA-FEIRA (Fase 2b)
-└── 10:00 UTC - Inteligência de Mercado
-    ├── MarketIntelligenceEnrichmentService
-    │   └── Enriquece seções (mercado, concorrência, público)
-    └── MarketIntelligenceEmailService
-        └── Envia e-mail de inteligência de mercado
-```
+| Dia | Horário (UTC) | Fase | Descrição |
+|-----|---------------|------|-----------|
+| Domingo | 06:00 | 1a | Gera contexto semanal (Gemini AI) |
+| Domingo | 09:00 | 1b | Transforma em oportunidades ranqueadas |
+| Segunda | 10:00 | 2a | Enriquece + envia e-mail de Oportunidades |
+| Quarta | 10:00 | 2b | Enriquece + envia e-mail de Inteligência |
 
 ---
 
-## Novos Endpoints
+## Arquitetura de Busca
 
-| Endpoint | Método | Descrição | Auth |
-|----------|--------|-----------|------|
-| `/client-context/generate-opportunities/` | GET | Gera oportunidades (Fase 1b) | Bearer Token |
-| `/client-context/enrich-and-send-opportunities-email/` | GET | Enriquece + envia e-mail de segunda | Bearer Token |
-| `/client-context/send-market-intelligence-email/` | GET | Enriquece + envia e-mail de quarta | Bearer Token |
+### Provedores
 
-### Endpoint Deprecated
+| Serviço | Função | Custo |
+|---------|--------|-------|
+| **Serper API** | Busca Google (resultados reais) | $1/1K queries (2.500 grátis/mês) |
+| **Jina Reader** | Extrai conteúdo das páginas | Grátis (1M tokens/mês) |
+| **SourceEvaluator** | Avalia relevância com IA | Usa Claude Haiku |
 
-| Endpoint | Status | Alternativa |
-|----------|--------|-------------|
-| `/client-context/send-weekly-context-email/` | **410 Gone** | Usar novos endpoints acima |
+### Fluxo de Enrichment
 
----
+```
+1. Serper busca "tendências marketing digital Brasil 2026"
+   → Retorna 10 links com snippets
 
-## Migração de Banco de Dados
+2. source_quality.py filtra (remove spam, redes sociais, etc)
+   → 6-8 links válidos
 
-### Nova migração: `0004_add_enrichment_fields.py`
+3. SourceEvaluatorService avalia relevância
+   → Seleciona 3 melhores para o tipo de conteúdo
 
-```python
-# Campos adicionados ao ClientContext
-tendencies_data = JSONField(null=True)           # Dados de oportunidades
-context_enrichment_status = CharField(max_length=20, default='pending')
-context_enrichment_date = DateTimeField(null=True)
-context_enrichment_error = TextField(default='')
+4. Jina Reader extrai conteúdo das 3 URLs
+   → Markdown limpo de cada página
+
+5. AI gera análise enriquecida
+   → enriched_analysis para o usuário
 ```
 
-**Tipo:** AddField only (não destrutiva)
-**Rollback:** `python manage.py migrate ClientContext 0003`
+### Sistema de Fallback (4 Estratégias)
 
-### Comando de migração
+Se a busca primária não encontrar 3 fontes:
 
-```bash
-python manage.py migrate ClientContext
-```
+| Estratégia | Descrição |
+|------------|-----------|
+| 1. Primária | News (newsjacking) ou Web (outros) |
+| 2. Alternativa | Troca tipo: Web ↔ News |
+| 3. Simplificada | Remove palavras clickbait da query |
+| 4. Reformulação IA | Claude gera queries alternativas |
+
+**Resultado:** 100% de sucesso em 17 cenários de teste.
 
 ---
 
 ## Variáveis de Ambiente
 
-### Obrigatórias (já existentes)
+### Obrigatórias
 
 | Variável | Descrição |
 |----------|-----------|
 | `CRON_SECRET` | Token de autenticação para endpoints batch |
-| `API_BASE_URL` | URL base da API (usado nos workflows) |
+| `API_BASE_URL` | URL base da API |
+| `SERPER_API_KEY` | API key do Serper (serper.dev) |
 
-### Opcionais (novas)
+### Opcionais
 
 | Variável | Descrição | Default |
 |----------|-----------|---------|
-| `GOOGLE_CSE_API_KEY` | API key do Google Custom Search | - |
-| `GOOGLE_CSE_ID` | ID do Search Engine | - |
+| `JINA_API_KEY` | API key do Jina (para rate limits maiores) | - |
+| `ANTHROPIC_API_KEY` | Para SourceEvaluator e reformulação de queries | - |
 
-**Nota:** Se Google CSE não estiver configurado, o sistema funciona normalmente mas sem fontes enriquecidas.
+### Configuração do Serper
 
-### Configuração do Google Custom Search
+1. Criar conta em [serper.dev](https://serper.dev)
+2. Copiar API key do dashboard
+3. Adicionar `SERPER_API_KEY` no Vercel/ambiente
 
-1. Acessar [Google Cloud Console](https://console.cloud.google.com)
-2. Criar projeto ou selecionar existente
-3. Habilitar "Custom Search API"
-4. Criar credencial (API Key)
-5. Acessar [Programmable Search Engine](https://cse.google.com)
-6. Criar Search Engine
-7. Copiar Search Engine ID
-8. Configurar variáveis de ambiente
-
-**Custos:**
-- Free tier: 100 queries/dia (~16 usuários)
-- Paid: $5 por 1000 queries
+**Custos estimados:**
+- Free tier: 2.500 queries/mês (~104 usuários)
+- 100 usuários: ~$2.40/mês
 
 ---
 
-## GitHub Actions Workflows
+## Endpoints
 
-### Removido
-
-- `weekly-context-mailing.yml` - Substituído pelos novos workflows
-
-### Modificado
-
-- `weekly-context-generation.yml` - Horário alterado de 00:00 para 06:00 UTC
-
-### Novos
-
-| Workflow | Cron | Descrição |
-|----------|------|-----------|
-| `weekly-opportunities-generation.yml` | `0 9 * * 0` (Dom 09:00) | Gera oportunidades |
-| `weekly-opportunities-mailing.yml` | `0 10 * * 1` (Seg 10:00) | Envia e-mail de oportunidades |
-| `weekly-market-intelligence-mailing.yml` | `0 10 * * 3` (Qua 10:00) | Envia e-mail de inteligência |
-
-Todos os workflows usam **5 batches** com `max-parallel: 2` para evitar timeouts.
-
----
-
-## Correções de Segurança
-
-| Vulnerabilidade | Correção | Arquivo |
-|-----------------|----------|---------|
-| Timing Attack | `secrets.compare_digest()` | `views.py` |
-| XSS em e-mails | `html.escape()` em todos os templates | `*_email.py` |
-| Header Injection | `_sanitize_subject()` | Email services |
-| Endpoints sem auth | Token validation obrigatório | `views.py` |
-
----
-
-## Testes Automatizados
-
-| Categoria | Quantidade | Cobertura |
-|-----------|------------|-----------|
-| URL Validation | 19 | Sync/async, edge cases, erros |
-| N+1 Query Fix | 12 | Pre-fetch, imports, services |
-| Security | 26 | Timing attack, XSS, sanitização |
-| **Total** | **57** | ✅ Todos passando |
-
-### Executar testes
-
-```bash
-python manage.py test ClientContext.tests
-```
-
----
-
-## Checklist de Deploy
-
-### Pré-deploy
-
-- [ ] Verificar `CRON_SECRET` no GitHub Secrets
-- [ ] Verificar `API_BASE_URL` no GitHub Secrets
-- [ ] (Opcional) Configurar `GOOGLE_CSE_API_KEY` e `GOOGLE_CSE_ID`
-- [ ] Revisar PR no GitHub
-
-### Deploy
-
-- [ ] Aprovar e fazer merge do PR
-- [ ] Aguardar deploy automático (Vercel)
-- [ ] Executar migração em produção:
-  ```bash
-  python manage.py migrate ClientContext
-  ```
-
-### Pós-deploy
-
-- [ ] Verificar logs de erro no Vercel
-- [ ] Testar endpoint manualmente:
-  ```bash
-  curl -X GET "https://api.postnow.com.br/api/v1/client-context/generate-opportunities/?batch=1" \
-    -H "Authorization: Bearer $CRON_SECRET"
-  ```
-- [ ] Verificar que endpoint deprecated retorna 410
-
-### Monitoramento (primeira semana)
-
-| Dia | Horário (UTC) | Verificar |
-|-----|---------------|-----------|
-| Domingo | 06:00 | Logs de geração de contexto |
-| Domingo | 09:00 | Logs de geração de oportunidades |
-| Segunda | 10:00 | Envio de e-mails de Oportunidades |
-| Quarta | 10:00 | Envio de e-mails de Inteligência de Mercado |
-
----
-
-## Rollback
-
-### Se migração falhar
-
-```bash
-python manage.py migrate ClientContext 0003
-```
-
-### Se bugs em produção
-
-1. Reverter merge no GitHub
-2. Redeploy automático via Vercel
-3. Rollback de migração se necessário
-
-### Degradação graceful
-
-- Se Google CSE indisponível: E-mails enviados sem fontes extras
-- Se Gemini falhar: Erro logado, usuário marcado para retry
-- Se Mailjet falhar: Erro logado, não afeta outros usuários
+| Endpoint | Método | Descrição |
+|----------|--------|-----------|
+| `/client-context/generate-opportunities/` | GET | Gera oportunidades (Fase 1b) |
+| `/client-context/enrich-and-send-opportunities-email/` | GET | Enriquece + envia segunda |
+| `/client-context/send-market-intelligence-email/` | GET | Enriquece + envia quarta |
 
 ---
 
 ## Estrutura de Arquivos
 
 ```
+services/
+├── serper_search_service.py      # Busca no Google via Serper
+├── jina_reader_service.py        # Extração de conteúdo
+└── source_evaluator_service.py   # Avaliação com IA
+
 ClientContext/
 ├── services/
-│   ├── opportunities_generation_service.py    # NOVO - Fase 1b
-│   ├── context_enrichment_service.py          # NOVO - Fase 2 Segunda
-│   ├── market_intelligence_enrichment_service.py  # NOVO - Fase 2 Quarta
-│   ├── opportunities_email_service.py         # NOVO - E-mail Segunda
-│   └── market_intelligence_email_service.py   # NOVO - E-mail Quarta
+│   ├── context_enrichment_service.py    # Orquestra enrichment
+│   ├── opportunities_email_service.py   # E-mail de segunda
+│   └── market_intelligence_*.py         # E-mail de quarta
 ├── utils/
-│   ├── opportunities_email.py      # NOVO - Template HTML
-│   ├── market_intelligence_email.py # NOVO - Template HTML
-│   ├── search_utils.py             # NOVO - Google Search
-│   ├── source_quality.py           # NOVO - Scoring de fontes
-│   ├── url_validation.py           # NOVO - Validação 404
-│   └── url_dedupe.py               # NOVO - Deduplicação URLs
-├── tests/
-│   ├── test_url_validation.py      # NOVO - 19 testes
-│   ├── test_services_n1_fix.py     # NOVO - 12 testes
-│   └── test_security_fixes.py      # NOVO - 26 testes
-└── migrations/
-    └── 0004_add_enrichment_fields.py  # NOVO
-
-services/
-└── google_search_service.py        # NOVO - Integração Google CSE
-
-docs/mockups/
-├── README.md                       # NOVO - Documentação dos mockups
-├── mock_email_monday_opportunities.html
-└── mock_email_wednesday_market_intelligence.html
+│   ├── search_utils.py           # Pipeline de busca + fallbacks
+│   ├── source_quality.py         # Scoring e filtros
+│   ├── url_validation.py         # Validação de URLs
+│   └── url_dedupe.py             # Deduplicação
 ```
 
 ---
 
-## Contato
+## Tipos de Conteúdo
 
-Para dúvidas sobre esta implementação:
-- Revisar código nos arquivos listados acima
-- Consultar `docs/mockups/README.md` para visualização dos e-mails
-- Verificar `CHANGELOG.md` para histórico completo de mudanças
+O sistema otimiza buscas por tipo:
+
+| Tipo | API | Keywords |
+|------|-----|----------|
+| `polemica` | Web | debate, crítica, problema |
+| `educativo` | Web | como, guia, tutorial |
+| `newsjacking` | **News** | novo, anuncia, lança |
+| `entretenimento` | Web | viral, meme, trend |
+| `estudo_caso` | Web | case, sucesso, resultados |
+| `futuro` | Web | tendência, previsão, 2026 |
+
+---
+
+## Domínios Bloqueados
+
+O `source_quality.py` bloqueia automaticamente:
+
+- **Redes sociais:** instagram.com, facebook.com, linkedin.com, tiktok.com
+- **Vídeos:** youtube.com, vimeo.com (não são fontes citáveis)
+- **Dicionários:** wikipedia.org, dicio.com.br, significados.com.br
+- **Q&A:** quora.com, reddit.com
+- **User-generated:** medium.com, academia.edu
+
+---
+
+## Monitoramento
+
+### Logs de Diagnóstico
+
+Quando uma busca não encontra 3 fontes:
+
+```
+[ENRICHMENT FAILURE] Got 2/3 sources for: "query original"
+[ENRICHMENT FAILURE] primary: raw=10, validated=1, blocked: 4 (youtube.com, instagram.com)
+[ENRICHMENT FAILURE] alternate: raw=8, validated=1
+```
+
+### Métricas
+
+| Métrica | Esperado |
+|---------|----------|
+| Fontes por oportunidade | 3 |
+| Taxa de sucesso | >95% |
+| Tempo por busca | 2-5s |
+
+---
+
+## Troubleshooting
+
+### Poucas fontes encontradas
+
+1. Verificar se `SERPER_API_KEY` está configurada
+2. Checar logs de domínios bloqueados
+3. Query pode ser muito específica (sistema tentará reformular)
+
+### Conteúdo não extraído
+
+1. Jina Reader pode ter timeout (30s)
+2. Site pode bloquear scrapers
+3. Conteúdo < 100 chars é ignorado
+
+### Créditos Serper
+
+```bash
+# Verificar créditos restantes
+curl -H "X-API-KEY: $SERPER_API_KEY" https://google.serper.dev/account
+```
+
+---
+
+## Histórico de Mudanças
+
+| Data | Mudança |
+|------|---------|
+| 2026-03-09 | Substituição Google CSE → Serper + Jina Reader |
+| 2026-03-09 | Sistema de 4 fallbacks para garantir 3 fontes |
+| 2026-03-09 | SourceEvaluatorService para avaliação com IA |
+| 2026-02-27 | Implementação inicial (Two-Phase System) |
