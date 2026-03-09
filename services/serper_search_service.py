@@ -49,7 +49,8 @@ class SerperSearchService:
         self,
         query: str,
         num_results: int = 5,
-        search_type: str = 'search'
+        search_type: str = 'search',
+        date_filter: str = None
     ) -> List[Dict[str, Any]]:
         """
         Perform a Google search via Serper API.
@@ -58,6 +59,7 @@ class SerperSearchService:
             query: Search query string
             num_results: Number of results to return (max 100)
             search_type: Type of search ('search', 'news', 'images')
+            date_filter: Date filter ('d1'=day, 'w1'=week, 'm3'=3 months, 'y1'=year, None=all)
 
         Returns:
             List of search result dicts with 'url', 'title', 'snippet'
@@ -76,9 +78,9 @@ class SerperSearchService:
                 'num': min(num_results, 100),
             }
 
-            # Add date filter for recent results (last 3 months)
-            if search_type == 'search':
-                payload['tbs'] = 'qdr:m3'
+            # Add date filter for recent results (default: last year)
+            if search_type == 'search' and date_filter:
+                payload['tbs'] = f'qdr:{date_filter}'
 
             headers = {
                 'X-API-KEY': self.api_key,

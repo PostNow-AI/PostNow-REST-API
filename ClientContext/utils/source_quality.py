@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 # Denied domains (low quality, paywalls, etc.)
 DENIED_DOMAINS = {
+    # Social media (conteúdo efêmero, não são fontes autoritativas)
     'pinterest.com',
     'pinterest.com.br',
     'facebook.com',
@@ -15,10 +16,19 @@ DENIED_DOMAINS = {
     'tiktok.com',
     'linkedin.com',
     'reddit.com',
+    'threads.net',
+    # Vídeos (não são fontes textuais para citar)
+    'youtube.com',
+    'youtu.be',
+    'vimeo.com',
+    # Q&A e conteúdo gerado por usuários
     'quora.com',
-    'medium.com',  # Often paywalled
-    'scribd.com',  # Paywalled
+    'yahoo.com',  # Yahoo Answers style
+    # Paywalled ou baixa qualidade
+    'medium.com',
+    'scribd.com',
     'slideshare.net',
+    'academia.edu',  # Paywalled
 }
 
 # Allowed high-quality domains by section
