@@ -12,7 +12,7 @@ from django.utils import timezone
 from ClientContext.models import ClientContext
 from ClientContext.utils.search_utils import build_search_query, fetch_and_filter_sources
 from ClientContext.utils.enrichment_analysis import generate_enriched_analysis
-from services.google_search_service import GoogleSearchService
+from services.serper_search_service import SerperSearchService
 from services.ai_service import AiService
 from services.semaphore_service import SemaphoreService
 
@@ -38,11 +38,11 @@ class ContextEnrichmentService:
 
     def __init__(
         self,
-        google_search_service: Optional[GoogleSearchService] = None,
+        search_service: Optional[SerperSearchService] = None,
         ai_service: Optional[AiService] = None,
         semaphore_service: Optional[SemaphoreService] = None,
     ):
-        self.google_search_service = google_search_service or GoogleSearchService()
+        self.search_service = search_service or SerperSearchService()
         self.ai_service = ai_service or AiService()
         self.semaphore_service = semaphore_service or SemaphoreService()
 
@@ -253,7 +253,7 @@ class ContextEnrichmentService:
         try:
             search_query = build_search_query(opportunity)
             enriched_sources = await fetch_and_filter_sources(
-                self.google_search_service, search_query, section, used_url_keys
+                self.search_service, search_query, section, used_url_keys
             )
             enriched_opportunity['enriched_sources'] = enriched_sources
 

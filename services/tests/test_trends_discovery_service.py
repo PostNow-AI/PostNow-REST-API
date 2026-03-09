@@ -1,7 +1,7 @@
 """
 Testes para TrendsDiscoveryService.
 
-Usa mocks dos serviços de Google Trends e Google Search.
+Usa mocks dos serviços de Google Trends e Serper Search.
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock
@@ -37,8 +37,8 @@ def mock_google_trends():
 
 
 @pytest.fixture
-def mock_google_search():
-    """Fixture que retorna um mock do GoogleSearchService."""
+def mock_search_service():
+    """Fixture que retorna um mock do SerperSearchService."""
     mock = MagicMock()
     mock.search.return_value = [
         {'url': 'https://example.com/1', 'title': 'Artigo 1', 'snippet': 'Snippet 1'},
@@ -49,11 +49,11 @@ def mock_google_search():
 
 
 @pytest.fixture
-def trends_discovery_service(mock_google_trends, mock_google_search):
+def trends_discovery_service(mock_google_trends, mock_search_service):
     """Fixture que retorna uma instância do TrendsDiscoveryService com mocks."""
     return TrendsDiscoveryService(
         google_trends_service=mock_google_trends,
-        google_search_service=mock_google_search,
+        search_service=mock_search_service,
     )
 
 
@@ -63,19 +63,19 @@ class TestTrendsDiscoveryServiceInit:
     def test_init_with_defaults(self):
         """Testa inicialização com valores padrão."""
         with patch('services.trends_discovery_service.GoogleTrendsService'), \
-             patch('services.trends_discovery_service.GoogleSearchService'):
+             patch('services.trends_discovery_service.SerperSearchService'):
             service = TrendsDiscoveryService()
             assert service.google_trends is not None
-            assert service.google_search is not None
+            assert service.search_service is not None
 
-    def test_init_with_injected_services(self, mock_google_trends, mock_google_search):
+    def test_init_with_injected_services(self, mock_google_trends, mock_search_service):
         """Testa inicialização com serviços injetados."""
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_google_search,
+            search_service=mock_search_service,
         )
         assert service.google_trends == mock_google_trends
-        assert service.google_search == mock_google_search
+        assert service.search_service == mock_search_service
 
 
 class TestDiscoverTrendsForSector:
@@ -96,18 +96,18 @@ class TestDiscoverTrendsForSector:
         assert 'discovery_metadata' in result
 
     def test_discover_trends_validates_with_sources(
-        self, mock_google_trends, mock_google_search
+        self, mock_google_trends, mock_search_service
     ):
         """Testa que tendências são validadas com fontes."""
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_google_search,
+            google_search_service=mock_search_service,
         )
 
         result = service.discover_trends_for_sector(sector='Tecnologia')
 
         # Verificar que Google Search foi chamado para validar
-        assert mock_google_search.search.called
+        assert mock_search_service.search.called
 
         # Verificar que tendências têm fontes
         for trend in result['general_trends']:
@@ -115,17 +115,17 @@ class TestDiscoverTrendsForSector:
             assert len(trend['sources']) >= 2
 
     def test_discover_trends_filters_without_sources(
-        self, mock_google_trends, mock_google_search
+        self, mock_google_trends, mock_search_service
     ):
         """Testa que tendências sem fontes suficientes são filtradas."""
         # Mock que retorna apenas 1 fonte (mínimo é 2)
-        mock_google_search.search.return_value = [
+        mock_search_service.search.return_value = [
             {'url': 'https://example.com/1', 'title': 'Artigo 1', 'snippet': 'Snippet 1'},
         ]
 
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_google_search,
+            google_search_service=mock_search_service,
         )
 
         result = service.discover_trends_for_sector(sector='Tecnologia')
@@ -156,7 +156,7 @@ class TestDiscoverGeneralTrends:
         mock_google_trends.get_trending_searches.assert_called_with(country='brazil')
 
     def test_discover_general_trends_limits_results(
-        self, mock_google_trends, mock_google_search
+        self, mock_google_trends, mock_search_service
     ):
         """Testa que limita resultados a MAX_TRENDS_PER_CATEGORY."""
         # Mock com muitas tendências
@@ -166,7 +166,7 @@ class TestDiscoverGeneralTrends:
 
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_google_search,
+            google_search_service=mock_search_service,
         )
 
         result = service._discover_general_trends()
@@ -194,12 +194,12 @@ class TestDiscoverSectorTrends:
         )
 
     def test_discover_sector_trends_prioritizes_rising(
-        self, mock_google_trends, mock_google_search
+        self, mock_google_trends, mock_search_service
     ):
         """Testa que prioriza queries em crescimento."""
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_google_search,
+            google_search_service=mock_search_service,
         )
 
         result = service._discover_sector_trends(sector='Tecnologia')
@@ -212,14 +212,14 @@ class TestValidateTrendWithSources:
     """Testes para validação de tendências com fontes."""
 
     def test_validate_trend_returns_none_without_sources(
-        self, mock_google_trends, mock_google_search
+        self, mock_google_trends, mock_search_service
     ):
         """Testa que retorna None se não houver fontes suficientes."""
-        mock_google_search.search.return_value = []  # Sem fontes
+        mock_search_service.search.return_value = []  # Sem fontes
 
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_google_search,
+            google_search_service=mock_search_service,
         )
 
         result = service._validate_trend_with_sources('Tendência Teste')
@@ -227,12 +227,12 @@ class TestValidateTrendWithSources:
         assert result is None
 
     def test_validate_trend_returns_dict_with_sources(
-        self, mock_google_trends, mock_google_search
+        self, mock_google_trends, mock_search_service
     ):
         """Testa que retorna dict válido com fontes suficientes."""
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_google_search,
+            google_search_service=mock_search_service,
         )
 
         result = service._validate_trend_with_sources('Tendência Teste')
@@ -242,12 +242,12 @@ class TestValidateTrendWithSources:
         assert len(result['sources']) >= 2
 
     def test_validate_trend_includes_context_keywords(
-        self, mock_google_trends, mock_google_search
+        self, mock_google_trends, mock_search_service
     ):
         """Testa que inclui keywords de contexto na busca."""
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_google_search,
+            google_search_service=mock_search_service,
         )
 
         service._validate_trend_with_sources(
@@ -256,7 +256,7 @@ class TestValidateTrendWithSources:
         )
 
         # Verificar que a busca incluiu o contexto
-        call_args = mock_google_search.search.call_args
+        call_args = mock_search_service.search.call_args
         assert 'IA tecnologia' in call_args[1]['query'] or 'IA tecnologia' in call_args[0][0]
 
 

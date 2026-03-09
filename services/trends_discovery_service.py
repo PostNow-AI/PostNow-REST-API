@@ -17,7 +17,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from services.google_trends_service import GoogleTrendsService
-from services.google_search_service import GoogleSearchService
+from services.serper_search_service import SerperSearchService
 
 logger = logging.getLogger(__name__)
 
@@ -39,17 +39,17 @@ class TrendsDiscoveryService:
     def __init__(
         self,
         google_trends_service: Optional[GoogleTrendsService] = None,
-        google_search_service: Optional[GoogleSearchService] = None,
+        search_service: Optional[SerperSearchService] = None,
     ):
         """
         Inicializa o serviço de descoberta de tendências.
 
         Args:
             google_trends_service: Serviço de Google Trends (injetável para testes)
-            google_search_service: Serviço de Google Search (injetável para testes)
+            search_service: Serviço de busca Serper (injetável para testes)
         """
         self.google_trends = google_trends_service or GoogleTrendsService()
-        self.google_search = google_search_service or GoogleSearchService()
+        self.search_service = search_service or SerperSearchService()
 
     def discover_trends_for_sector(
         self,
@@ -289,7 +289,7 @@ class TrendsDiscoveryService:
                 search_query = f"{topic} {context_keywords[0]}"
 
             # Buscar fontes
-            sources = self.google_search.search(
+            sources = self.search_service.search(
                 query=search_query,
                 num_results=5
             )

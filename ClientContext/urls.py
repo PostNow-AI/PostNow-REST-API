@@ -25,4 +25,7 @@ urlpatterns = [
          name='send_market_intelligence_email'),
     path('generate-single-client-context/', views.generate_single_client_context,
          name='generate_single_client_context'),
+    # Test endpoint for enrichment debugging
+    path('test-enrichment/', views.test_enrichment_for_user,
+         name='test_enrichment_for_user'),
 ]

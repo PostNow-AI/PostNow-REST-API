@@ -716,3 +716,138 @@ def send_market_intelligence_email(request):
         return Response({
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def test_enrichment_for_user(request):
+    """
+    Test enrichment pipeline for a specific user by email.
+
+    Query Parameters:
+        email: User email to test
+        send_email: Whether to send email after enrichment (default: true)
+
+    Requires CRON_SECRET authorization.
+    """
+    if not validate_batch_token(request):
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    email = request.query_params.get('email', '')
+    send_email_flag = request.query_params.get('send_email', 'true').lower() == 'true'
+
+    if not email:
+        return Response(
+            {'error': 'Email parameter is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    from django.contrib.auth.models import User
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response(
+            {'error': f'User not found: {email}'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    try:
+        context = ClientContext.objects.get(user=user)
+    except ClientContext.DoesNotExist:
+        return Response(
+            {'error': f'Context not found for user: {email}'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check opportunities
+    tendencies = context.tendencies_data or {}
+    total_opportunities = sum(
+        len(data.get('items', []))
+        for data in tendencies.values()
+        if isinstance(data, dict) and 'items' in data
+    )
+
+    if total_opportunities == 0:
+        return Response({
+            'error': 'No opportunities to enrich',
+            'message': 'Run generate-opportunities first'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Reset enrichment status
+    old_status = context.context_enrichment_status
+    context.context_enrichment_status = 'pending'
+    context.context_enrichment_error = None
+    context.save()
+
+    result = {
+        'user_id': user.id,
+        'email': email,
+        'opportunities_count': total_opportunities,
+        'previous_status': old_status,
+        'steps': {}
+    }
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        # Step 1: Enrichment
+        enrichment_service = ContextEnrichmentService()
+        context_data = {
+            'user_id': user.id,
+            'tendencies_data': context.tendencies_data,
+        }
+
+        enrichment_result = loop.run_until_complete(
+            enrichment_service.enrich_user_context(user, context_data)
+        )
+        result['steps']['enrichment'] = enrichment_result
+
+        # Collect enriched sources info
+        context.refresh_from_db()
+        tendencies = context.tendencies_data or {}
+        sources_by_category = {}
+        total_sources = 0
+
+        for category, data in tendencies.items():
+            if isinstance(data, dict) and 'items' in data:
+                category_sources = []
+                for item in data.get('items', []):
+                    sources = item.get('enriched_sources', [])
+                    category_sources.extend(sources)
+                    total_sources += len(sources)
+                if category_sources:
+                    sources_by_category[category] = [
+                        {'title': s.get('title', ''), 'url': s.get('url', '')}
+                        for s in category_sources[:3]
+                    ]
+
+        result['enriched_sources'] = {
+            'total': total_sources,
+            'by_category': sources_by_category
+        }
+
+        # Step 2: Send email if requested
+        if send_email_flag:
+            email_service = OpportunitiesEmailService()
+            email_result = loop.run_until_complete(
+                email_service.send_email_to_user(user)
+            )
+            result['steps']['email'] = email_result
+
+        result['status'] = 'success'
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.exception(f"Error in test_enrichment_for_user: {e}")
+        result['status'] = 'failed'
+        result['error'] = str(e)
+        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    finally:
+        loop.close()

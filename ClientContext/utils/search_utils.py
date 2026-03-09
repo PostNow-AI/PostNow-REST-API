@@ -1,22 +1,38 @@
 """
 Utility functions for search and source enrichment.
 Extracted from context_enrichment_service.py to keep files under 400 lines.
+
+Search providers:
+- Serper API (primary): Real Google results via commercial API
+- Jina Reader: Extracts clean content from URLs (free tier: 1M tokens/month)
 """
 import logging
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from asgiref.sync import sync_to_async
 
 from ClientContext.utils.source_quality import is_denied, score_source
 from ClientContext.utils.url_dedupe import normalize_url_key
 from ClientContext.utils.url_validation import validate_url_permissive_async
+from services.jina_reader_service import JinaReaderService
 
 logger = logging.getLogger(__name__)
 
 # Number of additional sources to fetch per opportunity (after filtering)
 ENRICHMENT_SOURCES_PER_OPPORTUNITY = 3
-# Fetch more from Google to have margin after filtering
-GOOGLE_SEARCH_RESULTS = 6
+# Fetch more results to have margin after filtering
+SEARCH_RESULTS_TO_FETCH = 6
+
+# Jina Reader instance (lazy initialized)
+_jina_reader: Optional[JinaReaderService] = None
+
+
+def get_jina_reader() -> JinaReaderService:
+    """Get or create Jina Reader service instance."""
+    global _jina_reader
+    if _jina_reader is None:
+        _jina_reader = JinaReaderService()
+    return _jina_reader
 
 
 def build_search_query(opportunity: Dict[str, Any]) -> str:
@@ -46,37 +62,41 @@ def build_search_query(opportunity: Dict[str, Any]) -> str:
 
 
 async def fetch_and_filter_sources(
-    google_search_service,
+    search_service,
     query: str,
     section: str,
-    used_url_keys: Set[str]
+    used_url_keys: Set[str],
+    read_content: bool = False
 ) -> List[Dict[str, str]]:
     """
-    Fetch additional sources from Google Search with quality filtering.
+    Fetch additional sources from search with quality filtering.
 
     Uses source_quality.py for denylist/allowlist filtering and scoring.
     Uses url_validation.py for URL validation.
     Uses url_dedupe.py for deduplication.
+    Optionally uses Jina Reader to extract page content.
 
     Args:
-        google_search_service: GoogleSearchService instance
+        search_service: SerperSearchService instance
         query: Search query
         section: Section name for source quality scoring
         used_url_keys: Set of already used URL keys for deduplication
+        read_content: Whether to fetch full page content via Jina Reader
 
     Returns:
         List of validated, filtered source dicts with 'url', 'title', 'snippet'
+        (and 'content' if read_content=True)
     """
     try:
         # Verificar se o serviço está configurado
-        if not google_search_service.is_configured():
-            logger.warning("[ENRICHMENT] Google CSE not configured, skipping source enrichment")
+        if not search_service.is_configured():
+            logger.warning("[ENRICHMENT] Search service not configured, skipping source enrichment")
             return []
 
         # Fetch more results than needed to have margin after filtering
-        results = await sync_to_async(google_search_service.search)(
+        results = await sync_to_async(search_service.search)(
             query=query,
-            num_results=GOOGLE_SEARCH_RESULTS
+            num_results=SEARCH_RESULTS_TO_FETCH
         )
 
         if not results:
@@ -90,6 +110,10 @@ async def fetch_and_filter_sources(
 
         # Validate and collect top sources
         validated_sources = await _validate_sources(scored_sources, used_url_keys)
+
+        # Optionally fetch full content via Jina Reader
+        if read_content and validated_sources:
+            validated_sources = await _enrich_with_content(validated_sources)
 
         # Log sem expor dados sensíveis do usuário
         logger.info(
@@ -192,3 +216,46 @@ async def _validate_sources(
         })
 
     return validated_sources
+
+
+async def _enrich_with_content(
+    sources: List[Dict[str, str]]
+) -> List[Dict[str, str]]:
+    """
+    Enrich sources with full page content via Jina Reader.
+
+    Args:
+        sources: List of validated source dicts
+
+    Returns:
+        Sources with 'content' field added (empty string if failed)
+    """
+    jina = get_jina_reader()
+
+    for source in sources:
+        try:
+            content = await sync_to_async(jina.read_url)(source['url'])
+            source['content'] = content or ''
+        except Exception as e:
+            logger.debug(f"[ENRICHMENT] Failed to read content from {source['url']}: {e}")
+            source['content'] = ''
+
+    return sources
+
+
+async def fetch_url_content(url: str) -> Optional[str]:
+    """
+    Fetch content from a single URL via Jina Reader.
+
+    Args:
+        url: URL to read
+
+    Returns:
+        Clean markdown content or None if failed
+    """
+    jina = get_jina_reader()
+    try:
+        return await sync_to_async(jina.read_url)(url)
+    except Exception as e:
+        logger.warning(f"[ENRICHMENT] Failed to fetch content from {url}: {e}")
+        return None
