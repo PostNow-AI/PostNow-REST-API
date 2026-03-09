@@ -16,7 +16,7 @@ For our use case:
 import os
 import time
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 import requests
 
@@ -29,6 +29,9 @@ RATE_LIMIT_INTERVAL = 1.0 / RATE_LIMIT_REQUESTS_PER_SECOND
 # Request timeout
 REQUEST_TIMEOUT = 30
 
+# Jina Reader base URL
+JINA_READER_URL = 'https://r.jina.ai/'
+
 
 class JinaReaderService:
     """Service for extracting clean content from URLs via Jina Reader."""
@@ -36,17 +39,45 @@ class JinaReaderService:
     _last_request_time: float = 0.0
 
     def __init__(self):
-        self.api_key = os.getenv('JINA_API_KEY', '')  # Optional
-        self.base_url = 'https://r.jina.ai/'
+        self.api_key = os.getenv('JINA_API_KEY', '')
 
     def _rate_limit(self) -> None:
         """Apply rate limiting between requests."""
         now = time.time()
         elapsed = now - JinaReaderService._last_request_time
         if elapsed < RATE_LIMIT_INTERVAL:
-            sleep_time = RATE_LIMIT_INTERVAL - elapsed
-            time.sleep(sleep_time)
+            time.sleep(RATE_LIMIT_INTERVAL - elapsed)
         JinaReaderService._last_request_time = time.time()
+
+    def _get_headers(
+        self,
+        output_format: str = 'markdown',
+        include_links: bool = False
+    ) -> Dict[str, str]:
+        """Build request headers."""
+        accept_type = 'text/html' if output_format == 'html' else f'text/{output_format}'
+        headers = {'Accept': accept_type}
+
+        if self.api_key:
+            headers['Authorization'] = f'Bearer {self.api_key}'
+        if not include_links:
+            headers['X-No-Links'] = 'true'
+
+        return headers
+
+    def _check_response_status(self, response: requests.Response, url: str) -> bool:
+        """Check response status. Returns True if OK, False if should skip."""
+        if response.status_code == 404:
+            logger.debug(f"Jina Reader: page not found for {url}")
+            return False
+        if response.status_code == 429:
+            logger.warning("Jina Reader rate limit exceeded")
+            return False
+        if response.status_code == 503:
+            logger.warning(f"Jina Reader: service unavailable for {url}")
+            return False
+        response.raise_for_status()
+        return True
 
     def read_url(
         self,
@@ -68,41 +99,15 @@ class JinaReaderService:
         self._rate_limit()
 
         try:
-            headers = {
-                'Accept': f'text/{output_format}' if output_format != 'html' else 'text/html',
-            }
-
-            # Add API key if available (for higher rate limits)
-            if self.api_key:
-                headers['Authorization'] = f'Bearer {self.api_key}'
-
-            # Add options via headers
-            if not include_links:
-                headers['X-No-Links'] = 'true'
-
+            headers = self._get_headers(output_format, include_links)
             response = requests.get(
-                f'{self.base_url}{url}',
-                headers=headers,
-                timeout=REQUEST_TIMEOUT
+                f'{JINA_READER_URL}{url}', headers=headers, timeout=REQUEST_TIMEOUT
             )
 
-            if response.status_code == 404:
-                logger.debug(f"Jina Reader: page not found for {url}")
+            if not self._check_response_status(response, url):
                 return None
-
-            if response.status_code == 429:
-                logger.warning("Jina Reader rate limit exceeded")
-                return None
-
-            if response.status_code == 503:
-                logger.warning(f"Jina Reader: service unavailable for {url}")
-                return None
-
-            response.raise_for_status()
 
             content = response.text
-
-            # Basic validation - content should have reasonable length
             if len(content) < 100:
                 logger.debug(f"Jina Reader: content too short for {url}")
                 return None
@@ -112,13 +117,11 @@ class JinaReaderService:
 
         except requests.exceptions.Timeout:
             logger.warning(f"Jina Reader timeout for {url}")
-            return None
         except requests.exceptions.RequestException as e:
             logger.warning(f"Jina Reader failed for {url}: {str(e)}")
-            return None
         except Exception as e:
             logger.error(f"Unexpected error in Jina Reader: {str(e)}")
-            return None
+        return None
 
     def read_url_with_metadata(self, url: str) -> Optional[Dict[str, Any]]:
         """
@@ -133,24 +136,18 @@ class JinaReaderService:
         self._rate_limit()
 
         try:
-            headers = {
-                'Accept': 'application/json',
-            }
-
+            headers = {'Accept': 'application/json'}
             if self.api_key:
                 headers['Authorization'] = f'Bearer {self.api_key}'
 
             response = requests.get(
-                f'{self.base_url}{url}',
-                headers=headers,
-                timeout=REQUEST_TIMEOUT
+                f'{JINA_READER_URL}{url}', headers=headers, timeout=REQUEST_TIMEOUT
             )
 
             if response.status_code != 200:
                 return None
 
             data = response.json()
-
             return {
                 'content': data.get('content', ''),
                 'title': data.get('title', ''),
@@ -159,35 +156,21 @@ class JinaReaderService:
             }
 
         except Exception as e:
-            logger.warning(f"Jina Reader metadata extraction failed for {url}: {str(e)}")
+            logger.warning(f"Jina Reader metadata failed for {url}: {str(e)}")
             return None
 
     def is_configured(self) -> bool:
-        """
-        Check if service is available.
-        Jina Reader works without API key, so always returns True.
-        """
+        """Jina Reader works without API key, so always available."""
         return True
 
-    def batch_read_urls(
-        self,
-        urls: list[str],
-        max_concurrent: int = 3
-    ) -> Dict[str, Optional[str]]:
+    def batch_read_urls(self, urls: List[str]) -> Dict[str, Optional[str]]:
         """
         Read multiple URLs sequentially with rate limiting.
 
         Args:
             urls: List of URLs to read
-            max_concurrent: Not used (sequential for simplicity)
 
         Returns:
             Dict mapping URL to content (or None if failed)
         """
-        results = {}
-
-        for url in urls:
-            content = self.read_url(url)
-            results[url] = content
-
-        return results
+        return {url: self.read_url(url) for url in urls}

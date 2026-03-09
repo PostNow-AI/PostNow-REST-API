@@ -9,7 +9,7 @@ Analisa se as fontes são relevantes para:
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 try:
     from anthropic import Anthropic
@@ -93,7 +93,7 @@ class SourceEvaluatorService:
         self.client = None
         if ANTHROPIC_AVAILABLE and self.api_key:
             self.client = Anthropic(api_key=self.api_key)
-        self.model = 'claude-3-5-haiku-20241022'  # Rápido e barato
+        self.model = 'claude-3-5-haiku-20241022'
 
     def is_configured(self) -> bool:
         """Verifica se o serviço está configurado."""
@@ -111,9 +111,9 @@ class SourceEvaluatorService:
         Avalia fontes e retorna as mais relevantes.
 
         Args:
-            sources: Lista de fontes com 'url', 'title', 'snippet', 'content' (opcional)
+            sources: Lista de fontes com 'url', 'title', 'snippet', 'content'
             opportunity_title: Título da oportunidade de conteúdo
-            content_type: Tipo de conteúdo (polemica, educativo, newsjacking, etc.)
+            content_type: Tipo de conteúdo (polemica, educativo, etc.)
             client_sector: Setor/nicho do cliente
             max_sources: Número máximo de fontes a retornar
 
@@ -123,20 +123,75 @@ class SourceEvaluatorService:
         if not sources:
             return []
 
-        # Se IA não configurada, usar fallback por sinais
         if not self.is_configured():
             logger.warning("SourceEvaluator: API não configurada, usando fallback")
             return self._evaluate_by_signals(sources, content_type, max_sources)
 
         try:
-            # Avaliar com IA
             return self._evaluate_with_ai(
                 sources, opportunity_title, content_type, client_sector, max_sources
             )
         except Exception as e:
             logger.error(f"SourceEvaluator: Erro na avaliação IA: {e}")
-            # Fallback para avaliação por sinais
             return self._evaluate_by_signals(sources, content_type, max_sources)
+
+    def _build_sources_text(self, sources: List[Dict[str, Any]]) -> str:
+        """Build formatted text of sources for the prompt."""
+        parts = []
+        for i, source in enumerate(sources, 1):
+            content_preview = source.get('content', source.get('snippet', ''))[:300]
+            parts.append(f"""
+Fonte {i}:
+- URL: {source.get('url', '')}
+- Título: {source.get('title', '')}
+- Conteúdo: {content_preview}...""")
+        return '\n'.join(parts)
+
+    def _build_evaluation_prompt(
+        self,
+        sources_text: str,
+        criteria: Dict[str, Any],
+        opportunity_title: str,
+        client_sector: str,
+        max_sources: int
+    ) -> str:
+        """Build the evaluation prompt for the AI."""
+        criteria_list = '\n'.join(f'- {c}' for c in criteria['criteria'])
+        return f"""Você é um avaliador de fontes para um criador de conteúdo.
+
+CONTEXTO:
+- Setor do cliente: {client_sector}
+- Tipo de conteúdo desejado: {criteria['description']}
+- Oportunidade: "{opportunity_title}"
+
+CRITÉRIOS DE AVALIAÇÃO:
+{criteria_list}
+
+FONTES PARA AVALIAR:
+{sources_text}
+
+TAREFA:
+Avalie cada fonte e selecione as {max_sources} MELHORES para esse tipo de conteúdo.
+
+Responda APENAS com um JSON válido no formato:
+{{
+  "selected": [
+    {{"index": 1, "score": 85, "reason": "Motivo em 1 linha"}}
+  ]
+}}
+
+Selecione apenas fontes realmente relevantes. Se nenhuma for boa, retorne lista vazia."""
+
+    def _parse_ai_response(self, response_text: str) -> List[Dict[str, Any]]:
+        """Parse AI response and extract selected sources."""
+        # Remove code markers if present
+        if '```json' in response_text:
+            response_text = response_text.split('```json')[1].split('```')[0]
+        elif '```' in response_text:
+            response_text = response_text.split('```')[1].split('```')[0]
+
+        result = json.loads(response_text)
+        return result.get('selected', [])
 
     def _evaluate_with_ai(
         self,
@@ -148,51 +203,10 @@ class SourceEvaluatorService:
     ) -> List[Dict[str, Any]]:
         """Avalia fontes usando Claude."""
         criteria = EVALUATION_CRITERIA.get(content_type, EVALUATION_CRITERIA['educativo'])
-
-        # Preparar lista de fontes para o prompt
-        sources_text = ""
-        for i, source in enumerate(sources, 1):
-            content_preview = source.get('content', source.get('snippet', ''))[:300]
-            sources_text += f"""
-Fonte {i}:
-- URL: {source.get('url', '')}
-- Título: {source.get('title', '')}
-- Conteúdo: {content_preview}...
-"""
-
-        prompt = f"""Você é um avaliador de fontes para um criador de conteúdo.
-
-CONTEXTO:
-- Setor do cliente: {client_sector}
-- Tipo de conteúdo desejado: {criteria['description']}
-- Oportunidade: "{opportunity_title}"
-
-CRITÉRIOS DE AVALIAÇÃO:
-{chr(10).join(f'- {c}' for c in criteria['criteria'])}
-
-FONTES PARA AVALIAR:
-{sources_text}
-
-TAREFA:
-Avalie cada fonte e selecione as {max_sources} MELHORES para esse tipo de conteúdo.
-
-Responda APENAS com um JSON válido no formato:
-{{
-  "selected": [
-    {{
-      "index": 1,
-      "score": 85,
-      "reason": "Motivo em 1 linha"
-    }}
-  ]
-}}
-
-Onde:
-- index: número da fonte (1, 2, 3...)
-- score: pontuação de 0-100
-- reason: motivo curto da escolha
-
-Selecione apenas fontes realmente relevantes. Se nenhuma for boa, retorne lista vazia."""
+        sources_text = self._build_sources_text(sources)
+        prompt = self._build_evaluation_prompt(
+            sources_text, criteria, opportunity_title, client_sector, max_sources
+        )
 
         response = self.client.messages.create(
             model=self.model,
@@ -200,37 +214,23 @@ Selecione apenas fontes realmente relevantes. Se nenhuma for boa, retorne lista 
             messages=[{"role": "user", "content": prompt}]
         )
 
-        # Extrair JSON da resposta
-        response_text = response.content[0].text.strip()
-
-        # Tentar extrair JSON
         try:
-            # Remover possíveis marcadores de código
-            if '```json' in response_text:
-                response_text = response_text.split('```json')[1].split('```')[0]
-            elif '```' in response_text:
-                response_text = response_text.split('```')[1].split('```')[0]
+            selected_indices = self._parse_ai_response(response.content[0].text.strip())
 
-            result = json.loads(response_text)
-            selected_indices = result.get('selected', [])
-
-            # Montar lista de fontes selecionadas
             selected_sources = []
             for item in selected_indices[:max_sources]:
-                idx = item.get('index', 0) - 1  # Converter para 0-indexed
+                idx = item.get('index', 0) - 1
                 if 0 <= idx < len(sources):
                     source = sources[idx].copy()
                     source['ai_score'] = item.get('score', 50)
                     source['ai_reason'] = item.get('reason', '')
                     selected_sources.append(source)
 
-            logger.info(
-                f"SourceEvaluator: IA selecionou {len(selected_sources)}/{len(sources)} fontes"
-            )
+            logger.info(f"SourceEvaluator: IA selecionou {len(selected_sources)}/{len(sources)}")
             return selected_sources
 
         except json.JSONDecodeError:
-            logger.warning(f"SourceEvaluator: Falha ao parsear JSON: {response_text[:200]}")
+            logger.warning("SourceEvaluator: Falha ao parsear JSON da IA")
             return self._evaluate_by_signals(sources, content_type, max_sources)
 
     def _evaluate_by_signals(
@@ -239,17 +239,12 @@ Selecione apenas fontes realmente relevantes. Se nenhuma for boa, retorne lista 
         content_type: str,
         max_sources: int
     ) -> List[Dict[str, Any]]:
-        """
-        Fallback: Avalia fontes por sinais textuais (sem IA).
-
-        Útil quando a API não está disponível.
-        """
+        """Fallback: Avalia fontes por sinais textuais (sem IA)."""
         criteria = EVALUATION_CRITERIA.get(content_type, EVALUATION_CRITERIA['educativo'])
         good_signals = criteria.get('good_signals', [])
         bad_signals = criteria.get('bad_signals', [])
 
         scored_sources = []
-
         for source in sources:
             text = (
                 source.get('title', '') + ' ' +
@@ -257,28 +252,20 @@ Selecione apenas fontes realmente relevantes. Se nenhuma for boa, retorne lista 
                 source.get('content', '')[:500]
             ).lower()
 
-            score = 50  # Base score
-
-            # Aumentar score para sinais positivos
+            score = 50
             for signal in good_signals:
                 if signal.lower() in text:
                     score += 10
-
-            # Diminuir score para sinais negativos
             for signal in bad_signals:
                 if signal.lower() in text:
                     score -= 10
 
-            # Limitar entre 0 e 100
             score = max(0, min(100, score))
-
             scored_source = source.copy()
             scored_source['signal_score'] = score
             scored_sources.append(scored_source)
 
-        # Ordenar por score e retornar top N
         scored_sources.sort(key=lambda x: x.get('signal_score', 0), reverse=True)
-
         return scored_sources[:max_sources]
 
     def evaluate_single_source(
@@ -287,11 +274,7 @@ Selecione apenas fontes realmente relevantes. Se nenhuma for boa, retorne lista 
         content_type: str,
         client_sector: str
     ) -> Dict[str, Any]:
-        """
-        Avalia uma única fonte rapidamente.
-
-        Útil para validação em tempo real.
-        """
+        """Avalia uma única fonte rapidamente."""
         result = self.evaluate_sources(
             sources=[source],
             opportunity_title="",
@@ -299,7 +282,4 @@ Selecione apenas fontes realmente relevantes. Se nenhuma for boa, retorne lista 
             client_sector=client_sector,
             max_sources=1
         )
-
-        if result:
-            return result[0]
-        return source
+        return result[0] if result else source

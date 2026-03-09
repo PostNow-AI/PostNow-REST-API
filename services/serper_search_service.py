@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 RATE_LIMIT_QUERIES_PER_SECOND = 10
 RATE_LIMIT_INTERVAL = 1.0 / RATE_LIMIT_QUERIES_PER_SECOND
 
+# Serper API endpoints
+SERPER_SEARCH_URL = 'https://google.serper.dev/search'
+SERPER_NEWS_URL = 'https://google.serper.dev/news'
+SERPER_ACCOUNT_URL = 'https://google.serper.dev/account'
+
 
 class SerperSearchService:
     """Service for performing Google searches via Serper API."""
@@ -34,16 +39,74 @@ class SerperSearchService:
 
     def __init__(self):
         self.api_key = os.getenv('SERPER_API_KEY', '')
-        self.base_url = 'https://google.serper.dev/search'
 
     def _rate_limit(self) -> None:
         """Apply rate limiting between requests."""
         now = time.time()
         elapsed = now - SerperSearchService._last_request_time
         if elapsed < RATE_LIMIT_INTERVAL:
-            sleep_time = RATE_LIMIT_INTERVAL - elapsed
-            time.sleep(sleep_time)
+            time.sleep(RATE_LIMIT_INTERVAL - elapsed)
         SerperSearchService._last_request_time = time.time()
+
+    def _get_headers(self) -> Dict[str, str]:
+        """Get request headers with API key."""
+        return {
+            'X-API-KEY': self.api_key,
+            'Content-Type': 'application/json'
+        }
+
+    def _build_payload(
+        self,
+        query: str,
+        num_results: int,
+        date_filter: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Build request payload for Serper API."""
+        payload = {
+            'q': query,
+            'gl': 'br',
+            'hl': 'pt-br',
+            'num': min(num_results, 100),
+        }
+        if date_filter:
+            payload['tbs'] = f'qdr:{date_filter}'
+        return payload
+
+    def _handle_response_errors(self, response: requests.Response) -> bool:
+        """Handle API response errors. Returns True if OK, False if error."""
+        if response.status_code == 401:
+            logger.error("Serper API authentication failed (invalid API key)")
+            return False
+        if response.status_code == 429:
+            logger.error("Serper API rate limit exceeded")
+            return False
+        response.raise_for_status()
+        return True
+
+    def _parse_organic_results(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Parse organic search results from API response."""
+        results = []
+        for item in data.get('organic', []):
+            results.append({
+                'url': item.get('link', ''),
+                'title': item.get('title', ''),
+                'snippet': item.get('snippet', ''),
+                'position': item.get('position', 0),
+            })
+        return results
+
+    def _parse_news_results(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Parse news results from API response."""
+        results = []
+        for item in data.get('news', []):
+            results.append({
+                'url': item.get('link', ''),
+                'title': item.get('title', ''),
+                'snippet': item.get('snippet', ''),
+                'source': item.get('source', ''),
+                'date': item.get('date', ''),
+            })
+        return results
 
     def search(
         self,
@@ -58,8 +121,8 @@ class SerperSearchService:
         Args:
             query: Search query string
             num_results: Number of results to return (max 100)
-            search_type: Type of search ('search', 'news', 'images')
-            date_filter: Date filter ('d1'=day, 'w1'=week, 'm3'=3 months, 'y1'=year, None=all)
+            search_type: Type of search ('search', 'news')
+            date_filter: Date filter ('d1'=day, 'w1'=week, 'm3'=3 months)
 
         Returns:
             List of search result dicts with 'url', 'title', 'snippet'
@@ -71,71 +134,29 @@ class SerperSearchService:
         self._rate_limit()
 
         try:
-            payload = {
-                'q': query,
-                'gl': 'br',  # Brazil geolocation
-                'hl': 'pt-br',  # Portuguese language
-                'num': min(num_results, 100),
-            }
-
-            # Add date filter for recent results (default: last year)
-            if search_type == 'search' and date_filter:
-                payload['tbs'] = f'qdr:{date_filter}'
-
-            headers = {
-                'X-API-KEY': self.api_key,
-                'Content-Type': 'application/json'
-            }
-
-            endpoint = self.base_url
-            if search_type == 'news':
-                endpoint = 'https://google.serper.dev/news'
+            payload = self._build_payload(query, num_results, date_filter)
+            endpoint = SERPER_NEWS_URL if search_type == 'news' else SERPER_SEARCH_URL
 
             response = requests.post(
-                endpoint,
-                json=payload,
-                headers=headers,
-                timeout=10
+                endpoint, json=payload, headers=self._get_headers(), timeout=10
             )
 
-            if response.status_code == 401:
-                logger.error("Serper API authentication failed (invalid API key)")
+            if not self._handle_response_errors(response):
                 return []
-
-            if response.status_code == 429:
-                logger.error("Serper API rate limit exceeded")
-                return []
-
-            response.raise_for_status()
 
             data = response.json()
+            results = self._parse_organic_results(data)
 
-            # Extract organic results
-            results = []
-            organic = data.get('organic', [])
-
-            for item in organic:
-                results.append({
-                    'url': item.get('link', ''),
-                    'title': item.get('title', ''),
-                    'snippet': item.get('snippet', ''),
-                    'position': item.get('position', 0),
-                })
-
-            logger.info(
-                f"Serper search for '{query[:30]}...' returned {len(results)} results"
-            )
+            logger.info(f"Serper search for '{query[:30]}...' returned {len(results)} results")
             return results
 
         except requests.exceptions.Timeout:
             logger.error(f"Serper search timeout for '{query}'")
-            return []
         except requests.exceptions.RequestException as e:
             logger.error(f"Serper search failed for '{query}': {str(e)}")
-            return []
         except Exception as e:
             logger.error(f"Unexpected error in Serper search: {str(e)}")
-            return []
+        return []
 
     def search_news(self, query: str, num_results: int = 5) -> List[Dict[str, Any]]:
         """
@@ -154,41 +175,13 @@ class SerperSearchService:
         self._rate_limit()
 
         try:
-            payload = {
-                'q': query,
-                'gl': 'br',
-                'hl': 'pt-br',
-                'num': min(num_results, 100),
-            }
-
-            headers = {
-                'X-API-KEY': self.api_key,
-                'Content-Type': 'application/json'
-            }
-
+            payload = self._build_payload(query, num_results)
             response = requests.post(
-                'https://google.serper.dev/news',
-                json=payload,
-                headers=headers,
-                timeout=10
+                SERPER_NEWS_URL, json=payload, headers=self._get_headers(), timeout=10
             )
-
             response.raise_for_status()
-            data = response.json()
 
-            results = []
-            news = data.get('news', [])
-
-            for item in news:
-                results.append({
-                    'url': item.get('link', ''),
-                    'title': item.get('title', ''),
-                    'snippet': item.get('snippet', ''),
-                    'source': item.get('source', ''),
-                    'date': item.get('date', ''),
-                })
-
-            return results
+            return self._parse_news_results(response.json())
 
         except Exception as e:
             logger.error(f"Serper news search failed: {str(e)}")
@@ -199,18 +192,13 @@ class SerperSearchService:
         return bool(self.api_key)
 
     def get_credits_info(self) -> Optional[Dict[str, Any]]:
-        """
-        Get account credits information from Serper.
-
-        Returns:
-            Dict with 'credits' and 'used' or None if failed
-        """
+        """Get account credits information from Serper."""
         if not self.api_key:
             return None
 
         try:
             response = requests.get(
-                'https://google.serper.dev/account',
+                SERPER_ACCOUNT_URL,
                 headers={'X-API-KEY': self.api_key},
                 timeout=5
             )
