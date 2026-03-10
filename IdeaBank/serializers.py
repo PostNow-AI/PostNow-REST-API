@@ -175,3 +175,77 @@ class PostOptionsSerializer(serializers.Serializer):
     types = serializers.ListField(
         child=serializers.DictField()
     )
+
+
+class OpportunityGenerationRequestSerializer(serializers.Serializer):
+    """
+    Serializer para gerar post a partir de oportunidade do e-mail.
+
+    Recebe os dados da oportunidade via query params ou POST body
+    e gera um post automaticamente usando IA.
+    """
+    # Dados da oportunidade (vindos do e-mail)
+    titulo = serializers.CharField(
+        max_length=200,
+        help_text="Título da oportunidade de conteúdo"
+    )
+    descricao = serializers.CharField(
+        max_length=500,
+        required=False,
+        allow_blank=True,
+        help_text="Descrição da oportunidade"
+    )
+    tipo = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        help_text="Tipo de post (controverso, educativo, noticia, etc)"
+    )
+    categoria = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        help_text="Categoria original (polemica, educativo, newsjacking, etc)"
+    )
+    fontes = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text="URLs das fontes separadas por vírgula"
+    )
+    contexto = serializers.CharField(
+        max_length=500,
+        required=False,
+        allow_blank=True,
+        help_text="Análise/contexto da oportunidade"
+    )
+
+    # Opções de geração
+    include_image = serializers.BooleanField(
+        required=False,
+        default=True,
+        help_text="Se deve gerar imagem automaticamente"
+    )
+
+    # Mapeamento de tipo para PostType
+    TYPE_MAPPING = {
+        'controverso': 'controverso',
+        'educativo': 'educativo',
+        'noticia': 'noticia',
+        'entretenimento': 'entretenimento',
+        'case': 'case',
+        'tendencia': 'tendencia',
+        'informativo': 'informativo',
+    }
+
+    def validate_tipo(self, value):
+        """Mapeia o tipo para um valor válido de PostType."""
+        if not value:
+            return 'informativo'
+        return self.TYPE_MAPPING.get(value.lower(), 'informativo')
+
+    def get_sources_list(self):
+        """Retorna lista de URLs de fontes."""
+        fontes = self.validated_data.get('fontes', '')
+        if not fontes:
+            return []
+        return [url.strip() for url in fontes.split(',') if url.strip()]
