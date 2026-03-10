@@ -14,6 +14,8 @@ from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.mailjet_service import MailjetService
 from services.semaphore_service import SemaphoreService
+from services.get_creator_profile_data import get_creator_profile_data
+from services.trends_discovery_service import TrendsDiscoveryService
 from services.user_validation_service import UserValidationService
 
 logger = logging.getLogger(__name__)
@@ -62,6 +64,11 @@ class WeeklyContextService:
     """Service for generating weekly context for users.
 
     Supports dependency injection for testing and flexibility (DIP).
+
+    Fluxo melhorado (2026):
+        1. Fase 0: TrendsDiscoveryService descobre tendências REAIS
+        2. Fase 1: Contexto gerado com tendências como input
+        3. Resultado: Temas validados com fontes verificáveis
     """
 
     def __init__(
@@ -72,6 +79,7 @@ class WeeklyContextService:
         prompt_service: Optional[AIPromptService] = None,
         audit_service: Optional[AuditService] = None,
         mailjet_service: Optional[MailjetService] = None,
+        trends_discovery_service: Optional[TrendsDiscoveryService] = None,
     ):
         self.user_validation_service = user_validation_service or UserValidationService()
         self.semaphore_service = semaphore_service or SemaphoreService()
@@ -79,6 +87,7 @@ class WeeklyContextService:
         self.prompt_service = prompt_service or AIPromptService()
         self.audit_service = audit_service or AuditService()
         self.mailjet_service = mailjet_service or MailjetService()
+        self.trends_discovery_service = trends_discovery_service or TrendsDiscoveryService()
 
     @sync_to_async
     def _get_eligible_users(self, offset: int, limit: int) -> list[dict[str, Any]]:
@@ -166,7 +175,13 @@ class WeeklyContextService:
             }
 
     async def _process_user_context(self, user_id: int) -> Dict[str, Any]:
-        """Process weekly context generation for a single user."""
+        """Process weekly context generation for a single user.
+
+        Fluxo melhorado (2026):
+            1. Fase 0: Descobrir tendências REAIS via Google Trends
+            2. Fase 1: Gerar contexto com tendências como input
+            3. Salvar tendências descobertas e contexto gerado
+        """
         try:
             user = await sync_to_async(User.objects.get)(id=user_id)
         except User.DoesNotExist:
@@ -191,7 +206,13 @@ class WeeklyContextService:
                         'status': 'skipped',
                         'reason': validation_result['reason']}
 
-            context_result = await sync_to_async(self._generate_context_for_user)(user)
+            # FASE 0: Descobrir tendências REAIS antes de gerar contexto
+            discovered_trends = await self._discover_trends_for_user(user)
+
+            # FASE 1: Gerar contexto com tendências como input
+            context_result = await sync_to_async(self._generate_context_for_user)(
+                user, discovered_trends
+            )
             # Remove markdown code block se presente (```json ... ```)
             context_json = re.sub(r'^```(?:json)?\s*', '', context_result.strip())
             context_json = re.sub(r'\s*```$', '', context_json).strip()
@@ -203,6 +224,9 @@ class WeeklyContextService:
 
             # DRY: Usa mapeamento centralizado
             self._map_context_fields(client_context, context_data)
+
+            # Salvar tendências descobertas para uso posterior
+            client_context.discovered_trends = discovered_trends
 
             client_context.weekly_context_error = None
             client_context.weekly_context_error_date = None
@@ -216,11 +240,15 @@ class WeeklyContextService:
                 user=user,
                 action='context_generated',
                 status='success',
+                details={
+                    'discovered_trends_count': discovered_trends.get('validated_count', 0)
+                }
             )
 
             return {
                 'user_id': user_id,
                 'status': 'success',
+                'discovered_trends_count': discovered_trends.get('validated_count', 0),
             }
 
         except Exception as e:
@@ -238,6 +266,64 @@ class WeeklyContextService:
                 'error': str(e),
             }
 
+    async def _discover_trends_for_user(self, user: User) -> Dict[str, Any]:
+        """
+        Fase 0: Descobre tendências REAIS para o setor do usuário.
+
+        Usa Google Trends para descobrir o que está em alta e valida
+        cada tendência buscando fontes reais no Google Search.
+
+        Args:
+            user: Instância do usuário
+
+        Returns:
+            Dict com tendências descobertas e validadas
+        """
+        try:
+            # Buscar dados do perfil do usuário
+            profile_data = await sync_to_async(get_creator_profile_data)(user)
+
+            sector = profile_data.get('specialization', '')
+            business_description = profile_data.get('business_description', '')
+            location = profile_data.get('business_location', 'Brasil')
+
+            if not sector:
+                logger.warning(f"User {user.id} has no sector defined, skipping trend discovery")
+                return {
+                    'general_trends': [],
+                    'sector_trends': [],
+                    'rising_topics': [],
+                    'validated_count': 0,
+                    'discovery_metadata': {'error': 'no_sector_defined'}
+                }
+
+            # Executar descoberta de tendências (sync, pois pytrends é síncrono)
+            discovered_trends = await sync_to_async(
+                self.trends_discovery_service.discover_trends_for_sector
+            )(
+                sector=sector,
+                business_description=business_description,
+                location=location,
+            )
+
+            logger.info(
+                f"Discovered {discovered_trends.get('validated_count', 0)} trends "
+                f"for user {user.id} (sector: {sector})"
+            )
+
+            return discovered_trends
+
+        except Exception as e:
+            logger.error(f"Error discovering trends for user {user.id}: {e}")
+            # Retornar estrutura vazia em caso de erro (não bloqueia o fluxo)
+            return {
+                'general_trends': [],
+                'sector_trends': [],
+                'rising_topics': [],
+                'validated_count': 0,
+                'discovery_metadata': {'error': str(e)}
+            }
+
     def _map_context_fields(self, client_context: ClientContext, context_data: dict) -> None:
         """DRY: Map JSON context data to ClientContext model fields.
 
@@ -249,11 +335,25 @@ class WeeklyContextService:
                 value = section_data.get(json_key, default)
                 setattr(client_context, model_field, value)
 
-    def _generate_context_for_user(self, user: User) -> str:
-        """AI service call to generate weekly context for a user."""
+    def _generate_context_for_user(
+        self,
+        user: User,
+        discovered_trends: Dict[str, Any] = None
+    ) -> str:
+        """AI service call to generate weekly context for a user.
+
+        Args:
+            user: Instância do usuário
+            discovered_trends: Tendências descobertas pelo TrendsDiscoveryService
+
+        Returns:
+            String JSON com o contexto gerado
+        """
         try:
             self.prompt_service.set_user(user)
-            prompt = self.prompt_service.build_context_prompts()
+            prompt = self.prompt_service.build_context_prompts(
+                discovered_trends=discovered_trends
+            )
             context_result = self.ai_service.generate_text(prompt, user)
 
             return context_result

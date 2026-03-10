@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 
 def generate_weekly_context_email_template(context_data, user_data):
@@ -439,7 +440,7 @@ def generate_weekly_context_email_template(context_data, user_data):
                                             Quer ajustar as configurações? Acesse sua conta no PostNow.
                                         </p>
                                         <p style="margin: 0; color: #6a7282; font-size: 12px; font-weight: 500;">
-                                            © 2025 PostNow. Inteligência de mercado para seu crescimento.
+                                            © {datetime.now().year} PostNow. Inteligência de mercado para seu crescimento.
                                         </p>
                                     </td>
                                 </tr>
@@ -580,7 +581,7 @@ para ver os links completos das fontes utilizadas.
 Use estes insights para criar posts que realmente conectam com seu público.
 Acesse: https://postnow.ai/dashboard
 
-© 2025 PostNow. Inteligência de mercado para seu crescimento.
+© {datetime.now().year} PostNow. Inteligência de mercado para seu crescimento.
 
 Para ajustar suas preferências, acesse sua conta no PostNow.
 """

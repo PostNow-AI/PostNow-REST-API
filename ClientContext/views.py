@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import os
-import secrets
 
 from django.core.cache import cache
 from django.views.decorators.csrf import csrf_exempt
@@ -18,58 +16,26 @@ from AuditSystem.services import AuditService
 from IdeaBank.serializers import UserSerializer
 from IdeaBank.services.weekly_feed_creation import WeeklyFeedCreationService
 
-logger = logging.getLogger(__name__)
-
-# Token secreto para endpoints de batch (definido no GitHub Secrets como CRON_SECRET)
-BATCH_API_TOKEN = os.getenv('CRON_SECRET', '')
-
-# Rate limiting para geração de contexto individual
-SINGLE_CONTEXT_RATE_LIMIT_SECONDS = 300  # 5 minutos
-
-# Limites de validação
-MAX_BATCH_NUMBER = 100
-MIN_BATCH_NUMBER = 1
-
-
-def _validate_batch_token(request) -> bool:
-    """Valida o token de autenticação para endpoints de batch."""
-    if not BATCH_API_TOKEN:
-        # Se não há token configurado, permite (desenvolvimento)
-        return True
-    auth_header = request.headers.get('Authorization', '')
-    if auth_header.startswith('Bearer '):
-        token = auth_header[7:]
-        # Usar compare_digest para evitar timing attacks
-        return secrets.compare_digest(token, BATCH_API_TOKEN)
-    return False
-
-
-def _validate_batch_number(batch_str: str) -> int:
-    """Valida e retorna o número do batch."""
-    try:
-        batch = int(batch_str)
-        if batch < MIN_BATCH_NUMBER:
-            return MIN_BATCH_NUMBER
-        if batch > MAX_BATCH_NUMBER:
-            return MAX_BATCH_NUMBER
-        return batch
-    except (ValueError, TypeError):
-        return 1
-
-
 from ClientContext.models import ClientContext
 from ClientContext.services.context_enrichment_service import ContextEnrichmentService
-from ClientContext.utils.context_helpers import (
-    check_step_result,
-    build_context_data,
-    build_full_context_data,
-)
 from ClientContext.services.market_intelligence_email_service import MarketIntelligenceEmailService
+from ClientContext.services.market_intelligence_enrichment_service import MarketIntelligenceEnrichmentService
 from ClientContext.services.opportunities_email_service import OpportunitiesEmailService
 from ClientContext.services.opportunities_generation_service import OpportunitiesGenerationService
-from ClientContext.services.market_intelligence_enrichment_service import MarketIntelligenceEnrichmentService
 from ClientContext.services.retry_client_context import RetryClientContext
 from ClientContext.services.weekly_context_service import WeeklyContextService
+from ClientContext.utils.batch_validation import (
+    SINGLE_CONTEXT_RATE_LIMIT_SECONDS,
+    validate_batch_number,
+    validate_batch_token,
+)
+from ClientContext.utils.context_helpers import (
+    build_context_data,
+    build_full_context_data,
+    check_step_result,
+)
+
+logger = logging.getLogger(__name__)
 
 
 @csrf_exempt
@@ -80,7 +46,7 @@ def generate_client_context(request):
     """Generate client context view."""
 
     # Validar token de autenticação
-    if not _validate_batch_token(request):
+    if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
             status=status.HTTP_401_UNAUTHORIZED
@@ -88,7 +54,7 @@ def generate_client_context(request):
 
     try:
         # Get batch number from query params (default to 1)
-        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
+        batch_number = validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 3  # Process 3 users per batch, to avoid vercel timeouts
 
         loop = asyncio.new_event_loop()
@@ -139,7 +105,7 @@ def manual_generate_client_context(request):
     """Generate client context view (manual trigger for all users)."""
 
     # Validar token de autenticação
-    if not _validate_batch_token(request):
+    if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
             status=status.HTTP_401_UNAUTHORIZED
@@ -409,7 +375,7 @@ def retry_generate_client_context(request):
     """Retry generate client context view."""
 
     # Validar token de autenticação
-    if not _validate_batch_token(request):
+    if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
             status=status.HTTP_401_UNAUTHORIZED
@@ -417,7 +383,7 @@ def retry_generate_client_context(request):
 
     try:
         # Get batch number from query params (default to 1)
-        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
+        batch_number = validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 2  # Process 2 users per batch, to avoid vercel timeouts
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -474,14 +440,14 @@ def generate_opportunities(request):
         batch: Batch number for processing (default: 1)
     """
     # Validar token de autenticação
-    if not _validate_batch_token(request):
+    if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
             status=status.HTTP_401_UNAUTHORIZED
         )
 
     try:
-        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
+        batch_number = validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 5  # Process 5 users per batch
 
         loop = asyncio.new_event_loop()
@@ -581,14 +547,14 @@ def enrich_and_send_opportunities_email(request):
     3. Sends the opportunities email with enriched data
     """
     # Validar token de autenticação
-    if not _validate_batch_token(request):
+    if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
             status=status.HTTP_401_UNAUTHORIZED
         )
 
     try:
-        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
+        batch_number = validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 2  # Process 2 users per batch to avoid timeouts
 
         loop = asyncio.new_event_loop()
@@ -682,14 +648,14 @@ def send_market_intelligence_email(request):
         batch: Batch number for processing (default: 1)
     """
     # Validar token de autenticação
-    if not _validate_batch_token(request):
+    if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
             status=status.HTTP_401_UNAUTHORIZED
         )
 
     try:
-        batch_number = _validate_batch_number(request.GET.get('batch', '1'))
+        batch_number = validate_batch_number(request.GET.get('batch', '1'))
         batch_size = 5  # Process 5 users per batch
 
         loop = asyncio.new_event_loop()
@@ -754,3 +720,138 @@ def send_market_intelligence_email(request):
         return Response({
             'error': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def test_enrichment_for_user(request):
+    """
+    Test enrichment pipeline for a specific user by email.
+
+    Query Parameters:
+        email: User email to test
+        send_email: Whether to send email after enrichment (default: true)
+
+    Requires CRON_SECRET authorization.
+    """
+    if not validate_batch_token(request):
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    email = request.query_params.get('email', '')
+    send_email_flag = request.query_params.get('send_email', 'true').lower() == 'true'
+
+    if not email:
+        return Response(
+            {'error': 'Email parameter is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    from django.contrib.auth.models import User
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response(
+            {'error': f'User not found: {email}'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    try:
+        context = ClientContext.objects.get(user=user)
+    except ClientContext.DoesNotExist:
+        return Response(
+            {'error': f'Context not found for user: {email}'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check opportunities
+    tendencies = context.tendencies_data or {}
+    total_opportunities = sum(
+        len(data.get('items', []))
+        for data in tendencies.values()
+        if isinstance(data, dict) and 'items' in data
+    )
+
+    if total_opportunities == 0:
+        return Response({
+            'error': 'No opportunities to enrich',
+            'message': 'Run generate-opportunities first'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    # Reset enrichment status
+    old_status = context.context_enrichment_status
+    context.context_enrichment_status = 'pending'
+    context.context_enrichment_error = None
+    context.save()
+
+    result = {
+        'user_id': user.id,
+        'email': email,
+        'opportunities_count': total_opportunities,
+        'previous_status': old_status,
+        'steps': {}
+    }
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        # Step 1: Enrichment
+        enrichment_service = ContextEnrichmentService()
+        context_data = {
+            'user_id': user.id,
+            'tendencies_data': context.tendencies_data,
+        }
+
+        enrichment_result = loop.run_until_complete(
+            enrichment_service.enrich_user_context(user, context_data)
+        )
+        result['steps']['enrichment'] = enrichment_result
+
+        # Collect enriched sources info
+        context.refresh_from_db()
+        tendencies = context.tendencies_data or {}
+        sources_by_category = {}
+        total_sources = 0
+
+        for category, data in tendencies.items():
+            if isinstance(data, dict) and 'items' in data:
+                category_sources = []
+                for item in data.get('items', []):
+                    sources = item.get('enriched_sources', [])
+                    category_sources.extend(sources)
+                    total_sources += len(sources)
+                if category_sources:
+                    sources_by_category[category] = [
+                        {'title': s.get('title', ''), 'url': s.get('url', '')}
+                        for s in category_sources[:3]
+                    ]
+
+        result['enriched_sources'] = {
+            'total': total_sources,
+            'by_category': sources_by_category
+        }
+
+        # Step 2: Send email if requested
+        if send_email_flag:
+            email_service = OpportunitiesEmailService()
+            email_result = loop.run_until_complete(
+                email_service.send_email_to_user(user)
+            )
+            result['steps']['email'] = email_result
+
+        result['status'] = 'success'
+        return Response(result, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.exception(f"Error in test_enrichment_for_user: {e}")
+        result['status'] = 'failed'
+        result['error'] = str(e)
+        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    finally:
+        loop.close()

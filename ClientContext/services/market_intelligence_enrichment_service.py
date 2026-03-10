@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from ClientContext.models import ClientContext
 from ClientContext.utils.search_utils import fetch_and_filter_sources
-from services.google_search_service import GoogleSearchService
+from services.serper_search_service import SerperSearchService
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +57,8 @@ class MarketIntelligenceEnrichmentService:
     Serviço para enriquecer dados de Inteligência de Mercado com fontes adicionais.
     """
 
-    def __init__(self, google_search_service: Optional[GoogleSearchService] = None):
-        self.google_search_service = google_search_service or GoogleSearchService()
+    def __init__(self, search_service: Optional[SerperSearchService] = None):
+        self.search_service = search_service or SerperSearchService()
 
     async def enrich_all_users(
         self,
@@ -255,7 +255,7 @@ class MarketIntelligenceEnrichmentService:
 
         # Buscar e filtrar fontes
         sources = await fetch_and_filter_sources(
-            self.google_search_service,
+            self.search_service,
             query,
             config['section_type'],
             used_url_keys

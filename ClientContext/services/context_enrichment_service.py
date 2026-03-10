@@ -12,9 +12,11 @@ from django.utils import timezone
 from ClientContext.models import ClientContext
 from ClientContext.utils.search_utils import build_search_query, fetch_and_filter_sources
 from ClientContext.utils.enrichment_analysis import generate_enriched_analysis
-from services.google_search_service import GoogleSearchService
+from services.serper_search_service import SerperSearchService
+from services.source_evaluator_service import SourceEvaluatorService
 from services.ai_service import AiService
 from services.semaphore_service import SemaphoreService
+from services.get_creator_profile_data import get_creator_profile_data
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +40,15 @@ class ContextEnrichmentService:
 
     def __init__(
         self,
-        google_search_service: Optional[GoogleSearchService] = None,
+        search_service: Optional[SerperSearchService] = None,
         ai_service: Optional[AiService] = None,
         semaphore_service: Optional[SemaphoreService] = None,
+        source_evaluator: Optional[SourceEvaluatorService] = None,
     ):
-        self.google_search_service = google_search_service or GoogleSearchService()
+        self.search_service = search_service or SerperSearchService()
         self.ai_service = ai_service or AiService()
         self.semaphore_service = semaphore_service or SemaphoreService()
+        self.source_evaluator = source_evaluator or SourceEvaluatorService()
 
     async def enrich_all_users_context(
         self,
@@ -199,6 +203,10 @@ class ContextEnrichmentService:
         """
         enriched_data = {}
 
+        # Obter setor do cliente para avaliação de fontes
+        user_data = await sync_to_async(get_creator_profile_data)(user)
+        client_sector = user_data.get('specialization', '') or user_data.get('business_name', '')
+
         for category_key, category_data in tendencies_data.items():
             if not isinstance(category_data, dict):
                 enriched_data[category_key] = category_data
@@ -214,7 +222,7 @@ class ContextEnrichmentService:
             enriched_items = []
             for item in items[:3]:
                 enriched_item = await self._enrich_opportunity(
-                    item, user, section, used_url_keys
+                    item, user, section, category_key, client_sector, used_url_keys
                 )
                 enriched_items.append(enriched_item)
 
@@ -230,6 +238,8 @@ class ContextEnrichmentService:
         opportunity: Dict[str, Any],
         user: User,
         section: str,
+        category_key: str,
+        client_sector: str,
         used_url_keys: Set[str]
     ) -> Dict[str, Any]:
         """
@@ -239,6 +249,8 @@ class ContextEnrichmentService:
             opportunity: Dict with opportunity data
             user: User instance for AI service calls
             section: Section name for source quality scoring
+            category_key: Category key (polemica, educativo, etc.)
+            client_sector: Client's sector/niche for relevance evaluation
             used_url_keys: Set of already used URL keys for deduplication
 
         Returns:
@@ -251,10 +263,32 @@ class ContextEnrichmentService:
             return enriched_opportunity
 
         try:
-            search_query = build_search_query(opportunity)
-            enriched_sources = await fetch_and_filter_sources(
-                self.google_search_service, search_query, section, used_url_keys
+            # Build query optimized for content type
+            search_query = build_search_query(opportunity, category_key)
+            # For news search, use simpler query (just the title)
+            news_query = build_search_query(opportunity, category_key, for_news=True)
+
+            # Fetch and filter sources (uses news search for newsjacking)
+            raw_sources = await fetch_and_filter_sources(
+                self.search_service, search_query, section, used_url_keys,
+                read_content=True,  # Ler conteúdo para avaliação IA
+                category_key=category_key,  # Para usar news search em newsjacking
+                news_query=news_query  # Query simplificada para news
             )
+
+            # Evaluate sources with AI for relevance to content type
+            if raw_sources and self.source_evaluator.is_configured():
+                evaluated_sources = await sync_to_async(self.source_evaluator.evaluate_sources)(
+                    sources=raw_sources,
+                    opportunity_title=titulo,
+                    content_type=category_key,
+                    client_sector=client_sector,
+                    max_sources=3
+                )
+                enriched_sources = evaluated_sources
+            else:
+                enriched_sources = raw_sources
+
             enriched_opportunity['enriched_sources'] = enriched_sources
 
             if enriched_sources:
