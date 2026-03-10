@@ -94,7 +94,7 @@ def _build_create_post_url(
     if analysis:
         params['contexto'] = analysis[:300]
 
-    return f"{base_url}/criar-post?{urlencode(params)}"
+    return f"{base_url}/create?{urlencode(params)}"
 
 
 def _generate_header(title: str, subtitle: str, emoji: str) -> str:
