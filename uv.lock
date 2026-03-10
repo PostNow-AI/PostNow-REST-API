@@ -293,7 +293,7 @@ wheels = [
 [[package]]
 name = "django-allauth"
 version = "0.61.1"
-source = { registry = "https://pypi.org/simple" }
+source = { path = "wheels/django_allauth-0.61.1-py3-none-any.whl" }
 dependencies = [
     { name = "django" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -301,7 +301,21 @@ dependencies = [
     { name = "requests" },
     { name = "requests-oauthlib" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/72/70/77c010fb24d7bebb6042354543f20f75cc7934944165d1a90091459e3d0b/django-allauth-0.61.1.tar.gz", hash = "sha256:5b4ae515ea74f54f0041210692eee10c309ad15ddbbd03d3620693c75e3f7945", size = 951524, upload-time = "2024-02-09T09:12:43.211Z" }
+wheels = [
+    { filename = "django_allauth-0.61.1-py3-none-any.whl", hash = "sha256:de5d576d82ff593ac8b606b848ffc797db0c6612a8fd145896dfbb21265b17e4" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "django", specifier = ">=3.2" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=1.7" },
+    { name = "python3-openid", specifier = ">=3.0.8" },
+    { name = "python3-saml", marker = "extra == 'saml'", specifier = ">=1.15.0,<2.0.0" },
+    { name = "qrcode", marker = "extra == 'mfa'", specifier = ">=7.0.0" },
+    { name = "requests", specifier = ">=2.0.0" },
+    { name = "requests-oauthlib", specifier = ">=0.3.0" },
+]
+provides-extras = ["saml", "mfa"]
 
 [[package]]
 name = "django-cors-headers"
@@ -992,7 +1006,7 @@ requires-dist = [
     { name = "cryptography", specifier = "==45.0.5" },
     { name = "dj-rest-auth", path = "wheels/dj_rest_auth-6.0.0-py2.py3-none-any.whl" },
     { name = "django", specifier = "==5.2.4" },
-    { name = "django-allauth", specifier = "==0.61.1" },
+    { name = "django-allauth", path = "wheels/django_allauth-0.61.1-py3-none-any.whl" },
     { name = "django-cors-headers", specifier = "==4.7.0" },
     { name = "django-filter", specifier = "==25.1" },
     { name = "djangorestframework", specifier = "==3.16.0" },

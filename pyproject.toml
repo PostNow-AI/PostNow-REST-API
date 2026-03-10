@@ -44,3 +44,4 @@ find-links = ["wheels"]
 
 [tool.uv.sources]
 dj-rest-auth = { path = "wheels/dj_rest_auth-6.0.0-py2.py3-none-any.whl" }
+django-allauth = { path = "wheels/django_allauth-0.61.1-py3-none-any.whl" }
