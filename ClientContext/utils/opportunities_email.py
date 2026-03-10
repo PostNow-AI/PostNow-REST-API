@@ -3,15 +3,12 @@ Template do e-mail de Oportunidades de Conteúdo (Segunda-feira).
 Contém apenas as oportunidades enriquecidas da Fase 2.
 Estilo visual unificado com o e-mail de Inteligência de Mercado.
 """
-import html
 import os
+from datetime import datetime
 
+from ClientContext.utils.email_helpers import escape_html as _escape
+from ClientContext.utils.email_helpers import get_user_name as _get_user_name
 
-def _escape(text) -> str:
-    """Sanitiza texto para prevenir XSS."""
-    if text is None:
-        return ''
-    return html.escape(str(text))
 
 # Estilo unificado PostNow
 STYLES = {
@@ -56,6 +53,7 @@ def _generate_header(title: str, subtitle: str, emoji: str) -> str:
 
 def _generate_footer() -> str:
     """Footer unificado."""
+    current_year = datetime.now().year
     return f'''
     <tr>
         <td style="padding: 24px; background-color: {STYLES['light_bg']}; border-top: 1px solid {STYLES['border_color']}; text-align: center;">
@@ -63,7 +61,7 @@ def _generate_footer() -> str:
                 📬 Toda <strong>segunda-feira</strong> você recebe oportunidades. Na <strong>quarta</strong>, inteligência de mercado.
             </p>
             <p style="margin: 0; color: #94a3b8; font-size: 11px;">
-                © 2025 PostNow. Transformando dados em conteúdo.
+                © {current_year} PostNow. Transformando dados em conteúdo.
             </p>
         </td>
     </tr>
@@ -191,7 +189,7 @@ def generate_opportunities_email_template(tendencies_data: dict, user_data: dict
     """
     # Sanitizar dados do usuário para prevenir XSS
     business_name = _escape(user_data.get('business_name', 'Sua Empresa'))
-    user_name = _escape(user_data.get('user_name', user_data.get('user__first_name', 'Usuário')))
+    user_name = _get_user_name(user_data)
     frontend_url = os.getenv('FRONTEND_URL', 'https://app.postnow.com.br')
 
     opportunities_html = _generate_opportunities_html(tendencies_data)
@@ -245,7 +243,7 @@ def generate_opportunities_email_template(tendencies_data: dict, user_data: dict
 def generate_opportunities_plain_text(tendencies_data: dict, user_data: dict) -> str:
     """Generate plain text version of the opportunities email."""
     business_name = user_data.get('business_name', 'Sua Empresa')
-    user_name = user_data.get('user_name', user_data.get('user__first_name', 'Usuário'))
+    user_name = _get_user_name(user_data)
 
     lines = [
         "POSTNOW - OPORTUNIDADES DE CONTEÚDO",
@@ -289,7 +287,7 @@ def generate_opportunities_plain_text(tendencies_data: dict, user_data: dict) ->
         "Acesse o dashboard para criar seus posts:",
         os.getenv('FRONTEND_URL', 'https://app.postnow.com.br'),
         "",
-        "© 2025 PostNow",
+        f"© {datetime.now().year} PostNow",
     ])
 
     return "\n".join(lines)

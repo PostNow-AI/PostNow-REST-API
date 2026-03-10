@@ -23,13 +23,11 @@ class AiService:
             'gemini-3-pro-preview', ]
         self.image_models = [
             'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview',
-            'gemini-2.5-flash-image',
-            'gemini-2.5-flash-image',
-            'gemini-2.5-flash-image',
             'gemini-2.5-flash-image',
             'gemini-3-pro-image-preview',
-            'gemini-3-pro-image-preview', ]
+            'gemini-2.5-flash-image',
+            'gemini-3-pro-image-preview',
+        ]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
         self.client = genai.Client(api_key=self.api_key)
         self.generate_text_config = types.GenerateContentConfig(
@@ -64,7 +62,7 @@ class AiService:
                 models=self.models,
                 generate_function=lambda model: self._try_generate_text(
                     model, prompt_list, effective_config),
-                max_retries=3
+                max_retries=2
             )
             self._deduct_credits(
                 user=user, model=model, operation='text_generation',
@@ -116,7 +114,7 @@ class AiService:
                 models=self.image_models,
                 generate_function=lambda model: self._try_generate_image(
                     model, prompt_list, image_attachment, effective_config),
-                max_retries=3
+                max_retries=1
             )
             self._deduct_credits(
                 user=user, model=model, operation='image_generation',

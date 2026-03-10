@@ -29,14 +29,14 @@ class DailyIdeasService:
     """
 
     def __init__(
-        self,
-        user_validation_service: Optional[UserValidationService] = None,
-        semaphore_service: Optional[SemaphoreService] = None,
-        weekly_feed_creation_service: Optional[WeeklyFeedCreationService] = None,
-        ai_service: Optional[AiService] = None,
-        prompt_service: Optional[AIPromptService] = None,
-        audit_service: Optional[AuditService] = None,
-        s3_service: Optional[S3Service] = None,
+            self,
+            user_validation_service: Optional[UserValidationService] = None,
+            semaphore_service: Optional[SemaphoreService] = None,
+            weekly_feed_creation_service: Optional[WeeklyFeedCreationService] = None,
+            ai_service: Optional[AiService] = None,
+            prompt_service: Optional[AIPromptService] = None,
+            audit_service: Optional[AuditService] = None,
+            s3_service: Optional[S3Service] = None,
     ):
         self.user_validation_service = user_validation_service or UserValidationService()
         self.semaphore_service = semaphore_service or SemaphoreService()
@@ -81,6 +81,8 @@ class DailyIdeasService:
 
         eligible_users = await self._get_eligible_users(offset=offset, limit=limit)
         total = len(eligible_users)
+
+        print(f"Batch {batch_number} - Total eligible users: {total}")
 
         if total == 0:
             return {
@@ -142,6 +144,8 @@ class DailyIdeasService:
     async def _process_user_daily_ideas(self, user_id: int) -> Dict[str, Any]:
         """Generate daily ideas to the user"""
         user = await sync_to_async(User.objects.get)(id=user_id)
+
+        print('processing user:', user_id)
         try:
             user_data = await self.user_validation_service.get_user_data(user_id)
             if not user_data:
@@ -164,7 +168,7 @@ class DailyIdeasService:
                 user=user,
                 type='feed',
                 further_details=week_id
-            ).first)()
+            ).order_by('-created_at').first)()
 
             if not feed_base_post:
                 await self.weekly_feed_creation_service.process_user_weekly_ideas(user_id)
@@ -172,7 +176,7 @@ class DailyIdeasService:
                     user=user,
                     type='feed',
                     further_details=week_id
-                ).first)()
+                ).order_by('-created_at').first)()
 
             post_idea = await sync_to_async(lambda: feed_base_post.ideas.first())()
 

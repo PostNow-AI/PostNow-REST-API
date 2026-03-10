@@ -28,4 +28,7 @@ urlpatterns = [
     # Frontend: Get user opportunities for navigation
     path('opportunities/', views.get_user_opportunities,
          name='get_user_opportunities'),
+    # Test endpoint for enrichment debugging
+    path('test-enrichment/', views.test_enrichment_for_user,
+         name='test_enrichment_for_user'),
 ]

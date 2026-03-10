@@ -40,7 +40,7 @@ jobs:
 
           RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X GET \
-            "${{ env.API_BASE_URL }}/client-context/generate-opportunities/?batch=${{ matrix.batch }}" \
+            "${{ env.API_BASE_URL }}/api/v1/client-context/generate-opportunities/?batch=${{ matrix.batch }}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}")
 

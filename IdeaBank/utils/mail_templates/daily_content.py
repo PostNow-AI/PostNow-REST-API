@@ -1,4 +1,5 @@
 import re
+from datetime import date
 
 
 def format_text_with_bold(text: str) -> str:
@@ -94,7 +95,7 @@ def daily_content_template(user_name: str, feed_image: str, feed_text: str, reel
                                             Precisa de ajuda? Entre em contato conosco respondendo este email.
                                         </p>
                                         <p style="margin: 0; color: #6a7282; font-size: 12px; font-weight: 500;">
-                                            © 2025 PostNow. Destrave sua criatividade, posts prontos mais rápido que nunca.
+                                            © {date.today().year} PostNow. Destrave sua criatividade, posts prontos mais rápido que nunca.
                                         </p>
                                     </td>
                                 </tr>
