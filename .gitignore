@@ -15,7 +15,7 @@ lib64/
 parts/
 sdist/
 var/
-wheels/
+# wheels/ is tracked intentionally (vendored dj-rest-auth wheel for Vercel)
 *.egg-info/
 .installed.cfg
 *.egg
