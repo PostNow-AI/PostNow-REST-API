@@ -101,7 +101,7 @@ class TestDiscoverTrendsForSector:
         """Testa que tendências são validadas com fontes."""
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_search_service,
+            search_service=mock_search_service,
         )
 
         result = service.discover_trends_for_sector(sector='Tecnologia')
@@ -125,7 +125,7 @@ class TestDiscoverTrendsForSector:
 
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_search_service,
+            search_service=mock_search_service,
         )
 
         result = service.discover_trends_for_sector(sector='Tecnologia')
@@ -166,7 +166,7 @@ class TestDiscoverGeneralTrends:
 
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_search_service,
+            search_service=mock_search_service,
         )
 
         result = service._discover_general_trends()
@@ -199,7 +199,7 @@ class TestDiscoverSectorTrends:
         """Testa que prioriza queries em crescimento."""
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_search_service,
+            search_service=mock_search_service,
         )
 
         result = service._discover_sector_trends(sector='Tecnologia')
@@ -219,7 +219,7 @@ class TestValidateTrendWithSources:
 
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_search_service,
+            search_service=mock_search_service,
         )
 
         result = service._validate_trend_with_sources('Tendência Teste')
@@ -232,7 +232,7 @@ class TestValidateTrendWithSources:
         """Testa que retorna dict válido com fontes suficientes."""
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_search_service,
+            search_service=mock_search_service,
         )
 
         result = service._validate_trend_with_sources('Tendência Teste')
@@ -247,7 +247,7 @@ class TestValidateTrendWithSources:
         """Testa que inclui keywords de contexto na busca."""
         service = TrendsDiscoveryService(
             google_trends_service=mock_google_trends,
-            google_search_service=mock_search_service,
+            search_service=mock_search_service,
         )
 
         service._validate_trend_with_sources(
