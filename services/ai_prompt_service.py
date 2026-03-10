@@ -50,9 +50,19 @@ class AIPromptService:
         """Set the user for whom the prompts will be generated."""
         self.user = user
 
-    def build_context_prompts(self) -> list[str]:
-        """Build context prompts based on the user's creator profile."""
+    def build_context_prompts(self, discovered_trends: dict = None) -> list[str]:
+        """Build context prompts based on the user's creator profile.
+
+        Args:
+            discovered_trends: Tendências pré-descobertas via Google Trends (opcional).
+                              Quando fornecido, a IA DEVE usar EXCLUSIVAMENTE essas
+                              tendências - NÃO pode inventar ou sugerir outras.
+                              Isso garante que todo conteúdo seja baseado em dados reais.
+        """
         profile_data = get_creator_profile_data(self.user)
+
+        # Formatar tendências descobertas para inclusão no prompt
+        trends_section = self._format_discovered_trends_for_prompt(discovered_trends)
 
         return [
             """
@@ -61,7 +71,6 @@ class AIPromptService:
             🏢 DADOS DO ONBOARDING DA EMPRESA
             - Nome da empresa: {profile_data['business_name']}
             - Site da empresa: {profile_data['business_website']}
-            - Nome da empresa: {profile_data['business_website']}
 
             - Descrição do negócio: {profile_data['business_description']}
             - Setor / nicho de mercado: {profile_data['specialization']}
@@ -70,7 +79,7 @@ class AIPromptService:
             - Interesses do público: {profile_data['target_interests']}
             - Concorrentes conhecidos: {profile_data['main_competitors']}
             - Perfis de referência: {profile_data['reference_profiles']}
-
+{trends_section}
             ============================================================
             📌 TAREFA
             Realizar pesquisa online (via web.search) e gerar um
@@ -82,6 +91,12 @@ class AIPromptService:
             3. Se algo não for encontrado → escrever: "sem dados disponíveis".
             4. Priorizar fontes brasileiras se a localização for {profile_data['business_location']} (BR).
             5. Manter linguagem neutra, objetiva e sem opiniões.
+            6. REGRA CRÍTICA - TENDÊNCIAS:
+               - Se tendências pré-validadas foram fornecidas acima, você DEVE usar
+                 SOMENTE essas tendências na seção "tendencias" do output.
+               - NÃO invente temas novos. Use APENAS os temas da lista fornecida.
+               - As fontes já estão validadas - use-as diretamente.
+               - Se não houver tendências pré-validadas, pesquise normalmente.
 
             ============================================================
 
@@ -112,7 +127,10 @@ class AIPromptService:
               }},
 
               "tendencias": {{
-                "temas_populares": ["Tema 1", "Tema 2"],
+                "temas_populares": [
+                  {{"tema": "Tema 1", "trend_source": "tendência original da lista"}},
+                  {{"tema": "Tema 2", "trend_source": "tendência original da lista"}}
+                ],
                 "hashtags": ["#hashtag1", "#hashtag2"],
                 "palavras_chave": ["keyword1", "keyword2"],
                 "fontes": ["URL 1", "URL 2"]
@@ -122,7 +140,7 @@ class AIPromptService:
                 "datas_relevantes": ["Data 1", "Data 2"],
                 "eventos_locais": ["Evento 1", "Evento 2"],
                 "fontes": ["URL 1", "URL 2"]
-              }},          
+              }},
 
               "marca": {{
                 "presenca_online": "Resumo factual das aparições online.",
@@ -138,6 +156,110 @@ class AIPromptService:
             ============================================================
 
             """]
+
+    def _format_discovered_trends_for_prompt(self, discovered_trends: dict = None) -> str:
+        """
+        Formata tendências descobertas para inclusão no prompt.
+
+        Args:
+            discovered_trends: Dict com tendências do TrendsDiscoveryService
+
+        Returns:
+            String formatada para inclusão no prompt, ou string vazia se não houver tendências
+        """
+        if not discovered_trends or discovered_trends.get('validated_count', 0) == 0:
+            return ""
+
+        sections = []
+        sections.append("""
+            ============================================================
+            📊 TENDÊNCIAS PRÉ-VALIDADAS (Google Trends + fontes verificadas)
+
+            ⚠️ REGRA OBRIGATÓRIA - LEIA COM ATENÇÃO:
+            Você DEVE usar EXCLUSIVAMENTE as tendências listadas abaixo.
+            NÃO invente ou sugira temas que não estejam nesta lista.
+            Cada item da seção "tendencias" DEVE vir desta lista.
+            Se precisar de mais temas, adapte os existentes ao contexto do setor.
+
+            PROIBIDO: Criar temas novos que não estão na lista abaixo.
+            ============================================================""")
+
+        # Tendências gerais do Brasil
+        general_trends = discovered_trends.get('general_trends', [])
+        if general_trends:
+            sections.append("\n            🌍 TENDÊNCIAS GERAIS DO BRASIL:")
+            for trend in general_trends[:5]:
+                topic = trend.get('topic', '')
+                sources = trend.get('sources', [])
+                relevance = trend.get('relevance_score', 0)
+                sections.append(f"            - {topic} (relevância: {relevance}/100)")
+                if sources:
+                    source_urls = [s.get('url', '') for s in sources[:2] if s.get('url')]
+                    if source_urls:
+                        sections.append(f"              Fontes: {', '.join(source_urls)}")
+
+        # Tendências específicas do setor
+        sector_trends = discovered_trends.get('sector_trends', [])
+        if sector_trends:
+            sections.append("\n            🎯 TENDÊNCIAS DO SETOR:")
+            for trend in sector_trends[:5]:
+                topic = trend.get('topic', '')
+                sources = trend.get('sources', [])
+                relevance = trend.get('relevance_score', 0)
+                sections.append(f"            - {topic} (relevância: {relevance}/100)")
+                if sources:
+                    source_urls = [s.get('url', '') for s in sources[:2] if s.get('url')]
+                    if source_urls:
+                        sections.append(f"              Fontes: {', '.join(source_urls)}")
+
+        # Tópicos em crescimento
+        rising_topics = discovered_trends.get('rising_topics', [])
+        if rising_topics:
+            sections.append("\n            📈 TÓPICOS EM CRESCIMENTO:")
+            for trend in rising_topics[:5]:
+                topic = trend.get('topic', '')
+                growth = trend.get('growth_score', 0)
+                sections.append(f"            - {topic} (crescimento: +{growth}%)")
+
+        # Few-shot examples para guiar a IA
+        sections.append("""
+            ============================================================
+            📚 EXEMPLOS DE COMO USAR AS TENDÊNCIAS (Few-shot):
+
+            EXEMPLO 1:
+            Tendência fornecida: "IA generativa empresas"
+            Setor do usuário: "Marketing Digital"
+            Resultado esperado:
+            {
+              "tema": "IA generativa no marketing digital",
+              "trend_source": "IA generativa empresas"
+            }
+
+            EXEMPLO 2:
+            Tendência fornecida: "ChatGPT"
+            Setor do usuário: "Recursos Humanos"
+            Resultado esperado:
+            {
+              "tema": "ChatGPT para recrutamento e seleção",
+              "trend_source": "ChatGPT"
+            }
+
+            EXEMPLO 3:
+            Tendência fornecida: "automação processos"
+            Setor do usuário: "E-commerce"
+            Resultado esperado:
+            {
+              "tema": "Automação de atendimento no e-commerce",
+              "trend_source": "automação processos"
+            }
+
+            REGRA: Sempre adapte a tendência ao setor do usuário, mas o
+            "trend_source" DEVE ser exatamente uma das tendências listadas acima.
+            ============================================================""")
+
+        sections.append("")  # Linha em branco no final
+
+        return '\n'.join(sections)
 
     def build_content_prompts(self, context: dict, posts_quantity: str) -> list[str]:
         """Build content generation prompts based on the user's creator profile."""

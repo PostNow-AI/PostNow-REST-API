@@ -3,15 +3,12 @@ Template de e-mail para Inteligência de Mercado (Quarta-feira).
 
 Este é um template SEPARADO do weekly_context.py.
 """
-import html
 import os
+from datetime import datetime
 
-
-def _escape(text) -> str:
-    """Sanitiza texto para prevenir XSS."""
-    if text is None:
-        return ''
-    return html.escape(str(text))
+from ClientContext.utils.email_helpers import escape_html as _escape
+from ClientContext.utils.email_helpers import format_list_as_text as _format_list_as_text
+from ClientContext.utils.email_helpers import get_user_name as _get_user_name
 
 
 def generate_market_intelligence_email(context_data: dict, user_data: dict) -> str:
@@ -26,7 +23,7 @@ def generate_market_intelligence_email(context_data: dict, user_data: dict) -> s
         HTML do e-mail
     """
     # Sanitizar dados do usuário para prevenir XSS
-    user_name = _escape(user_data.get('user_name', user_data.get('user__first_name', 'Usuário')))
+    user_name = _get_user_name(user_data)
     business_name = _escape(user_data.get('business_name', 'Sua Empresa'))
     frontend_url = os.getenv('FRONTEND_URL', 'https://app.postnow.com.br')
 
@@ -36,8 +33,8 @@ def generate_market_intelligence_email(context_data: dict, user_data: dict) -> s
     market_challenges = [_escape(c) for c in (context_data.get('market_challenges') or [])]
 
     competition_main = context_data.get('competition_main', [])  # Sanitizado em _format_competitor
-    competition_strategies = _escape(context_data.get('competition_strategies', ''))
-    competition_opportunities = _escape(context_data.get('competition_opportunities', ''))
+    competition_strategies = _format_list_as_text(context_data.get('competition_strategies', ''))
+    competition_opportunities = _format_list_as_text(context_data.get('competition_opportunities', ''))
 
     audience_profile = _escape(context_data.get('target_audience_profile', ''))
     audience_behaviors = _escape(context_data.get('target_audience_behaviors', ''))
@@ -134,7 +131,7 @@ def generate_market_intelligence_email(context_data: dict, user_data: dict) -> s
                                 Toda <strong>quarta-feira</strong> você recebe inteligência de mercado. Na <strong>segunda</strong>, oportunidades de conteúdo.
                             </p>
                             <p style="margin: 0; color: #94a3b8; font-size: 11px;">
-                                © 2025 PostNow. Transformando dados em conteúdo.
+                                © {datetime.now().year} PostNow. Transformando dados em conteúdo.
                             </p>
                         </td>
                     </tr>

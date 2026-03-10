@@ -2,16 +2,17 @@
 Template do e-mail de Oportunidades de Conteúdo (Segunda-feira).
 Contém apenas as oportunidades enriquecidas da Fase 2.
 Estilo visual unificado com o e-mail de Inteligência de Mercado.
+
+Inclui botão "Criar Post" em cada oportunidade que leva o usuário
+para o sistema com os dados pré-preenchidos.
 """
-import html
 import os
+from datetime import datetime
+from urllib.parse import urlencode
 
+from ClientContext.utils.email_helpers import escape_html as _escape
+from ClientContext.utils.email_helpers import get_user_name as _get_user_name
 
-def _escape(text) -> str:
-    """Sanitiza texto para prevenir XSS."""
-    if text is None:
-        return ''
-    return html.escape(str(text))
 
 # Estilo unificado PostNow
 STYLES = {
@@ -36,6 +37,65 @@ CATEGORY_COLORS = {
     'outros': {'bg': '#f8fafc', 'border': '#64748b', 'text': '#475569', 'emoji': '⚡'},
 }
 
+# Mapeamento de categoria para tipo de post (usado na geração)
+CATEGORY_TO_POST_TYPE = {
+    'polemica': 'controverso',
+    'educativo': 'educativo',
+    'newsjacking': 'noticia',
+    'entretenimento': 'entretenimento',
+    'estudo_caso': 'case',
+    'futuro': 'tendencia',
+    'outros': 'informativo',
+}
+
+
+def _build_create_post_url(
+    base_url: str,
+    item: dict,
+    category: str
+) -> str:
+    """
+    Constrói URL para criar post a partir de uma oportunidade.
+
+    A URL inclui query params que o frontend usa para pré-preencher
+    o formulário de criação de post.
+
+    Args:
+        base_url: URL base do frontend (ex: https://app.postnow.com.br)
+        item: Dicionário com dados da oportunidade
+        category: Chave da categoria (polemica, educativo, etc)
+
+    Returns:
+        URL completa com query params encodados
+    """
+    # Coletar fontes para passar ao frontend
+    sources = []
+    if item.get('url_fonte'):
+        sources.append(item['url_fonte'])
+    for source in item.get('enriched_sources', [])[:2]:
+        if source.get('url'):
+            sources.append(source['url'])
+
+    # Montar parâmetros
+    params = {
+        'from': 'email',
+        'titulo': item.get('titulo_ideia', '')[:100],  # Limitar tamanho
+        'descricao': item.get('descricao', '')[:200],
+        'tipo': CATEGORY_TO_POST_TYPE.get(category, 'informativo'),
+        'categoria': category,
+    }
+
+    # Adicionar fontes se existirem (separadas por vírgula)
+    if sources:
+        params['fontes'] = ','.join(sources[:3])
+
+    # Adicionar análise resumida se existir
+    analysis = item.get('enriched_analysis', '')
+    if analysis:
+        params['contexto'] = analysis[:300]
+
+    return f"{base_url}/create?{urlencode(params)}"
+
 
 def _generate_header(title: str, subtitle: str, emoji: str) -> str:
     """Header unificado."""
@@ -56,6 +116,7 @@ def _generate_header(title: str, subtitle: str, emoji: str) -> str:
 
 def _generate_footer() -> str:
     """Footer unificado."""
+    current_year = datetime.now().year
     return f'''
     <tr>
         <td style="padding: 24px; background-color: {STYLES['light_bg']}; border-top: 1px solid {STYLES['border_color']}; text-align: center;">
@@ -63,7 +124,7 @@ def _generate_footer() -> str:
                 📬 Toda <strong>segunda-feira</strong> você recebe oportunidades. Na <strong>quarta</strong>, inteligência de mercado.
             </p>
             <p style="margin: 0; color: #94a3b8; font-size: 11px;">
-                © 2025 PostNow. Transformando dados em conteúdo.
+                © {current_year} PostNow. Transformando dados em conteúdo.
             </p>
         </td>
     </tr>
@@ -88,8 +149,23 @@ def _generate_cta(url: str) -> str:
     '''
 
 
-def _generate_opportunity_item(item: dict, colors: dict, index: int) -> str:
-    """Item de oportunidade formatado."""
+def _generate_opportunity_item(
+    item: dict,
+    colors: dict,
+    index: int,
+    category: str,
+    frontend_url: str
+) -> str:
+    """
+    Item de oportunidade formatado com botão de ação.
+
+    Args:
+        item: Dicionário com dados da oportunidade
+        colors: Cores da categoria
+        index: Índice do item (para separador)
+        category: Chave da categoria (polemica, educativo, etc)
+        frontend_url: URL base do frontend
+    """
     # Sanitizar todos os campos de texto para prevenir XSS
     titulo = _escape(item.get('titulo_ideia', ''))
     descricao = _escape(item.get('descricao', ''))
@@ -124,6 +200,14 @@ def _generate_opportunity_item(item: dict, colors: dict, index: int) -> str:
         </div>
         '''
 
+    # Botão "Criar Post" com URL pré-preenchida
+    create_post_url = _build_create_post_url(frontend_url, item, category)
+    create_post_button = f'''
+        <a href="{create_post_url}" target="_blank" style="display: inline-block; background-color: {colors['border']}; color: white; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; text-decoration: none; margin-top: 12px;">
+            ✨ Criar Post
+        </a>
+    '''
+
     return f'''
     <div style="{separator}">
         <table role="presentation" style="width: 100%; border-collapse: collapse;">
@@ -141,12 +225,19 @@ def _generate_opportunity_item(item: dict, colors: dict, index: int) -> str:
         <div style="margin-top: 10px;">
             {sources_html}
         </div>
+        {create_post_button}
     </div>
     '''
 
 
-def _generate_opportunities_html(tendencies_data: dict) -> str:
-    """Generate HTML for opportunities section."""
+def _generate_opportunities_html(tendencies_data: dict, frontend_url: str) -> str:
+    """
+    Generate HTML for opportunities section.
+
+    Args:
+        tendencies_data: Dicionário com categorias e itens
+        frontend_url: URL base do frontend para os botões de ação
+    """
     if not tendencies_data:
         return ''
 
@@ -164,7 +255,9 @@ def _generate_opportunities_html(tendencies_data: dict) -> str:
 
         items_html = ''
         for i, item in enumerate(items[:3]):
-            items_html += _generate_opportunity_item(item, colors, i)
+            items_html += _generate_opportunity_item(
+                item, colors, i, category_key, frontend_url
+            )
 
         html_parts.append(f'''
         <table role="presentation" style="width: 100%; margin-bottom: 20px; border: 1px solid {colors['border']}20; border-radius: 12px; overflow: hidden;">
@@ -191,10 +284,10 @@ def generate_opportunities_email_template(tendencies_data: dict, user_data: dict
     """
     # Sanitizar dados do usuário para prevenir XSS
     business_name = _escape(user_data.get('business_name', 'Sua Empresa'))
-    user_name = _escape(user_data.get('user_name', user_data.get('user__first_name', 'Usuário')))
+    user_name = _get_user_name(user_data)
     frontend_url = os.getenv('FRONTEND_URL', 'https://app.postnow.com.br')
 
-    opportunities_html = _generate_opportunities_html(tendencies_data)
+    opportunities_html = _generate_opportunities_html(tendencies_data, frontend_url)
 
     if not opportunities_html:
         opportunities_html = f'''
@@ -245,7 +338,7 @@ def generate_opportunities_email_template(tendencies_data: dict, user_data: dict
 def generate_opportunities_plain_text(tendencies_data: dict, user_data: dict) -> str:
     """Generate plain text version of the opportunities email."""
     business_name = user_data.get('business_name', 'Sua Empresa')
-    user_name = user_data.get('user_name', user_data.get('user__first_name', 'Usuário'))
+    user_name = _get_user_name(user_data)
 
     lines = [
         "POSTNOW - OPORTUNIDADES DE CONTEÚDO",
@@ -289,7 +382,7 @@ def generate_opportunities_plain_text(tendencies_data: dict, user_data: dict) ->
         "Acesse o dashboard para criar seus posts:",
         os.getenv('FRONTEND_URL', 'https://app.postnow.com.br'),
         "",
-        "© 2025 PostNow",
+        f"© {datetime.now().year} PostNow",
     ])
 
     return "\n".join(lines)

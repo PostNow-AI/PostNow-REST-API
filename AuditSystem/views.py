@@ -1,9 +1,10 @@
 import os
 from datetime import date, timedelta
 
-from django.db.models import Count, Q
+from django.contrib.auth.models import User
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+
 from IdeaBank.services.mail_service import MailService
 from rest_framework import status
 from rest_framework.decorators import (
@@ -13,8 +14,8 @@ from rest_framework.decorators import (
 )
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
-from services.daily_post_amount_service import DailyPostAmountService
 
+from .daily_report_service import DailyReportService
 from .dashboard_service import BehaviorDashboardService
 from .models import AuditLog, DailyReport
 from .services import AuditService
@@ -39,8 +40,6 @@ def generate_daily_audit_report(request):
         params = request.GET
     else:
         params = request.data
-
-    # Debug line
 
     # Determine the report date
     report_date_str = params.get('date')
@@ -111,83 +110,8 @@ def generate_daily_audit_report(request):
 
 
 def _generate_report(report_date):
-    """Generate the complete audit report data"""
-    # Query audit logs for the date
-    logs = AuditLog.objects.filter(
-        timestamp__date=report_date
-    ).select_related('user')
-
-    # Basic counts
-    total_operations = logs.count()
-    successful_operations = logs.filter(status='success').count()
-    failed_operations = logs.filter(status__in=['failure', 'error']).count()
-
-    # Category counts
-    category_counts = logs.values('operation_category').annotate(
-        count=Count('operation_category')
-    ).order_by('-count')
-
-    # Action counts for content generation
-    content_logs = logs.filter(operation_category='content')
-    content_attempts = content_logs.count()
-    content_successes = content_logs.filter(status='success').count()
-    content_failures = content_logs.filter(
-        status__in=['failure', 'error']).count()
-
-    # Top errors
-    error_logs = logs.filter(
-        status__in=['failure', 'error']).exclude(error_message='')
-    top_errors = error_logs.values('error_message').annotate(
-        count=Count('error_message')
-    ).order_by('-count')[:10]
-
-    # User activity summary
-    user_activity = logs.values('user__username').annotate(
-        operations=Count('user')
-    ).filter(user__username__isnull=False).order_by('-operations')[:20]
-
-    # Recent critical operations
-    critical_ops = logs.filter(
-        Q(status__in=['error', 'failure']) |
-        Q(action__in=['account_deleted', 'subscription_cancelled'])
-    ).order_by('-timestamp')[:50]
-
-    # Generated posts amount
-    generated_posts_amount = DailyPostAmountService.get_daily_post_amounts(
-        report_date)
-
-    # Build report data
-    report_data = {
-        'report_date': str(report_date),
-        'summary': {
-            'total_operations': total_operations,
-            'successful_operations': successful_operations,
-            'failed_operations': failed_operations,
-            'success_rate': (successful_operations / total_operations * 100) if total_operations > 0 else 0,
-        },
-        'categories': {item['operation_category']: item['count'] for item in category_counts},
-        'content_generation': {
-            'attempts': content_attempts,
-            'successes': content_successes,
-            'failures': content_failures,
-            'success_rate': (content_successes / content_attempts * 100) if content_attempts > 0 else 0,
-        },
-        'top_errors': list(top_errors),
-        'user_activity': list(user_activity),
-        'critical_operations': [
-            {
-                'timestamp': op.timestamp.isoformat(),
-                'user': op.user.username if op.user else 'Anonymous',
-                'action': op.get_action_display(),
-                'status': op.status,
-                'error_message': op.error_message[:100] if op.error_message else '',
-            }
-            for op in critical_ops
-        ],
-        'generated_posts_amount': generated_posts_amount,
-    }
-
-    return report_data
+    """Generate the complete audit report data."""
+    return DailyReportService.generate_report(report_date)
 
 
 def _save_report(report_date, report_data):
@@ -528,7 +452,7 @@ def _generate_html_report(report):
                                             Este é um relatório automático gerado pelo sistema PostNow.
                                         </p>
                                         <p style="margin: 0; color: #6a7282; font-size: 12px; font-weight: 500;">
-                                            © 2025 PostNow. Monitoramento e auditoria do sistema.
+                                            © """ + str(date.today().year) + """ PostNow. Monitoramento e auditoria do sistema.
                                         </p>
                                     </td>
                                 </tr>
@@ -646,10 +570,9 @@ def mailjet_webhook(request):
             # Try to find the user by email
             user = None
             try:
-                from django.contrib.auth.models import User
                 user = User.objects.filter(email=email).first()
             except Exception:
-                pass
+                pass  # User lookup failed, continue with user=None
 
             # Log the event
             details = {
