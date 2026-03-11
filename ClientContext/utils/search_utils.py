@@ -395,15 +395,16 @@ def _log_search_failure(diagnosis: dict, final_count: int) -> None:
 
 
 async def _enrich_with_content(sources: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    """Add full page content via Jina Reader."""
+    """Add full page content via Jina Reader, falling back to Serper snippet."""
     jina = get_jina_reader()
     for source in sources:
         try:
             content = await sync_to_async(jina.read_url)(source['url'])
-            source['content'] = content or ''
+            # Fall back to Serper snippet so the AI always has some context
+            source['content'] = content or source.get('snippet', '')
         except Exception as e:
             logger.debug(f"[ENRICHMENT] Content read failed: {e}")
-            source['content'] = ''
+            source['content'] = source.get('snippet', '')
     return sources
 
 

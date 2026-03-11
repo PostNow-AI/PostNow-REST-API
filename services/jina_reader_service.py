@@ -13,10 +13,10 @@ For our use case:
 - 1M tokens = ~500 pages/month for free
 - More than enough for enrichment
 """
+import logging
 import os
 import time
-import logging
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -26,8 +26,9 @@ logger = logging.getLogger(__name__)
 RATE_LIMIT_REQUESTS_PER_SECOND = 2
 RATE_LIMIT_INTERVAL = 1.0 / RATE_LIMIT_REQUESTS_PER_SECOND
 
-# Request timeout
-REQUEST_TIMEOUT = 30
+# Request timeout: (connect_timeout, read_timeout)
+# Aggressive values to avoid blocking enrichment for slow academic/gov sites.
+REQUEST_TIMEOUT = (8, 15)
 
 # Jina Reader base URL
 JINA_READER_URL = 'https://r.jina.ai/'
@@ -97,6 +98,7 @@ class JinaReaderService:
             Clean content string or None if failed
         """
         self._rate_limit()
+        logger.debug(f"Jina Reader: reading {url} with format={output_format}, include_links={include_links}")
 
         try:
             headers = self._get_headers(output_format, include_links)

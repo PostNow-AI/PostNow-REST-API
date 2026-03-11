@@ -16,7 +16,6 @@ Este serviço resolve o problema de "inverter o fluxo":
 import logging
 from typing import Any, Dict, List, Optional
 
-from services.google_trends_service import GoogleTrendsService
 from services.serper_search_service import SerperSearchService
 
 logger = logging.getLogger(__name__)
@@ -38,17 +37,14 @@ class TrendsDiscoveryService:
 
     def __init__(
         self,
-        google_trends_service: Optional[GoogleTrendsService] = None,
         search_service: Optional[SerperSearchService] = None,
     ):
         """
         Inicializa o serviço de descoberta de tendências.
 
         Args:
-            google_trends_service: Serviço de Google Trends (injetável para testes)
             search_service: Serviço de busca Serper (injetável para testes)
         """
-        self.google_trends = google_trends_service or GoogleTrendsService()
         self.search_service = search_service or SerperSearchService()
 
     def discover_trends_for_sector(
@@ -118,7 +114,7 @@ class TrendsDiscoveryService:
 
     def _discover_general_trends(self) -> List[Dict[str, Any]]:
         """
-        Descobre tendências gerais do Brasil e valida com fontes.
+        Descobre tendências gerais do Brasil via Serper news e valida com fontes.
 
         Returns:
             Lista de tendências gerais validadas
@@ -126,22 +122,30 @@ class TrendsDiscoveryService:
         validated_trends = []
 
         try:
-            # Buscar trending searches
-            trending = self.google_trends.get_trending_searches(country='brazil')
+            # Google Trends endpoints are unreliable (404/429). Use Serper news
+            # to discover what is currently trending in Brazil.
+            news_results = self.search_service.search_news(
+                query="tendências brasil hoje",
+                num_results=MAX_GENERAL_TRENDS,
+            )
 
-            if not trending:
-                logger.warning("No trending searches found")
+            if not news_results:
+                logger.warning("No general trends found via Serper news")
                 return []
 
-            # Processar apenas os top N
-            for trend_topic in trending[:MAX_GENERAL_TRENDS]:
-                validated = self._validate_trend_with_sources(trend_topic)
-                if validated:
-                    validated_trends.append(validated)
-
-                # Parar se já temos tendências suficientes
+            existing_topics: set = set()
+            for article in news_results:
                 if len(validated_trends) >= MAX_TRENDS_PER_CATEGORY:
                     break
+
+                topic = article.get('title', '').strip()
+                if not topic or topic in existing_topics:
+                    continue
+
+                validated = self._validate_trend_with_sources(topic)
+                if validated:
+                    validated_trends.append(validated)
+                    existing_topics.add(topic)
 
         except Exception as e:
             logger.error(f"Error discovering general trends: {e}")
@@ -150,7 +154,7 @@ class TrendsDiscoveryService:
 
     def _discover_sector_trends(self, sector: str, business_description: str = '') -> List[Dict[str, Any]]:
         """
-        Descobre tendências específicas do setor.
+        Descobre tendências específicas do setor via Serper news.
 
         Args:
             sector: Setor de atuação
@@ -160,65 +164,38 @@ class TrendsDiscoveryService:
             Lista de tendências do setor validadas
         """
         try:
-            related_queries = self.google_trends.get_related_queries(
-                keyword=sector,
-                timeframe='today 3-m',
-                geo='BR'
+            # Google Trends related_queries() returns 429 under heavy use.
+            # Use Serper news to find recent sector-specific trending articles.
+            query = f"{sector} tendências brasil"
+            news_results = self.search_service.search_news(
+                query=query,
+                num_results=MAX_GENERAL_TRENDS,
             )
 
-            # Processar queries em crescimento primeiro
-            validated_trends = self._process_queries_to_trends(
-                queries=related_queries.get('rising', []),
-                sector=sector,
-                existing_trends=[]
-            )
+            validated_trends: List[Dict[str, Any]] = []
+            existing_topics: set = set()
 
-            # Completar com top queries se necessário
-            if len(validated_trends) < MAX_TRENDS_PER_CATEGORY:
-                validated_trends.extend(
-                    self._process_queries_to_trends(
-                        queries=related_queries.get('top', []),
-                        sector=sector,
-                        existing_trends=validated_trends,
-                        max_count=MAX_TRENDS_PER_CATEGORY - len(validated_trends)
-                    )
+            for article in news_results:
+                if len(validated_trends) >= MAX_TRENDS_PER_CATEGORY:
+                    break
+
+                topic = article.get('title', '').strip()
+                if not topic or topic in existing_topics:
+                    continue
+
+                validated = self._validate_trend_with_sources(
+                    topic=topic,
+                    context_keywords=[sector],
                 )
+                if validated:
+                    validated_trends.append(validated)
+                    existing_topics.add(topic)
 
             return validated_trends
 
         except Exception as e:
             logger.error(f"Error discovering sector trends for '{sector}': {e}")
             return []
-
-    def _process_queries_to_trends(
-        self,
-        queries: List[Dict],
-        sector: str,
-        existing_trends: List[Dict],
-        max_count: int = MAX_TRENDS_PER_CATEGORY
-    ) -> List[Dict[str, Any]]:
-        """Processa lista de queries e retorna tendências validadas."""
-        validated = []
-        existing_topics = {t.get('topic') for t in existing_trends}
-
-        for query_data in queries[:max_count * 2]:  # Processar mais para compensar filtros
-            if len(validated) >= max_count:
-                break
-
-            query = query_data.get('query', '')
-            if not query or query in existing_topics:
-                continue
-
-            trend = self._validate_trend_with_sources(
-                topic=query,
-                context_keywords=[sector],
-                growth_score=query_data.get('value', 0)
-            )
-            if trend:
-                validated.append(trend)
-                existing_topics.add(query)
-
-        return validated
 
     def _discover_rising_topics(self, sector: str) -> List[Dict[str, Any]]:
         """
@@ -233,28 +210,32 @@ class TrendsDiscoveryService:
         validated_trends = []
 
         try:
-            # Buscar tópicos relacionados
-            related_topics = self.google_trends.get_related_topics(
-                keyword=sector,
-                timeframe='today 3-m',
-                geo='BR'
+            # pytrends.related_topics() is broken (Google changed response format).
+            # Use Serper news search to find recent articles about rising topics
+            # in the sector, then validate each via the normal source-check pipeline.
+            news_results = self.search_service.search_news(
+                query=f"{sector} tendências",
+                num_results=10,
             )
 
-            # Processar tópicos em crescimento
-            rising_topics = related_topics.get('rising', [])
-            for topic_data in rising_topics[:MAX_TRENDS_PER_CATEGORY]:
-                topic = topic_data.get('topic', '')
-                if not topic:
+            existing_topics: set = set()
+            for article in news_results:
+                if len(validated_trends) >= MAX_TRENDS_PER_CATEGORY:
+                    break
+
+                topic = article.get('title', '').strip()
+                if not topic or topic in existing_topics:
                     continue
 
                 validated = self._validate_trend_with_sources(
                     topic=topic,
                     context_keywords=[sector],
-                    growth_score=topic_data.get('value', 0)
+                    growth_score=0,
                 )
                 if validated:
                     validated['is_rising'] = True
                     validated_trends.append(validated)
+                    existing_topics.add(topic)
 
         except Exception as e:
             logger.error(f"Error discovering rising topics for '{sector}': {e}")

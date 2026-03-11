@@ -103,12 +103,11 @@ class GoogleTrendsService:
             except Exception as e:
                 last_error = e
                 logger.error(f"Google Trends error: {e}")
-                if attempt < MAX_RETRIES - 1:
-                    time.sleep(RATE_LIMIT_SECONDS * (attempt + 1))
-                else:
-                    break
+                # Non-rate-limit errors (e.g. 404, parse errors) will not recover
+                # from retrying — fail immediately.
+                break
 
-        logger.error(f"Google Trends failed after {MAX_RETRIES} attempts: {last_error}")
+        logger.error(f"Google Trends failed: {last_error}")
         raise last_error if last_error else Exception("Unknown error in Google Trends")
 
     def get_trending_searches(self, country: str = 'brazil') -> List[str]:
