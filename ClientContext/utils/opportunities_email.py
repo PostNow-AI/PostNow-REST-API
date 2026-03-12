@@ -76,13 +76,12 @@ def _build_create_post_url(
         if source.get('url'):
             sources.append(source['url'])
 
-    # Montar parâmetros
+    # Montar parâmetros (nomes alinhados com o frontend useUrlParams)
     params = {
         'from': 'email',
-        'titulo': item.get('titulo_ideia', '')[:100],  # Limitar tamanho
-        'descricao': item.get('descricao', '')[:200],
-        'tipo': CATEGORY_TO_POST_TYPE.get(category, 'informativo'),
-        'categoria': category,
+        'topic': item.get('titulo_ideia', '')[:100],
+        'category': category,
+        'score': item.get('score', 0),
     }
 
     # Adicionar fontes se existirem (separadas por vírgula)
