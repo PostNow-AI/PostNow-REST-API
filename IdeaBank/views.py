@@ -220,6 +220,9 @@ def generate_post_idea(request):
         serializer = ClientContextSerializer(context)
 
         context_data = serializer.data if serializer else {}
+        # Remove tendencies_data (4MB+) from prompt context — not needed for post generation
+        context_data.pop('tendencies_data', None)
+        context_data.pop('discovered_trends', None)
 
         ai_service = AiService()
         prompt_service = AIPromptService()
