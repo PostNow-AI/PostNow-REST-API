@@ -178,7 +178,10 @@ class WeeklyContextService:
 
     async def _process_user_context(self, user_id: int) -> Dict[str, Any]:
         """Process weekly context generation for a single user."""
-        user = await sync_to_async(User.objects.get)(id=user_id)
+        try:
+            user = await sync_to_async(User.objects.get)(id=user_id)
+        except User.DoesNotExist:
+            return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
 
         try:
             user_data = await self.user_validation_service.get_user_data(user_id)
@@ -255,11 +258,15 @@ class WeeklyContextService:
                 user=user,
                 action='context_generated',
                 status='success',
+                details={
+                    'discovered_trends_count': discovered_trends.get('validated_count', 0)
+                }
             )
 
             return {
                 'user_id': user_id,
                 'status': 'success',
+                'discovered_trends_count': discovered_trends.get('validated_count', 0),
             }
 
         except Exception as e:

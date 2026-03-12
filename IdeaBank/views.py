@@ -332,6 +332,12 @@ def generate_post_idea(request):
 
         return Response({
             'message': 'Post e ideia gerados com sucesso!',
+            'post': {
+                'id': post.id,
+                'name': post.name,
+                'content': post_content.strip(),
+                'image_url': image_url if include_image else None,
+            }
         }, status=status.HTTP_201_CREATED)
 
     except Exception as e:
@@ -343,6 +349,192 @@ def generate_post_idea(request):
             error_message=str(e),
             details={
                 'post_data': post_data,
+                'include_image': include_image
+            }
+        )
+
+        return Response(
+            {'error': f'Erro na geração do post: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def generate_from_opportunity(request):
+    """
+    Generate a post from an email opportunity.
+
+    This endpoint receives data from the opportunities email link
+    and generates a post using AI with the provided context.
+
+    The link from the email includes query params like:
+    ?titulo=...&descricao=...&tipo=...&fontes=...&contexto=...
+
+    These are passed in the POST body by the frontend.
+    """
+    from IdeaBank.serializers import OpportunityGenerationRequestSerializer
+
+    user = request.user
+    serializer = OpportunityGenerationRequestSerializer(data=request.data)
+
+    if not serializer.is_valid():
+        return Response(
+            {'error': 'Dados inválidos', 'details': serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        data = serializer.validated_data
+        include_image = data.get('include_image', True)
+
+        # Get user context
+        context = ClientContext.objects.filter(user=user).first()
+        context_serializer = ClientContextSerializer(context)
+        context_data = context_serializer.data if context_serializer else {}
+
+        # Initialize services
+        ai_service = AiService()
+        prompt_service = AIPromptService()
+        s3_service = S3Service()
+        prompt_service.set_user(request.user)
+
+        # Build prompt with opportunity context
+        opportunity_context = f"""
+CONTEXTO DA OPORTUNIDADE (do e-mail semanal):
+- Tema: {data.get('titulo', '')}
+- Descrição: {data.get('descricao', '')}
+- Análise: {data.get('contexto', '')}
+- Fontes de referência: {data.get('fontes', '')}
+
+Use essas informações como base para criar o conteúdo.
+"""
+        # Map tipo to PostType format
+        tipo = data.get('tipo', 'informativo')
+
+        post_data = {
+            'name': data.get('titulo', '')[:100],
+            'type': 'feed',  # Default to feed for social posts
+            'objective': 'engajamento',  # Default objective
+            'further_details': opportunity_context,
+        }
+
+        prompt = prompt_service.build_standalone_post_prompt(post_data, context_data)
+
+        # Generate content with AI
+        content_result = ai_service.generate_text(
+            prompt,
+            user,
+            types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
+                response_modalities=["TEXT"],
+            )
+        )
+
+        content_json = content_result.replace('json', '', 1).strip('`').strip()
+        content_loaded = json.loads(content_json)
+
+        image_url = ''
+
+        # Generate image if requested
+        if include_image:
+            try:
+                user_logo = CreatorProfile.objects.filter(user=user).first().logo
+                if user_logo and "data:image/" in user_logo and ";base64," in user_logo:
+                    user_logo = user_logo.split(",")[1]
+
+                semantic_prompt = prompt_service.semantic_analysis_prompt(content_loaded)
+                semantic_result = ai_service.generate_text(semantic_prompt, user)
+                semantic_json = semantic_result.replace('json', '', 1).strip('`').strip()
+                semantic_loaded = json.loads(semantic_json)
+
+                semantic_analysis = semantic_loaded.get('analise_semantica', {})
+                image_prompt = prompt_service.image_generation_prompt(semantic_analysis)
+
+                image_result = ai_service.generate_image(
+                    image_prompt,
+                    user_logo,
+                    user,
+                    types.GenerateContentConfig(
+                        temperature=0.7,
+                        top_p=0.9,
+                        response_modalities=["IMAGE"],
+                        image_config=types.ImageConfig(aspect_ratio="4:5"),
+                    )
+                )
+
+                if image_result:
+                    image_url = s3_service.upload_image(user, image_result)
+
+            except Exception as image_error:
+                print(f"Warning: Failed to generate image: {image_error}")
+
+        # Create Post
+        post = Post.objects.create(
+            user=user,
+            name=data.get('titulo', '')[:100] or 'Post de Oportunidade',
+            type='feed',
+            objective='engajamento',
+            further_details=opportunity_context,
+            include_image=include_image,
+            is_automatically_generated=True,
+            is_active=False
+        )
+
+        # Format content
+        post_content = f"""
+{content_loaded.get('legenda', '').strip()}
+
+{' '.join(content_loaded.get('hashtags', []))}
+
+{content_loaded.get('cta', '').strip()}
+        """.strip()
+
+        # Create PostIdea
+        post_idea = PostIdea.objects.create(
+            post=post,
+            content=post_content,
+            image_url=image_url if include_image else '',
+            image_description=''
+        )
+
+        # Log success
+        AuditService.log_content_generation(
+            user=request.user,
+            action='content_generated_from_opportunity',
+            status='success',
+            details={
+                'post_id': post.id,
+                'post_name': post.name,
+                'opportunity_title': data.get('titulo', ''),
+                'include_image': include_image,
+                'source': 'email_opportunity'
+            }
+        )
+
+        return Response({
+            'message': 'Post criado a partir da oportunidade!',
+            'post': {
+                'id': post.id,
+                'name': post.name,
+                'content': post_content,
+                'image_url': image_url if include_image else None,
+            },
+            'opportunity': {
+                'titulo': data.get('titulo', ''),
+                'categoria': data.get('categoria', ''),
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        AuditService.log_content_generation(
+            user=request.user,
+            action='content_generation_from_opportunity_failed',
+            status='error',
+            error_message=str(e),
+            details={
+                'opportunity_title': data.get('titulo', ''),
                 'include_image': include_image
             }
         )

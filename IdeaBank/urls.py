@@ -26,6 +26,8 @@ urlpatterns = [
     # AI-powered generation endpoints
     path('generate/post-idea/', views.generate_post_idea,
          name='generate-post-idea'),
+    path('generate/from-opportunity/', views.generate_from_opportunity,
+         name='generate-from-opportunity'),
     path('ideas/<int:idea_id>/generate-image/',
          views.generate_image_for_idea, name='generate-image-for-idea'),
     path('ideas/<int:idea_id>/edit/',
