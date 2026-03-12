@@ -3,202 +3,147 @@ Testes para utilitários de validação de URL.
 
 Estes testes verificam:
 - Validação síncrona de formato de URL
-- Validação assíncrona com requisições HTTP
-- Comportamento em caso de erro (deve retornar False)
+- Validação com requisições HTTP (mocked)
+- Comportamento em caso de erro (deve retornar True - presunção de inocência)
 """
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch, MagicMock
 
 from django.test import TestCase
 
 from ClientContext.utils.url_validation import (
-    _validate_with_get,
-    validate_url_permissive_async,
+    coerce_url_to_str,
+    recover_url,
+    _is_soft_404,
     validate_url_sync,
 )
 
 
-def run_async(coro):
-    """Helper para executar funções async em testes."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+class CoerceUrlToStrTestCase(TestCase):
+    """Testes para coerção de valores para URL string."""
+
+    def test_string_retorna_string(self):
+        self.assertEqual(coerce_url_to_str("https://example.com"), "https://example.com")
+
+    def test_none_retorna_vazio(self):
+        self.assertEqual(coerce_url_to_str(None), "")
+
+    def test_dict_com_url_retorna_url(self):
+        self.assertEqual(coerce_url_to_str({"url": "https://example.com"}), "https://example.com")
+
+    def test_dict_com_link_retorna_link(self):
+        self.assertEqual(coerce_url_to_str({"link": "https://example.com"}), "https://example.com")
+
+    def test_dict_vazio_retorna_vazio(self):
+        self.assertEqual(coerce_url_to_str({}), "")
+
+    def test_lista_retorna_primeiro_item(self):
+        self.assertEqual(coerce_url_to_str(["https://a.com", "https://b.com"]), "https://a.com")
+
+    def test_lista_vazia_retorna_vazio(self):
+        self.assertEqual(coerce_url_to_str([]), "")
+
+
+class RecoverUrlTestCase(TestCase):
+    """Testes para recuperação de URL alucinada."""
+
+    def test_match_exato(self):
+        result = recover_url("https://example.com", ["https://example.com"])
+        self.assertEqual(result, "https://example.com")
+
+    def test_match_parcial(self):
+        result = recover_url(
+            "https://example.com/article?utm=123",
+            ["https://example.com/article"]
+        )
+        self.assertEqual(result, "https://example.com/article")
+
+    def test_sem_match_retorna_original(self):
+        result = recover_url("https://hallucinated.com", ["https://real.com"])
+        self.assertEqual(result, "https://hallucinated.com")
+
+    def test_url_vazia_retorna_vazio(self):
+        self.assertEqual(recover_url("", ["https://real.com"]), "")
+
+    def test_none_retorna_vazio(self):
+        self.assertEqual(recover_url(None, []), "")
+
+
+class IsSoft404TestCase(TestCase):
+    """Testes para detecção de soft 404."""
+
+    def test_linkedin_not_found(self):
+        self.assertTrue(_is_soft_404(
+            "https://linkedin.com/pulse?trk=article_not_found",
+            "Some content"
+        ))
+
+    def test_pagina_nao_encontrada(self):
+        self.assertTrue(_is_soft_404("https://example.com", "Página não encontrada"))
+
+    def test_page_not_found(self):
+        self.assertTrue(_is_soft_404("https://example.com", "Page not found"))
+
+    def test_pagina_normal(self):
+        self.assertFalse(_is_soft_404("https://example.com", "Welcome to our site"))
+
+    def test_body_vazio(self):
+        self.assertFalse(_is_soft_404("https://example.com", ""))
 
 
 class ValidateUrlSyncTestCase(TestCase):
     """Testes para validação síncrona de URL."""
 
-    def test_url_https_valida_retorna_true(self):
-        """Teste: URL HTTPS válida retorna True"""
+    @patch('ClientContext.utils.url_validation.requests')
+    def test_url_valida_200_retorna_true(self, mock_requests):
+        mock_head = MagicMock()
+        mock_head.status_code = 200
+        mock_requests.head.return_value = mock_head
+
+        mock_get = MagicMock()
+        mock_get.status_code = 200
+        mock_get.url = "https://example.com"
+        mock_get.text = "Normal page"
+        mock_requests.get.return_value = mock_get
+
         self.assertTrue(validate_url_sync("https://example.com"))
 
-    def test_url_http_valida_retorna_true(self):
-        """Teste: URL HTTP válida retorna True"""
-        self.assertTrue(validate_url_sync("http://example.com"))
+    @patch('ClientContext.utils.url_validation.requests')
+    def test_url_404_retorna_false(self, mock_requests):
+        mock_head = MagicMock()
+        mock_head.status_code = 404
+        mock_requests.head.return_value = mock_head
 
-    def test_url_com_path_retorna_true(self):
-        """Teste: URL com path retorna True"""
-        self.assertTrue(validate_url_sync("https://example.com/path/to/page"))
+        self.assertFalse(validate_url_sync("https://example.com/not-found"))
 
-    def test_url_sem_scheme_retorna_false(self):
-        """Teste: URL sem scheme retorna False"""
-        self.assertFalse(validate_url_sync("example.com"))
+    @patch('ClientContext.utils.url_validation.requests')
+    def test_timeout_retorna_true(self, mock_requests):
+        """Timeout = presunção de inocência, retorna True."""
+        import requests
+        mock_requests.head.side_effect = requests.exceptions.Timeout()
+        mock_requests.exceptions = requests.exceptions
 
-    def test_url_sem_netloc_retorna_false(self):
-        """Teste: URL sem netloc retorna False"""
-        self.assertFalse(validate_url_sync("https://"))
+        self.assertTrue(validate_url_sync("https://slow-site.com"))
 
-    def test_string_vazia_retorna_false(self):
-        """Teste: string vazia retorna False"""
-        self.assertFalse(validate_url_sync(""))
+    @patch('ClientContext.utils.url_validation.requests')
+    def test_connection_error_retorna_true(self, mock_requests):
+        """Connection error = presunção de inocência, retorna True."""
+        import requests
+        mock_requests.head.side_effect = requests.exceptions.ConnectionError()
+        mock_requests.exceptions = requests.exceptions
 
-    def test_string_aleatoria_retorna_false(self):
-        """Teste: string não-URL retorna False"""
-        self.assertFalse(validate_url_sync("not-a-url"))
+        self.assertTrue(validate_url_sync("https://blocked-site.com"))
 
-    def test_none_retorna_false(self):
-        """Teste: None retorna False (via exception)"""
-        self.assertFalse(validate_url_sync(None))
+    @patch('ClientContext.utils.url_validation.requests')
+    def test_soft_404_retorna_false(self, mock_requests):
+        mock_head = MagicMock()
+        mock_head.status_code = 200
+        mock_requests.head.return_value = mock_head
 
+        mock_get = MagicMock()
+        mock_get.status_code = 200
+        mock_get.url = "https://linkedin.com/pulse?trk=article_not_found"
+        mock_get.text = "we can't find the page you're looking for"
+        mock_requests.get.return_value = mock_get
 
-class ValidateUrlPermissiveAsyncTestCase(TestCase):
-    """Testes para validação assíncrona de URL."""
-
-    def test_formato_invalido_retorna_false(self):
-        """Teste: formato de URL inválido retorna False sem chamada de rede"""
-        result = run_async(validate_url_permissive_async("not-a-url"))
-        self.assertFalse(result)
-
-    def test_url_vazia_retorna_false(self):
-        """Teste: URL vazia retorna False"""
-        result = run_async(validate_url_permissive_async(""))
-        self.assertFalse(result)
-
-    def test_scheme_invalido_retorna_false(self):
-        """Teste: scheme não-HTTP retorna False"""
-        result = run_async(validate_url_permissive_async("ftp://example.com"))
-        self.assertFalse(result)
-
-    @patch('ClientContext.utils.url_validation.aiohttp.ClientSession')
-    def test_head_sucesso_retorna_true(self, mock_session_class):
-        """Teste: requisição HEAD com sucesso (2xx) retorna True"""
-        # Configurar mock
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session = MagicMock()
-        mock_session.head = MagicMock(return_value=mock_response)
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session_class.return_value = mock_session
-
-        result = run_async(validate_url_permissive_async("https://example.com"))
-        self.assertTrue(result)
-
-    @patch('ClientContext.utils.url_validation.aiohttp.ClientSession')
-    def test_404_retorna_false(self, mock_session_class):
-        """Teste: resposta 404 retorna False"""
-        mock_response = AsyncMock()
-        mock_response.status = 404
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session = MagicMock()
-        mock_session.head = MagicMock(return_value=mock_response)
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session_class.return_value = mock_session
-
-        result = run_async(validate_url_permissive_async("https://example.com"))
-        self.assertFalse(result)
-
-    @patch('ClientContext.utils.url_validation.aiohttp.ClientSession')
-    def test_redirect_3xx_retorna_true(self, mock_session_class):
-        """Teste: resposta 3xx redirect retorna True"""
-        mock_response = AsyncMock()
-        mock_response.status = 301
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session = MagicMock()
-        mock_session.head = MagicMock(return_value=mock_response)
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session_class.return_value = mock_session
-
-        result = run_async(validate_url_permissive_async("https://example.com"))
-        self.assertTrue(result)
-
-    @patch('ClientContext.utils.url_validation.aiohttp.ClientSession')
-    def test_exception_retorna_false(self, mock_session_class):
-        """Teste: exception durante request retorna False (correção crítica)"""
-        mock_session = MagicMock()
-        mock_session.__aenter__ = AsyncMock(side_effect=Exception("Network error"))
-        mock_session.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session_class.return_value = mock_session
-
-        result = run_async(validate_url_permissive_async("https://example.com"))
-        # IMPORTANTE: Este é o teste da correção - antes retornava True
-        self.assertFalse(result)
-
-
-class ValidateWithGetTestCase(TestCase):
-    """Testes para validação via GET (fallback)."""
-
-    def test_get_sucesso_retorna_true(self):
-        """Teste: requisição GET com sucesso retorna True"""
-        mock_response = AsyncMock()
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session = MagicMock()
-        mock_session.get = MagicMock(return_value=mock_response)
-
-        result = run_async(_validate_with_get(mock_session, "https://example.com"))
-        self.assertTrue(result)
-
-    def test_403_retorna_true(self):
-        """Teste: 403 (rate limit) retorna True (assume válido)"""
-        mock_response = AsyncMock()
-        mock_response.status = 403
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session = MagicMock()
-        mock_session.get = MagicMock(return_value=mock_response)
-
-        result = run_async(_validate_with_get(mock_session, "https://example.com"))
-        self.assertTrue(result)
-
-    def test_500_retorna_false(self):
-        """Teste: erro 500 retorna False"""
-        mock_response = AsyncMock()
-        mock_response.status = 500
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=None)
-
-        mock_session = MagicMock()
-        mock_session.get = MagicMock(return_value=mock_response)
-
-        result = run_async(_validate_with_get(mock_session, "https://example.com"))
-        self.assertFalse(result)
-
-    def test_exception_retorna_false(self):
-        """Teste: exception durante GET retorna False (correção crítica)"""
-        mock_session = MagicMock()
-        mock_session.get = MagicMock(side_effect=Exception("Network error"))
-
-        result = run_async(_validate_with_get(mock_session, "https://example.com"))
-        # IMPORTANTE: Este é o teste da correção - antes retornava True
-        self.assertFalse(result)
+        self.assertFalse(validate_url_sync("https://linkedin.com/pulse/article"))

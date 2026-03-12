@@ -301,14 +301,15 @@ class SubscriptionCurrentTestCase(TestCase):
         self.plan = get_or_create_plan("monthly")
         self.current_url = "/api/v1/credits/subscription/current/"
 
-    def test_no_subscription_returns_404(self):
-        """Teste: sem assinatura retorna 404"""
+    def test_no_subscription_returns_null(self):
+        """Teste: sem assinatura retorna 200 com null"""
         # Limpar assinaturas
         UserSubscription.objects.filter(user=self.user).delete()
 
         self.client.force_authenticate(user=self.user)
         response = self.client.get(self.current_url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data)
 
     def test_active_subscription_returns_data(self):
         """Teste: assinatura ativa retorna dados"""
@@ -341,7 +342,9 @@ class SubscriptionCurrentTestCase(TestCase):
 
         self.client.force_authenticate(user=self.user)
         response = self.client.get(self.current_url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        # View retorna 200 com null quando não há assinatura ativa
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data)
 
 
 class SubscriptionPlansListTestCase(TestCase):

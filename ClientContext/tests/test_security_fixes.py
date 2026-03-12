@@ -13,55 +13,55 @@ class TestTimingAttackPrevention(TestCase):
 
     def test_compare_digest_used_for_token_comparison(self):
         """Verifica que secrets.compare_digest é usado."""
-        from ClientContext.views import _validate_batch_token
+        from ClientContext.utils.batch_validation import validate_batch_token
 
         # Verificar que a função usa compare_digest
         import inspect
-        source = inspect.getsource(_validate_batch_token)
+        source = inspect.getsource(validate_batch_token)
         self.assertIn('secrets.compare_digest', source)
 
-    @patch('ClientContext.views.BATCH_API_TOKEN', 'test-secret-token')
+    @patch('ClientContext.utils.batch_validation.BATCH_API_TOKEN', 'test-secret-token')
     def test_valid_token_returns_true(self):
         """Token válido deve retornar True."""
-        from ClientContext.views import _validate_batch_token
+        from ClientContext.utils.batch_validation import validate_batch_token
 
         request = MagicMock()
         request.headers.get.return_value = 'Bearer test-secret-token'
 
-        result = _validate_batch_token(request)
+        result = validate_batch_token(request)
         self.assertTrue(result)
 
-    @patch('ClientContext.views.BATCH_API_TOKEN', 'test-secret-token')
+    @patch('ClientContext.utils.batch_validation.BATCH_API_TOKEN', 'test-secret-token')
     def test_invalid_token_returns_false(self):
         """Token inválido deve retornar False."""
-        from ClientContext.views import _validate_batch_token
+        from ClientContext.utils.batch_validation import validate_batch_token
 
         request = MagicMock()
         request.headers.get.return_value = 'Bearer wrong-token'
 
-        result = _validate_batch_token(request)
+        result = validate_batch_token(request)
         self.assertFalse(result)
 
-    @patch('ClientContext.views.BATCH_API_TOKEN', '')
+    @patch('ClientContext.utils.batch_validation.BATCH_API_TOKEN', '')
     def test_empty_token_config_allows_all(self):
         """Sem token configurado, permite todas as requisições (dev)."""
-        from ClientContext.views import _validate_batch_token
+        from ClientContext.utils.batch_validation import validate_batch_token
 
         request = MagicMock()
         request.headers.get.return_value = ''
 
-        result = _validate_batch_token(request)
+        result = validate_batch_token(request)
         self.assertTrue(result)
 
-    @patch('ClientContext.views.BATCH_API_TOKEN', 'test-secret-token')
+    @patch('ClientContext.utils.batch_validation.BATCH_API_TOKEN', 'test-secret-token')
     def test_missing_bearer_prefix_returns_false(self):
         """Token sem prefixo Bearer deve retornar False."""
-        from ClientContext.views import _validate_batch_token
+        from ClientContext.utils.batch_validation import validate_batch_token
 
         request = MagicMock()
         request.headers.get.return_value = 'test-secret-token'
 
-        result = _validate_batch_token(request)
+        result = validate_batch_token(request)
         self.assertFalse(result)
 
 
@@ -158,7 +158,7 @@ class TestBatchValidation(TestCase):
 
     def test_valid_batch_number(self):
         """Batch válido retorna o número."""
-        from ClientContext.views import _validate_batch_number
+        from ClientContext.utils.batch_validation import validate_batch_number as _validate_batch_number
 
         self.assertEqual(_validate_batch_number("5"), 5)
         self.assertEqual(_validate_batch_number("1"), 1)
@@ -166,21 +166,21 @@ class TestBatchValidation(TestCase):
 
     def test_batch_below_minimum_returns_minimum(self):
         """Batch abaixo do mínimo retorna mínimo."""
-        from ClientContext.views import _validate_batch_number
+        from ClientContext.utils.batch_validation import validate_batch_number as _validate_batch_number
 
         self.assertEqual(_validate_batch_number("0"), 1)
         self.assertEqual(_validate_batch_number("-5"), 1)
 
     def test_batch_above_maximum_returns_maximum(self):
         """Batch acima do máximo retorna máximo."""
-        from ClientContext.views import _validate_batch_number
+        from ClientContext.utils.batch_validation import validate_batch_number as _validate_batch_number
 
         self.assertEqual(_validate_batch_number("150"), 100)
         self.assertEqual(_validate_batch_number("999"), 100)
 
     def test_invalid_batch_returns_default(self):
         """Batch inválido retorna 1."""
-        from ClientContext.views import _validate_batch_number
+        from ClientContext.utils.batch_validation import validate_batch_number as _validate_batch_number
 
         self.assertEqual(_validate_batch_number("abc"), 1)
         self.assertEqual(_validate_batch_number(""), 1)

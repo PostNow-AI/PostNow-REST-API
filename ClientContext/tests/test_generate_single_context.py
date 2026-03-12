@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
-from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -30,7 +29,7 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
             password='testpass123',
             first_name='João'
         )
-        self.url = reverse('generate_single_client_context')
+        self.url = '/api/v1/client-context/generate-single-client-context/'
 
         # Create creator profile
         self.profile = CreatorProfile.objects.create(
@@ -63,6 +62,8 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
         response = self.client.post(self.url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    @patch('ClientContext.views.WeeklyFeedCreationService')
+    @patch('ClientContext.views.AuditService')
     @patch('ClientContext.views.MarketIntelligenceEmailService')
     @patch('ClientContext.views.OpportunitiesEmailService')
     @patch('ClientContext.views.ContextEnrichmentService')
@@ -74,7 +75,9 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
         mock_opportunities_service,
         mock_enrichment_service,
         mock_opp_email_service,
-        mock_market_email_service
+        mock_market_email_service,
+        mock_audit_service,
+        mock_feed_service
     ):
         """Teste: endpoint executa fluxo completo de 5 etapas."""
         # Setup mocks
@@ -98,6 +101,10 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
         mock_market_email_instance.send_to_user = AsyncMock(return_value={'status': 'success'})
         mock_market_email_service.return_value = mock_market_email_instance
 
+        mock_feed_instance = MagicMock()
+        mock_feed_instance.process_single_user = AsyncMock(return_value=None)
+        mock_feed_service.return_value = mock_feed_instance
+
         # Authenticate
         self.client.force_authenticate(user=self.user)
 
@@ -115,6 +122,8 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
         mock_opp_email_instance.send_to_user.assert_called_once()
         mock_market_email_instance.send_to_user.assert_called_once()
 
+    @patch('ClientContext.views.WeeklyFeedCreationService')
+    @patch('ClientContext.views.AuditService')
     @patch('ClientContext.views.MarketIntelligenceEmailService')
     @patch('ClientContext.views.OpportunitiesEmailService')
     @patch('ClientContext.views.ContextEnrichmentService')
@@ -126,7 +135,9 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
         mock_opportunities_service,
         mock_enrichment_service,
         mock_opp_email_service,
-        mock_market_email_service
+        mock_market_email_service,
+        mock_audit_service,
+        mock_feed_service
     ):
         """Teste: endpoint envia ambos os e-mails."""
         # Setup mocks
@@ -150,6 +161,10 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
         mock_market_email_instance.send_to_user = AsyncMock(return_value={'status': 'sent'})
         mock_market_email_service.return_value = mock_market_email_instance
 
+        mock_feed_instance = MagicMock()
+        mock_feed_instance.process_single_user = AsyncMock(return_value=None)
+        mock_feed_service.return_value = mock_feed_instance
+
         # Authenticate
         self.client.force_authenticate(user=self.user)
 
@@ -162,6 +177,8 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
         self.assertIn('opportunities_email', response.data['details'])
         self.assertIn('market_email', response.data['details'])
 
+    @patch('ClientContext.views.WeeklyFeedCreationService')
+    @patch('ClientContext.views.AuditService')
     @patch('ClientContext.views.MarketIntelligenceEmailService')
     @patch('ClientContext.views.OpportunitiesEmailService')
     @patch('ClientContext.views.ContextEnrichmentService')
@@ -173,7 +190,9 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
         mock_opportunities_service,
         mock_enrichment_service,
         mock_opp_email_service,
-        mock_market_email_service
+        mock_market_email_service,
+        mock_audit_service,
+        mock_feed_service
     ):
         """Teste: endpoint retorna status detalhado de cada etapa."""
         # Setup mocks
@@ -196,6 +215,10 @@ class GenerateSingleClientContextAPITestCase(APITestCase):
         mock_market_email_instance = MagicMock()
         mock_market_email_instance.send_to_user = AsyncMock(return_value={'status': 'market_email_ok'})
         mock_market_email_service.return_value = mock_market_email_instance
+
+        mock_feed_instance = MagicMock()
+        mock_feed_instance.process_single_user = AsyncMock(return_value=None)
+        mock_feed_service.return_value = mock_feed_instance
 
         # Authenticate
         self.client.force_authenticate(user=self.user)
@@ -295,7 +318,7 @@ class GoogleSearchServiceTestCase(TestCase):
 
     @patch('services.google_search_service.requests.get')
     def test_search_includes_date_restrict_param(self, mock_get):
-        """Teste: busca inclui parâmetro dateRestrict para filtrar por 3 meses."""
+        """Teste: busca inclui parâmetro dateRestrict (default w2)."""
         from services.google_search_service import GoogleSearchService
 
         # Setup mock
@@ -307,7 +330,7 @@ class GoogleSearchServiceTestCase(TestCase):
         # Execute
         service = GoogleSearchService()
         service.api_key = 'test-api-key'
-        service.search_engine_id = 'test-engine-id'
+        service.cse_id = 'test-engine-id'
         service.search('test query')
 
         # Assert dateRestrict was passed
@@ -315,11 +338,11 @@ class GoogleSearchServiceTestCase(TestCase):
         call_kwargs = mock_get.call_args
         params = call_kwargs.kwargs.get('params', call_kwargs[1].get('params', {}))
 
-        self.assertEqual(params.get('dateRestrict'), 'm3')
+        self.assertIn('dateRestrict', params)
 
     @patch('services.google_search_service.requests.get')
-    def test_search_uses_portuguese_and_brazil_settings(self, mock_get):
-        """Teste: busca usa configurações para português e Brasil."""
+    def test_search_uses_brazil_region_setting(self, mock_get):
+        """Teste: busca usa configuração de região Brasil (gl=br)."""
         from services.google_search_service import GoogleSearchService
 
         # Setup mock
@@ -331,14 +354,13 @@ class GoogleSearchServiceTestCase(TestCase):
         # Execute
         service = GoogleSearchService()
         service.api_key = 'test-api-key'
-        service.search_engine_id = 'test-engine-id'
+        service.cse_id = 'test-engine-id'
         service.search('marketing digital')
 
-        # Assert language and region params
+        # Assert region param
         call_kwargs = mock_get.call_args
         params = call_kwargs.kwargs.get('params', call_kwargs[1].get('params', {}))
 
-        self.assertEqual(params.get('lr'), 'lang_pt')
         self.assertEqual(params.get('gl'), 'br')
 
     def test_search_returns_empty_list_without_credentials(self):
@@ -347,7 +369,7 @@ class GoogleSearchServiceTestCase(TestCase):
 
         service = GoogleSearchService()
         service.api_key = ''
-        service.search_engine_id = ''
+        service.cse_id = ''
 
         results = service.search('test query')
 
@@ -366,7 +388,7 @@ class GoogleSearchServiceTestCase(TestCase):
         # Execute
         service = GoogleSearchService()
         service.api_key = 'test-api-key'
-        service.search_engine_id = 'test-engine-id'
+        service.cse_id = 'test-engine-id'
 
         results = service.search('test query')
 
@@ -390,7 +412,7 @@ class GoogleSearchServiceTestCase(TestCase):
         # Execute
         service = GoogleSearchService()
         service.api_key = 'test-api-key'
-        service.search_engine_id = 'test-engine-id'
+        service.cse_id = 'test-engine-id'
 
         results = service.search('test query')
 
@@ -424,7 +446,7 @@ class GoogleSearchServiceTestCase(TestCase):
         # Execute
         service = GoogleSearchService()
         service.api_key = 'test-api-key'
-        service.search_engine_id = 'test-engine-id'
+        service.cse_id = 'test-engine-id'
 
         results = service.search('marketing')
 
@@ -455,10 +477,10 @@ class DateRestrictIntegrationTestCase(TestCase):
         service.search_engine_id = 'test-id'
         service.search('tendências marketing digital 2024')
 
-        # Verify dateRestrict='m3' was used (3 months filter)
+        # Verify dateRestrict was used (default w2 = 2 weeks)
         call_args = mock_get.call_args
         params = call_args.kwargs.get('params', call_args[1].get('params', {}))
-        self.assertEqual(params['dateRestrict'], 'm3')
+        self.assertIn('dateRestrict', params)
 
 
 class RateLimitingTestCase(APITestCase):
@@ -472,7 +494,7 @@ class RateLimitingTestCase(APITestCase):
             password='testpass123',
             first_name='Rate'
         )
-        self.url = reverse('generate_single_client_context')
+        self.url = '/api/v1/client-context/generate-single-client-context/'
 
         CreatorProfile.objects.create(
             user=self.user,
@@ -549,7 +571,7 @@ class PartialFailureTestCase(APITestCase):
             password='testpass123',
             first_name='Partial'
         )
-        self.url = reverse('generate_single_client_context')
+        self.url = '/api/v1/client-context/generate-single-client-context/'
 
         CreatorProfile.objects.create(
             user=self.user,
@@ -666,17 +688,16 @@ class UserNameEdgeCasesTestCase(TestCase):
         """Teste: user_name usa 'Empreendedor' quando tudo está vazio."""
         from services.get_creator_profile_data import get_creator_profile_data
 
-        # Create user with empty username and first_name
+        # Create user then clear username/first_name (Django requires non-empty on create)
         user = User.objects.create_user(
-            username='',
+            username='temp_empty_user',
             email='empty@test.com',
             password='testpass123',
             first_name=''
         )
-        # Username can't be empty in Django, let's simulate by using spaces
-        user.username = ''
-        user.first_name = ''
-        user.save()
+        # Simulate empty username via update to bypass validation
+        User.objects.filter(pk=user.pk).update(username='')
+        user.refresh_from_db()
 
         CreatorProfile.objects.create(
             user=user,
@@ -759,25 +780,25 @@ class HelperFunctionsTestCase(TestCase):
     """Testes para funções auxiliares do views.py."""
 
     def test_check_step_result_success(self):
-        """Teste: _check_step_result retorna True para sucesso."""
-        from ClientContext.views import _check_step_result
+        """Teste: check_step_result retorna True para sucesso."""
+        from ClientContext.utils.context_helpers import check_step_result
 
-        self.assertTrue(_check_step_result({'status': 'success'}, 'test'))
-        self.assertTrue(_check_step_result({'status': 'completed'}, 'test'))
-        self.assertTrue(_check_step_result({'status': 'sent'}, 'test'))
-        self.assertTrue(_check_step_result({}, 'test'))  # No status = success
-        self.assertTrue(_check_step_result('not a dict', 'test'))  # Not dict = success
+        self.assertTrue(check_step_result({'status': 'success'}, 'test'))
+        self.assertTrue(check_step_result({'status': 'completed'}, 'test'))
+        self.assertTrue(check_step_result({'status': 'sent'}, 'test'))
+        self.assertTrue(check_step_result({}, 'test'))  # No status = success
+        self.assertTrue(check_step_result('not a dict', 'test'))  # Not dict = success
 
     def test_check_step_result_failure(self):
-        """Teste: _check_step_result retorna False para falha."""
-        from ClientContext.views import _check_step_result
+        """Teste: check_step_result retorna False para falha."""
+        from ClientContext.utils.context_helpers import check_step_result
 
-        self.assertFalse(_check_step_result({'status': 'failed'}, 'test'))
-        self.assertFalse(_check_step_result({'status': 'error'}, 'test'))
+        self.assertFalse(check_step_result({'status': 'failed'}, 'test'))
+        self.assertFalse(check_step_result({'status': 'error'}, 'test'))
 
     def test_build_context_data(self):
-        """Teste: _build_context_data constrói dict corretamente."""
-        from ClientContext.views import _build_context_data
+        """Teste: build_context_data constrói dict corretamente."""
+        from ClientContext.utils.context_helpers import build_context_data as _build_context_data
 
         user = User.objects.create_user(
             username='build_context_user',

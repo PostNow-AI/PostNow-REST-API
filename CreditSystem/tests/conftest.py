@@ -1,4 +1,4 @@
-"""Pytest configuration for ClientContext tests."""
+"""Pytest configuration for CreditSystem tests."""
 
 import os
 import django
