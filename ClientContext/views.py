@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 def generate_client_context(request):
     """Generate client context view."""
 
-    # Validar token de autenticação
+    # Validar token de autenticacao
     if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
@@ -104,7 +104,7 @@ def generate_client_context(request):
 def manual_generate_client_context(request):
     """Generate client context view (manual trigger for all users)."""
 
-    # Validar token de autenticação
+    # Validar token de autenticacao
     if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
@@ -374,7 +374,7 @@ def generate_single_client_context(request):
 def retry_generate_client_context(request):
     """Retry generate client context view."""
 
-    # Validar token de autenticação
+    # Validar token de autenticacao
     if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
@@ -439,7 +439,7 @@ def generate_opportunities(request):
     Query params:
         batch: Batch number for processing (default: 1)
     """
-    # Validar token de autenticação
+    # Validar token de autenticacao
     if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
@@ -546,7 +546,7 @@ def enrich_and_send_opportunities_email(request):
     2. Enriches each context with additional sources and analysis
     3. Sends the opportunities email with enriched data
     """
-    # Validar token de autenticação
+    # Validar token de autenticacao
     if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},
@@ -647,7 +647,7 @@ def send_market_intelligence_email(request):
     Query params:
         batch: Batch number for processing (default: 1)
     """
-    # Validar token de autenticação
+    # Validar token de autenticacao
     if not validate_batch_token(request):
         return Response(
             {'error': 'Unauthorized'},

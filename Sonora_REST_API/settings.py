@@ -91,7 +91,9 @@ INSTALLED_APPS = [
     'CreditSystem',
     'AuditSystem',
     'ClientContext',
+    'Analytics',
     'OnboardingCampaign',
+    'SocialMediaIntegration',
 ]
 
 SITE_ID = 3
@@ -153,7 +155,7 @@ DB_PORT = os.getenv('DB_PORT', '3306')
 if not all([DB_NAME, DB_USER, DB_PASSWORD, DB_HOST]):
     # For Vercel, we might want to use a different database or fail gracefully
     if os.getenv('VERCEL_ENV'):
-        print("🚀 Vercel environment detected - using fallback configuration")
+        print("Vercel environment detected - using fallback configuration")
         # You can set up a different database here for Vercel
         # For now, we'll use the environment variables as-is
 
@@ -280,7 +282,6 @@ SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
 SOCIALACCOUNT_LOGIN_ON_GET = False  # Require POST for social login (security)
 
 # Account connection settings
-ACCOUNT_SIGNUP_EMAIL_ENTER_TWICE = False
 ACCOUNT_SESSION_REMEMBER = True
 
 # Google OAuth credentials (add these to your .env file)
@@ -358,7 +359,7 @@ CREDIT_SYSTEM_ENABLED = True
 DEFAULT_CREDIT_BALANCE = 0.00
 
 # Subscription Configuration
-SUBSCRIPTION_TRIAL_DAYS = 10  # Dias de teste grátis para novas assinaturas
+SUBSCRIPTION_TRIAL_DAYS = 10  # Dias de teste gratis para novas assinaturas
 
 CRON_SECRET = os.environ.get('CRON_SECRET', 'dev-secret-change-in-production')
 

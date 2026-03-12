@@ -61,7 +61,7 @@ class PostListView(generics.ListCreateAPIView):
         return Post.objects.filter(user=self.request.user)
 
     def get_serializer_class(self):
-        if self.request.method == 'POST':
+        if self.request.method == "POST":
             return PostCreateSerializer
         return PostSerializer
 
@@ -71,10 +71,10 @@ class PostListView(generics.ListCreateAPIView):
         # Log post creation
         AuditService.log_post_operation(
             user=self.request.user,
-            action='post_created',
+            action="post_created",
             post_id=str(serializer.instance.id),
-            status='success',
-            details={'post_name': serializer.instance.name}
+            status="success",
+            details={"post_name": serializer.instance.name},
         )
 
 
@@ -214,7 +214,7 @@ def generate_post_idea(request):
 
     try:
         post_data = serializer.validated_data
-        include_image = post_data.get('include_image', False)
+        include_image_requested = post_data.get("include_image", False)
 
         context = ClientContext.objects.filter(user=user).first()
         serializer = ClientContextSerializer(context)
@@ -247,8 +247,7 @@ def generate_post_idea(request):
 
         image_url = ''
 
-        # Generate image if requested
-        if include_image:
+        if include_image_requested:
             try:
                 user_logo = CreatorProfile.objects.filter(user=user).first().logo
                 if user_logo and "data:image/" in user_logo and ";base64," in user_logo:
