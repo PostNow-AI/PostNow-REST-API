@@ -214,7 +214,7 @@ def generate_post_idea(request):
 
     try:
         post_data = serializer.validated_data
-        include_image_requested = post_data.get("include_image", False)
+        include_image = post_data.get("include_image", False)
 
         context = ClientContext.objects.filter(user=user).first()
         serializer = ClientContextSerializer(context)
@@ -247,7 +247,7 @@ def generate_post_idea(request):
 
         image_url = ''
 
-        if include_image_requested:
+        if include_image:
             try:
                 user_logo = CreatorProfile.objects.filter(user=user).first().logo
                 if user_logo and "data:image/" in user_logo and ";base64," in user_logo:

@@ -202,3 +202,4 @@ coverage.xml
 .env.production
 
 /debug_chat_history
+.vercel

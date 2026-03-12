@@ -781,6 +781,130 @@ class AIPromptService:
             """
         ]
 
+    def build_standalone_post_prompt(self, post_data: dict, context: dict) -> list[str]:
+        """Build prompt for standalone post generation from opportunity or manual creation."""
+        profile_data = get_creator_profile_data(self.user)
+        formatted_context = format_weekly_context_output(context)
+        return [
+            """
+            Você é um estrategista de conteúdo e redator de marketing digital especializado em redes sociais. Sua função é criar um post para o Instagram totalmente personalizado e criativo para esta empresa. Caso o post seja de tipo "reels" ou "story", traga o conteúdo em formato de roteiro de reels ou story. Caso contrário, faça um post apropriado para ser postado no feed do usuário. Se alguma informação estiver ausente ou marcada como 'sem dados disponíveis', você deve ignorar essa parte sem criar suposições. Não invente dados, tendências, números ou nomes de concorrentes. Baseie o conteúdo dos posts no contexto pesquisado, sempre respeitando o tom de voz da marca, porém seja criativo e crie conteúdo engajador, utilizando o método AIDA. Usar também como referência a jornada do herói.""",
+            f"""
+            ============================================================
+            ### DADOS DE ENTRADA (Inseridos pelo usuário):
+            - Assunto do post: {post_data['name']}
+            - Objetivo do post: {post_data['objective']}
+            - Tipo do post: {post_data['type']}
+            - Mais detalhes: {post_data['further_details']}
+            ============================================================
+
+            📊 CONTEXTO PESQUISADO (dados externos e verificados)
+            → INPUT: {formatted_context}
+            ============================================================
+
+            🏢 INFORMAÇÕES DA EMPRESA (dados internos do onboarding)
+
+            - Nome: {profile_data['business_name']}
+            - Personalidade da marca: {profile_data['brand_personality']}
+            - Público-alvo: {profile_data['target_audience']}
+            ============================================================
+
+            ============================================================
+            SAÍDAS CONDICIONAIS:
+
+            ############################################################
+            CASO O POST SEJA TIPO "FEED":
+
+            📌 TAREFA PRINCIPAL
+
+            Criar **1 post para o Instagram**, combinando:
+            ✔ dados da empresa
+            ✔ contexto pesquisado
+            ✔ Assunto, objetivo e mais detalhes
+
+            O post deve incluir:
+
+            1. **Título curto e atrativo**
+               - Entre 2 e 5 palavras
+               - Alinhado ao tom da marca
+
+            2. **Legenda completa**
+               - Baseada nos dados de contexto pesquisado e dados inseridos pelo usuário
+               - Ignorar itens sem dados disponíveis
+               - Limite máximo de 600 caracteres
+               - Pode citar fontes reais quando relevante
+
+            3. **Hashtags recomendadas**:
+               - Adicione as hashtags de tendências verificadas: {', '.join(context.get('tendencies_hashtags', []))}
+               - Não criar hashtags inventadas
+
+            4. **CTA (chamada para ação)**
+               - coerente com o conteúdo do post
+
+            ============================================================
+            🧭 DIRETRIZES DE QUALIDADE E CONFIABILIDADE
+
+            - Manter linguagem natural sem grandes exageros.
+            - Não exagerar na utilização de emojis, máximo de 5 por conteúdo gerado
+            - Não inventar estatísticas, datas ou referências.
+            - Linguagem persuasiva que expresse o tom do texto do post
+            - Se faltar dados → focar na proposta de valor.
+            - Storytelling só quando houver base real.
+            - Nunca mencionar "sem dados disponíveis" no texto final.
+            - Conteúdo deve soar autêntico e profissional.
+            - Conteúdo deve sempre ser gerado em PT-BR
+
+            ============================================================
+
+            💬 FORMATO DE SAÍDA (APENAS UM JSON)
+
+            {{
+                "id": 1,
+                "titulo": "Título do post",
+                "sub_titulo": "Sub Título do post",
+                "legenda": "Texto completo da legenda",
+                "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3"],
+                "cta": "Chamada para ação"
+            }}
+
+            ############################################################
+            CASO O POST SEJA TIPO "REELS" OU "STORY":
+
+            📌 TAREFA PRINCIPAL
+
+            Criar **1 post para o Instagram**, combinando:
+            ✔ dados da empresa
+            ✔ contexto pesquisado
+            ✔ Assunto, objetivo e mais detalhes
+
+            - O 1 (ÚNICO) conteúdo deve ser:
+                - 5 ideais para Stories (PARA TIPO STORY)
+                OU
+                - 1 roteiro para vídeo de Reels entre 15 e 35 segundos (PARA TIPO REELS)
+
+            ============================================================
+            🧭 DIRETRIZES DE QUALIDADE E CONFIABILIDADE
+
+            - Não inventar estatísticas, datas ou referências.
+            - Manter linguagem natural sem grandes exageros.
+            - Linguagem persuasiva que expresse o tom do texto do post
+            - Se faltar dados → focar na proposta de valor.
+            - Storytelling só quando houver base real.
+            - Nunca mencionar "sem dados disponíveis" no texto final.
+            - Conteúdo deve soar autêntico e profissional.
+            - Conteúdo deve sempre ser gerado em PT-BR
+
+            ============================================================
+
+            💬 FORMATO DE SAÍDA (APENAS UM JSON)
+
+            {{
+                "titulo": "Título do post",
+                "roteiro": "Roteiro do Reels ou Story"
+            }}
+
+            """
+        ]
+
     def build_campaign_prompts(self, context: dict) -> dict:
         """Build campaign generation prompts based on the user's creator profile."""
         profile_data = get_creator_profile_data(self.user)
