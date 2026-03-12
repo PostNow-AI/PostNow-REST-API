@@ -27,6 +27,7 @@ from Sonora_REST_API.Users.views import (
     google_auth,
     google_callback,
     list_social_accounts,
+    validate_magic_link,
 )
 
 urlpatterns = [
@@ -53,6 +54,8 @@ urlpatterns = [
          disconnect_social_account, name='disconnect_social_account'),
     path('api/v1/auth/delete-user/',
          delete_user_by_email, name='delete_user_by_email'),
+    path('api/v1/auth/magic-link/validate/',
+         validate_magic_link, name='validate_magic_link'),
 
 
 

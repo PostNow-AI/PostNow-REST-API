@@ -52,7 +52,8 @@ CATEGORY_TO_POST_TYPE = {
 def _build_create_post_url(
     base_url: str,
     item: dict,
-    category: str
+    category: str,
+    magic_token: str = ''
 ) -> str:
     """
     Constrói URL para criar post a partir de uma oportunidade.
@@ -84,14 +85,9 @@ def _build_create_post_url(
         'score': item.get('score', 0),
     }
 
-    # Adicionar fontes se existirem (separadas por vírgula)
-    if sources:
-        params['fontes'] = ','.join(sources[:3])
-
-    # Adicionar análise resumida se existir
-    analysis = item.get('enriched_analysis', '')
-    if analysis:
-        params['contexto'] = analysis[:300]
+    # Magic link token para autenticação automática
+    if magic_token:
+        params['token'] = magic_token
 
     return f"{base_url}/create?{urlencode(params)}"
 
@@ -153,7 +149,8 @@ def _generate_opportunity_item(
     colors: dict,
     index: int,
     category: str,
-    frontend_url: str
+    frontend_url: str,
+    magic_token: str = ''
 ) -> str:
     """
     Item de oportunidade formatado com botão de ação.
@@ -200,7 +197,7 @@ def _generate_opportunity_item(
         '''
 
     # Botão "Criar Post" com URL pré-preenchida
-    create_post_url = _build_create_post_url(frontend_url, item, category)
+    create_post_url = _build_create_post_url(frontend_url, item, category, magic_token)
     create_post_button = f'''
         <a href="{create_post_url}" target="_blank" style="display: inline-block; background-color: {colors['border']}; color: white; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; text-decoration: none; margin-top: 12px;">
             ✨ Criar Post
@@ -229,7 +226,7 @@ def _generate_opportunity_item(
     '''
 
 
-def _generate_opportunities_html(tendencies_data: dict, frontend_url: str) -> str:
+def _generate_opportunities_html(tendencies_data: dict, frontend_url: str, magic_token: str = '') -> str:
     """
     Generate HTML for opportunities section.
 
@@ -255,7 +252,7 @@ def _generate_opportunities_html(tendencies_data: dict, frontend_url: str) -> st
         items_html = ''
         for i, item in enumerate(items[:3]):
             items_html += _generate_opportunity_item(
-                item, colors, i, category_key, frontend_url
+                item, colors, i, category_key, frontend_url, magic_token
             )
 
         html_parts.append(f'''
@@ -276,7 +273,7 @@ def _generate_opportunities_html(tendencies_data: dict, frontend_url: str) -> st
     return ''.join(html_parts)
 
 
-def generate_opportunities_email_template(tendencies_data: dict, user_data: dict) -> str:
+def generate_opportunities_email_template(tendencies_data: dict, user_data: dict, magic_token: str = '') -> str:
     """
     Generate HTML email template for weekly opportunities report.
     Sent on Mondays with enriched content opportunities.
@@ -286,7 +283,7 @@ def generate_opportunities_email_template(tendencies_data: dict, user_data: dict
     user_name = _get_user_name(user_data)
     frontend_url = os.getenv('FRONTEND_URL', 'https://app.postnow.com.br')
 
-    opportunities_html = _generate_opportunities_html(tendencies_data, frontend_url)
+    opportunities_html = _generate_opportunities_html(tendencies_data, frontend_url, magic_token)
 
     if not opportunities_html:
         opportunities_html = f'''

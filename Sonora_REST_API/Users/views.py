@@ -2,6 +2,7 @@ import json
 import os
 from urllib.parse import urlencode, urljoin
 
+import jwt
 import requests
 from allauth.account.views import (
     ConfirmEmailView,
@@ -12,10 +13,12 @@ from allauth.socialaccount.models import SocialAccount
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from dotenv import load_dotenv
@@ -23,6 +26,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
 
 load_dotenv()
 
@@ -366,4 +370,68 @@ def delete_user_by_email(request):
         return Response(
             {'error': f'Failed to delete user: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+# ============================================================================
+# Magic Link Authentication
+# ============================================================================
+
+MAGIC_LINK_SECRET = settings.SECRET_KEY
+MAGIC_LINK_EXPIRY_HOURS = 72  # 3 days
+
+
+def generate_magic_link_token(user_id: int) -> str:
+    """Generate a short-lived JWT token for magic link authentication."""
+    payload = {
+        'user_id': user_id,
+        'purpose': 'magic_link',
+        'iat': timezone.now().timestamp(),
+        'exp': (timezone.now() + timezone.timedelta(hours=MAGIC_LINK_EXPIRY_HOURS)).timestamp(),
+    }
+    return jwt.encode(payload, MAGIC_LINK_SECRET, algorithm='HS256')
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def validate_magic_link(request):
+    """Validate a magic link token and return JWT access/refresh tokens."""
+    token = request.data.get('token')
+    if not token:
+        return Response(
+            {'error': 'Token é obrigatório'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        payload = jwt.decode(token, MAGIC_LINK_SECRET, algorithms=['HS256'])
+
+        if payload.get('purpose') != 'magic_link':
+            return Response(
+                {'error': 'Token inválido'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        user = User.objects.get(id=payload['user_id'])
+        refresh = RefreshToken.for_user(user)
+
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+            }
+        })
+
+    except jwt.ExpiredSignatureError:
+        return Response(
+            {'error': 'Link expirado. Faça login para continuar.'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    except (jwt.InvalidTokenError, User.DoesNotExist):
+        return Response(
+            {'error': 'Token inválido'},
+            status=status.HTTP_401_UNAUTHORIZED
         )

@@ -157,8 +157,12 @@ class OpportunitiesEmailService:
                     'reason': 'no_opportunities'
                 }
 
+            # Gerar magic link token para autenticação automática
+            from Sonora_REST_API.Users.views import generate_magic_link_token
+            magic_token = generate_magic_link_token(user.id)
+
             subject = f"Oportunidades de Conteúdo - {_sanitize_subject(business_name)}"
-            html_content = generate_opportunities_email_template(tendencies_data, user_data)
+            html_content = generate_opportunities_email_template(tendencies_data, user_data, magic_token)
 
             success, response = await self.mailjet_service.send_email(
                 to_email=user.email,
