@@ -508,6 +508,8 @@ class RateLimitingTestCase(APITestCase):
             market_tendencies=['trend1'],
         )
 
+    @patch('ClientContext.views.WeeklyFeedCreationService')
+    @patch('ClientContext.views.AuditService')
     @patch('ClientContext.views.cache')
     @patch('ClientContext.views.MarketIntelligenceEmailService')
     @patch('ClientContext.views.OpportunitiesEmailService')
@@ -521,7 +523,9 @@ class RateLimitingTestCase(APITestCase):
         mock_enrichment_service,
         mock_opp_email_service,
         mock_market_email_service,
-        mock_cache
+        mock_cache,
+        mock_audit_service,
+        mock_feed_service
     ):
         """Teste: primeira requisição é permitida."""
         # Cache returns None (no rate limit hit)
@@ -537,6 +541,10 @@ class RateLimitingTestCase(APITestCase):
             instance.enrich_user_context = AsyncMock(return_value={'status': 'success'})
             instance.send_to_user = AsyncMock(return_value={'status': 'success'})
             mock_service.return_value = instance
+
+        mock_feed_instance = MagicMock()
+        mock_feed_instance.process_single_user = AsyncMock(return_value=None)
+        mock_feed_service.return_value = mock_feed_instance
 
         self.client.force_authenticate(user=self.user)
         response = self.client.post(self.url)
@@ -585,6 +593,8 @@ class PartialFailureTestCase(APITestCase):
             market_tendencies=['trend1'],
         )
 
+    @patch('ClientContext.views.WeeklyFeedCreationService')
+    @patch('ClientContext.views.AuditService')
     @patch('ClientContext.views.cache')
     @patch('ClientContext.views.MarketIntelligenceEmailService')
     @patch('ClientContext.views.OpportunitiesEmailService')
@@ -598,7 +608,9 @@ class PartialFailureTestCase(APITestCase):
         mock_enrichment_service,
         mock_opp_email_service,
         mock_market_email_service,
-        mock_cache
+        mock_cache,
+        mock_audit_service,
+        mock_feed_service
     ):
         """Teste: retorna partial_success quando um e-mail falha."""
         mock_cache.get.return_value = None
@@ -626,6 +638,10 @@ class PartialFailureTestCase(APITestCase):
         mock_market_email_instance.send_to_user = AsyncMock(return_value={'status': 'failed', 'error': 'SMTP error'})
         mock_market_email_service.return_value = mock_market_email_instance
 
+        mock_feed_instance = MagicMock()
+        mock_feed_instance.process_single_user = AsyncMock(return_value=None)
+        mock_feed_service.return_value = mock_feed_instance
+
         self.client.force_authenticate(user=self.user)
         response = self.client.post(self.url)
 
@@ -636,6 +652,8 @@ class PartialFailureTestCase(APITestCase):
         self.assertTrue(response.data['emails_sent']['opportunities'])
         self.assertFalse(response.data['emails_sent']['market_intelligence'])
 
+    @patch('ClientContext.views.WeeklyFeedCreationService')
+    @patch('ClientContext.views.AuditService')
     @patch('ClientContext.views.cache')
     @patch('ClientContext.views.MarketIntelligenceEmailService')
     @patch('ClientContext.views.OpportunitiesEmailService')
@@ -649,7 +667,9 @@ class PartialFailureTestCase(APITestCase):
         mock_enrichment_service,
         mock_opp_email_service,
         mock_market_email_service,
-        mock_cache
+        mock_cache,
+        mock_audit_service,
+        mock_feed_service
     ):
         """Teste: resposta de sucesso inclui status de cada e-mail."""
         mock_cache.get.return_value = None
@@ -670,6 +690,10 @@ class PartialFailureTestCase(APITestCase):
         mock_market_email_instance = MagicMock()
         mock_market_email_instance.send_to_user = AsyncMock(return_value={'status': 'success'})
         mock_market_email_service.return_value = mock_market_email_instance
+
+        mock_feed_instance = MagicMock()
+        mock_feed_instance.process_single_user = AsyncMock(return_value=None)
+        mock_feed_service.return_value = mock_feed_instance
 
         self.client.force_authenticate(user=self.user)
         response = self.client.post(self.url)
