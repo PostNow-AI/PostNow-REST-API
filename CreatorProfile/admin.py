@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import CreatorProfile, OnboardingStepTracking, OnboardingTempData, VisualStylePreference
+from .models import CreatorProfile, GeneratedVisualStyle, OnboardingStepTracking, OnboardingTempData, VisualStylePreference
 
 
 @admin.register(CreatorProfile)
@@ -53,6 +53,18 @@ class CreatorProfileAdmin(admin.ModelAdmin):
 class VisualStylePreferenceAdmin(admin.ModelAdmin):
     list_display = ("id", "name")
     search_fields = ("name",)
+
+
+@admin.register(GeneratedVisualStyle)
+class GeneratedVisualStyleAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'user_email', 'is_favorite', 'times_used', 'created_at')
+    list_filter = ('is_favorite', 'created_at')
+    search_fields = ('name', 'user__email')
+    readonly_fields = ('created_at',)
+
+    @admin.display(description="Email", ordering="user__email")
+    def user_email(self, obj):
+        return obj.user.email
 
 
 @admin.register(OnboardingStepTracking)

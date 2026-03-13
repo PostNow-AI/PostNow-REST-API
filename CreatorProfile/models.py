@@ -322,6 +322,53 @@ class VisualStylePreference(models.Model):
         return f"{self.name} - {self.description}"
 
 
+class GeneratedVisualStyle(models.Model):
+    """
+    Estilo visual gerado pela IA para uma imagem.
+    Salvo como ativo do usuário para reutilização futura e campanhas.
+    """
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='generated_styles'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    name = models.CharField(
+        max_length=100,
+        verbose_name="Nome do Estilo",
+        help_text="Nome curto gerado pela IA (ex: 'Editorial Minimalista')"
+    )
+
+    style_data = models.JSONField(
+        verbose_name="Dados do Estilo",
+        help_text="JSON estruturado com aesthetic, colors (memory colors), lighting, typography, composition, mood, references"
+    )
+
+    source_post_id = models.IntegerField(
+        null=True, blank=True,
+        verbose_name="Post de Origem",
+        help_text="ID do post que originou este estilo"
+    )
+
+    is_favorite = models.BooleanField(
+        default=False,
+        verbose_name="Favorito"
+    )
+
+    times_used = models.IntegerField(
+        default=1,
+        verbose_name="Vezes Utilizado"
+    )
+
+    class Meta:
+        verbose_name = "Estilo Visual Gerado"
+        verbose_name_plural = "Estilos Visuais Gerados"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.user.email})"
+
+
 class OnboardingStepTracking(models.Model):
     """
     Track each step/screen visited during onboarding.

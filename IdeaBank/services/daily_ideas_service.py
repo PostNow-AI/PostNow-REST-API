@@ -18,6 +18,7 @@ from IdeaBank.services.weekly_feed_creation import WeeklyFeedCreationService
 from IdeaBank.utils.current_week import get_current_week
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
+from services.style_generation_service import generate_style
 from services.s3_sevice import S3Service
 from services.semaphore_service import SemaphoreService
 from services.user_validation_service import UserValidationService
@@ -251,8 +252,13 @@ class DailyIdeasService:
             semantic_analysis = semantic_loaded.get(
                 'analise_semantica', {})
 
+            generated_style = generate_style(
+                user=user,
+                semantic_analysis=semantic_analysis,
+                ai_service=self.ai_service,
+            )
             image_prompt = self.prompt_service.image_generation_prompt(
-                semantic_analysis)
+                semantic_analysis, generated_style=generated_style)
 
             image_result = self.ai_service.generate_image(image_prompt, user_logo, user, types.GenerateContentConfig(
                 temperature=0.7,

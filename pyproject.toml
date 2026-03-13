@@ -39,6 +39,9 @@ dependencies = [
     "whitenoise==6.6.0",
 ]
 
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "Sonora_REST_API.settings"
+
 [tool.uv]
 find-links = ["wheels"]
 

@@ -53,10 +53,11 @@
 - [ ] Mostrar mensagens em vermelho abaixo dos campos
 - [ ] Adicionar classe `border-red-500` quando há erro
 
-### Arquitetura de Visual Styles
-- [ ] Decidir arquitetura: Frontend-first vs Backend-first
-- [ ] Implementar single source of truth
-- [ ] Remover duplicação de dados (ver `ANALISE_PR24_VISUAL_STYLES.md`)
+### Sistema de Estilo Visual Dinâmico
+- [ ] **Decisão tomada (2026-03-13):** IA gera estilo do zero para cada imagem, estilos salvos para reutilização
+- [ ] Ver tasks completas em `docs/TASKS_ESTILO_DINAMICO.md`
+- [ ] Fase 1: Modelo de dados, memory colors, service de geração, integração no pipeline
+- [ ] Referência anterior: `ANALISE_PR24_VISUAL_STYLES.md`
 
 ---
 
@@ -112,5 +113,6 @@
 
 | Data | Mudança |
 |------|---------|
+| 2026-03-13 | Atualizado Visual Styles para Sistema de Estilo Dinâmico (ref: TASKS_ESTILO_DINAMICO.md) |
 | 2026-02-28 | Adicionado PRs #38, #29, #37 pendentes; Testes E2E; TypeScript checks |
 | 2026-02-10 | Versão inicial com pendências do sprint Onboarding 2.0 |

@@ -28,6 +28,7 @@ from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.daily_post_amount_service import DailyPostAmountService
 from services.s3_sevice import S3Service
+from services.style_generation_service import generate_style
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
     ImageGenerationRequestSerializer,
@@ -267,8 +268,13 @@ def generate_post_idea(request):
                 semantic_analysis = semantic_loaded.get(
                     'analise_semantica', {})
 
+                generated_style = generate_style(
+                    user=user,
+                    semantic_analysis=semantic_analysis,
+                    ai_service=ai_service,
+                )
                 image_prompt = prompt_service.image_generation_prompt(
-                    semantic_analysis)
+                    semantic_analysis, generated_style=generated_style)
 
                 image_result = ai_service.generate_image(
                     image_prompt,
@@ -453,7 +459,13 @@ Use essas informações como base para criar o conteúdo.
                 semantic_loaded = json.loads(semantic_json)
 
                 semantic_analysis = semantic_loaded.get('analise_semantica', {})
-                image_prompt = prompt_service.image_generation_prompt(semantic_analysis)
+                generated_style = generate_style(
+                    user=user,
+                    semantic_analysis=semantic_analysis,
+                    ai_service=ai_service,
+                )
+                image_prompt = prompt_service.image_generation_prompt(
+                    semantic_analysis, generated_style=generated_style)
 
                 image_result = ai_service.generate_image(
                     image_prompt,
@@ -607,8 +619,13 @@ def generate_image_for_idea(request, idea_id):
             semantic_analysis = semantic_loaded.get(
                 'analise_semantica', {})
 
+            generated_style = generate_style(
+                user=user,
+                semantic_analysis=semantic_analysis,
+                ai_service=ai_service,
+            )
             image_prompt = prompt_service.image_generation_prompt(
-                semantic_analysis)
+                semantic_analysis, generated_style=generated_style)
 
             image_result = ai_service.generate_image(image_prompt, user_logo, user, types.GenerateContentConfig(
                 temperature=0.7,

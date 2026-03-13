@@ -1121,30 +1121,15 @@ class AIPromptService:
             """
         ]
 
-    def image_generation_prompt(self, semantic_analysis: dict) -> str:
-        """Prompt for AI image generation based on semantic analysis."""
+    def image_generation_prompt(self, semantic_analysis: dict, generated_style=None) -> str:
+        """
+        Prompt for AI image generation based on semantic analysis and generated style.
+
+        Args:
+            semantic_analysis: Dict from semantic analysis step
+            generated_style: GeneratedVisualStyle instance (if None, uses fallback)
+        """
         profile_data = get_creator_profile_data(self.user)
-
-        def get_visual_style_info():
-            visual_style = profile_data.get('visual_style', '')
-            if isinstance(visual_style, str) and ' - ' in visual_style:
-                parts = visual_style.split(' - ', 1)
-                return {
-                    'tipo_estilo': parts[0],
-                    'descricao_completa': parts[1] if len(parts) > 1 else ''
-                }
-            elif isinstance(visual_style, dict):
-                return {
-                    'tipo_estilo': visual_style.get('tipo_estilo', ''),
-                    'descricao_completa': visual_style.get('descricao_completa', '')
-                }
-            else:
-                return {
-                    'tipo_estilo': str(visual_style) if visual_style else '',
-                    'descricao_completa': ''
-                }
-
-        visual_style_info = get_visual_style_info()
 
         # Gera seção de logo com instruções detalhadas
         logo_section = build_logo_section(
@@ -1152,40 +1137,82 @@ class AIPromptService:
             color_palette=profile_data.get('color_palette', [])
         )
 
-        # Formata cores da paleta para o prompt
+        # Formata cores da paleta para o prompt (agora em memory colors)
         colors_formatted = format_colors_for_prompt(profile_data.get('color_palette', []))
 
+        # Estilo: usa GeneratedVisualStyle ou fallback
+        if generated_style and hasattr(generated_style, 'style_data'):
+            style = generated_style.style_data
+        else:
+            style = self._fallback_style(semantic_analysis, profile_data)
+
+        style_colors = style.get('colors', {})
+        references = style.get('references', [])
+        references_text = ', '.join(references) if references else 'professional social media design'
+
         return [
-            f"""
-          Crie uma imagem seguindo o estilo e contexto descritos abaixo.
+            f"""Professional Instagram feed post (4:5 vertical format, 1080x1350px)
+for a {profile_data.get('specialization', 'business')} business.
 
-          - Estilo visual:
-            - Tipo estilo: {visual_style_info['tipo_estilo']},
-            - Descrição completa: {visual_style_info['descricao_completa']},
-          - Contexto e conteudo:
-            - Contexto visual sugerido: {semantic_analysis['contexto_visual_sugerido']},
-            - Elementos relevantes: {', '.join(semantic_analysis['objetos_relevantes'])},
-            - Tema principal do post: {semantic_analysis['tema_principal']},
-          - Emoção e estética:
-            - Emoções associadas: {', '.join(semantic_analysis['emoções_associadas'])},
-            - Sensação geral: {semantic_analysis['sensação_geral']},
-            - Tons de cor sugeridos: {', '.join(semantic_analysis['tons_de_cor_sugeridos'])}
+STYLE:
+{style.get('aesthetic', 'Clean professional design')}.
+{style.get('lighting', 'Soft natural daylight, diffused and even')}.
+Aesthetic references: {references_text}.
 
-          - Paleta de cores da marca (use estas cores preferencialmente):
+SUBJECT AND CONTEXT:
+Main visual: {semantic_analysis.get('contexto_visual_sugerido', '')}.
+Key elements: {', '.join(semantic_analysis.get('objetos_relevantes', []))}.
+Theme: {semantic_analysis.get('tema_principal', '')}.
+Mood: {style.get('mood', semantic_analysis.get('sensação_geral', 'professional'))}.
+
+COLORS:
+- Background: {style_colors.get('background', 'warm ivory')}
+- Primary elements: {style_colors.get('primary', 'deep cobalt blue')}
+- Accent details: {style_colors.get('accent', 'vivid coral')}
+- Text color: {style_colors.get('text', 'dark charcoal')}
+- Brand palette (prefer these):
 {colors_formatted}
 
-            {logo_section}
+COMPOSITION:
+{style.get('composition', 'Title upper third centered, main visual centered, logo bottom-right 8%')}.
+Typography: {style.get('typography', 'modern bold sans-serif')}.
+Safe margin of 10% on all edges — no important elements near borders.
+Render a short title text related to the post content, centered in the upper third.
+All rendered text must be in Brazilian Portuguese (PT-BR).
 
-          - Regras e Restrições:
-            - Caso uma logomarca seja anexada, INCLUA a logomarca na imagem de forma harmoniosa e integrada ao design
-            - Caso uma logomarca não seja anexada, NÃO gerar ou adicionar logomarca
-            - Sempre renderize um texto na imagem com um título curto referente ao conteúdo do post.
-            - Todas as imagens devem renderizar o texto do título do post na imagem.
-            - Nunca renderize o texto das hashtags do post na imagem.
-            - Nunca renderize códigos HEX de cores na imagem.
-            - Textos renderizados na imagem devem sempre ser escritos em português do Brasil (PT-BR).
-        """
+{logo_section}
+
+QUALITY:
+Professional social media quality, optimized for mobile viewing.
+Sharp focus on text, smooth gradients, clean edges, no artifacts.
+
+AVOID:
+- Watermarks, stock photo badges
+- Distorted or misspelled text
+- Colors outside the specified palette
+- Cluttered background, too many competing elements
+- Hashtags or hex codes rendered in the image
+- Text in any language other than Brazilian Portuguese
+- If no logo is attached, do NOT generate or add any logo
+"""
         ]
+
+    def _fallback_style(self, semantic_analysis: dict, profile_data: dict = None) -> dict:
+        """Estilo fallback quando GeneratedVisualStyle não está disponível."""
+        return {
+            "aesthetic": "Clean professional design suitable for social media",
+            "colors": {
+                "background": "warm ivory",
+                "primary": "deep cobalt blue",
+                "accent": "vivid coral",
+                "text": "dark charcoal",
+            },
+            "lighting": "Soft natural daylight, diffused and even",
+            "typography": "modern bold sans-serif",
+            "composition": "Title upper third centered, main visual centered 40% of frame, logo bottom-right 8%",
+            "mood": semantic_analysis.get('sensação_geral', 'professional'),
+            "references": ["editorial magazine layout"],
+        }
 
     # =========================================================================
     # ANÁLISE HISTÓRICA E POSTS AUTOMÁTICOS
