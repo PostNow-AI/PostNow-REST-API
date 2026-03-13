@@ -18,7 +18,6 @@ from IdeaBank.services.weekly_feed_creation import WeeklyFeedCreationService
 from IdeaBank.utils.current_week import get_current_week
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
-from services.image_text_validator import generate_image_with_validation, IMAGE_GEN_CONFIG_4_5
 from services.style_generation_service import generate_style
 from services.s3_sevice import S3Service
 from services.semaphore_service import SemaphoreService
@@ -261,13 +260,12 @@ class DailyIdeasService:
             image_prompt = self.prompt_service.image_generation_prompt(
                 semantic_analysis, generated_style=generated_style)
 
-            profile = CreatorProfile.objects.filter(user=user).first()
-            expected_texts = [profile.business_name] if profile and profile.business_name else None
-
-            image_result = generate_image_with_validation(
-                self.ai_service, image_prompt, user_logo, user,
-                IMAGE_GEN_CONFIG_4_5, expected_texts=expected_texts,
-            )
+            image_result = self.ai_service.generate_image(image_prompt, user_logo, user, types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(aspect_ratio="4:5"),
+            ))
 
             if not image_result:
                 image_url = ''
