@@ -28,6 +28,7 @@ from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.daily_post_amount_service import DailyPostAmountService
 from services.s3_sevice import S3Service
+from services.image_text_validator import generate_image_with_validation, IMAGE_GEN_CONFIG_4_5
 from services.style_generation_service import generate_style
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
@@ -276,20 +277,13 @@ def generate_post_idea(request):
                 image_prompt = prompt_service.image_generation_prompt(
                     semantic_analysis, generated_style=generated_style)
 
-                image_result = ai_service.generate_image(
-                    image_prompt,
-                    user_logo,
-                    user,
-                    types.GenerateContentConfig(
-                        temperature=0.7,
-                        top_p=0.9,
-                        response_modalities=[
-                            "IMAGE",
-                        ],
-                        image_config=types.ImageConfig(
-                            aspect_ratio="4:5",
-                        ),
-                    ))
+                profile = CreatorProfile.objects.filter(user=user).first()
+                expected_texts = [profile.business_name] if profile and profile.business_name else None
+
+                image_result = generate_image_with_validation(
+                    ai_service, image_prompt, user_logo, user,
+                    IMAGE_GEN_CONFIG_4_5, expected_texts=expected_texts,
+                )
 
                 if not image_result:
                     image_url = ''
@@ -467,16 +461,12 @@ Use essas informações como base para criar o conteúdo.
                 image_prompt = prompt_service.image_generation_prompt(
                     semantic_analysis, generated_style=generated_style)
 
-                image_result = ai_service.generate_image(
-                    image_prompt,
-                    user_logo,
-                    user,
-                    types.GenerateContentConfig(
-                        temperature=0.7,
-                        top_p=0.9,
-                        response_modalities=["IMAGE"],
-                        image_config=types.ImageConfig(aspect_ratio="4:5"),
-                    )
+                profile = CreatorProfile.objects.filter(user=user).first()
+                expected_texts = [profile.business_name] if profile and profile.business_name else None
+
+                image_result = generate_image_with_validation(
+                    ai_service, image_prompt, user_logo, user,
+                    IMAGE_GEN_CONFIG_4_5, expected_texts=expected_texts,
                 )
 
                 if image_result:
@@ -627,16 +617,13 @@ def generate_image_for_idea(request, idea_id):
             image_prompt = prompt_service.image_generation_prompt(
                 semantic_analysis, generated_style=generated_style)
 
-            image_result = ai_service.generate_image(image_prompt, user_logo, user, types.GenerateContentConfig(
-                temperature=0.7,
-                top_p=0.9,
-                response_modalities=[
-                    "IMAGE",
-                ],
-                image_config=types.ImageConfig(
-                    aspect_ratio="4:5",
-                ),
-            ))
+            profile = CreatorProfile.objects.filter(user=user).first()
+            expected_texts = [profile.business_name] if profile and profile.business_name else None
+
+            image_result = generate_image_with_validation(
+                ai_service, image_prompt, user_logo, user,
+                IMAGE_GEN_CONFIG_4_5, expected_texts=expected_texts,
+            )
 
         if not image_result:
             image_url = ''

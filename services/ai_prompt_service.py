@@ -1057,10 +1057,11 @@ class AIPromptService:
     def adapted_semantic_analysis_prompt(self, semantic_analysis: dict) -> str:
         """Prompt for semantic analysis adapted to creator profile."""
         profile_data = get_creator_profile_data(self.user)
+        colors_formatted = format_colors_for_prompt(profile_data.get('color_palette', []))
 
         return [
             """
-              Você é um Diretor de Arte Sênior de Inteligência Artificial. Sua tarefa é fundir uma análise semântica de conteúdo com um perfil de marca específico, garantindo que o resultado seja uma diretriz visual coesa, priorizando **integralmente** o estilo e a paleta de cores da marca, mesmo que os temas originais sejam de naturezas diferentes (ex: Café com estilo Futurista).
+              Você é um Diretor de Arte Sênior de Inteligência Artificial. Sua tarefa é fundir uma análise semântica de conteúdo com um perfil de marca específico, garantindo que o resultado seja uma diretriz visual coesa, priorizando **integralmente** a paleta de cores e a personalidade da marca, mesmo que os temas originais sejam de naturezas diferentes (ex: Café com marca Futurista).
             """,
             f"""
               ### DADOS DE ENTRADA ####
@@ -1068,37 +1069,38 @@ class AIPromptService:
               1. PERSONALIDADE DA MARCA (Emoções)
               {profile_data['brand_personality']}
 
-              2. ANÁLISE SEMÂNTICA (Conteúdo e Mensagem
+              2. ANÁLISE SEMÂNTICA (Conteúdo e Mensagem)
               {semantic_analysis}
 
-              3. PERFIL DA MARCA (Estilo e Identidade)
+              3. PERFIL DA MARCA (Identidade)
 
-              - Cores da Marca:
-                {profile_data['color_palette']} - podem ser usadas variações mais escuras, mais claras e gradientes baseadas nas cores da marca.
-              - Estilo visual: 
-                {str(profile_data['visual_style']) if profile_data.get('visual_style') else 'Não definido'}
+              - Cores da Marca (use estes nomes descritivos, não códigos hex):
+{colors_formatted}
+                Podem ser usadas variações mais escuras, mais claras e gradientes baseadas nestas cores.
+
+              - Nicho: {profile_data.get('specialization', '')}
+              - Tom de voz: {profile_data.get('voice_tone', '')}
 
 
               ### INSTRUÇÕES PARA ADAPTAÇÃO
-              1. **Prioridade Absoluta:**  
-                O resultado final deve priorizar o **"Estilo Visual"** e as **"Cores da Marca"**.
+              1. **Prioridade Absoluta:**
+                O resultado final deve priorizar as **Cores da Marca** e a **Personalidade da Marca**.
 
-              2. **Mapeamento Visual:**  
-                Adapte os `objetos_relevantes` e o `contexto_visual_sugerido` da análise semântica 
-                para o `Estilo Visual` da marca.  
-                Exemplo: se o tema é *natureza* e o estilo é *3D Futurista*, 
-                a natureza deve ser renderizada em 3D, com brilhos e linhas geométricas.
+              2. **Mapeamento Visual:**
+                Adapte os `objetos_relevantes` e o `contexto_visual_sugerido` da análise semântica
+                para serem coerentes com o nicho e personalidade da marca.
 
-              3. **Mapeamento de Emoções:**  
-                Use a `Personalidade da Marca` para refinar a `ação_sugerida` e as `emoções_associadas`.  
+              3. **Mapeamento de Emoções:**
+                Use a `Personalidade da Marca` para refinar a `ação_sugerida` e as `emoções_associadas`.
                 Exemplo: uma marca *educadora* deve ter personagens em postura de clareza e acolhimento.
 
-              4. **Paleta de Cores:**  
-                Substitua os `tons_de_cor_sugeridos` originais pelas **Cores da Marca**.  
+              4. **Paleta de Cores:**
+                Substitua os `tons_de_cor_sugeridos` originais pelas **Cores da Marca** (nomes descritivos acima).
                 Utilize as cores da marca para destaques, iluminação e elementos de fundo.
+                NUNCA use códigos hex (#FFFFFF) — use apenas nomes descritivos de cor.
 
-              5. **Geração:**  
-                Gere o novo JSON final com a estrutura `analise_semantica_adaptada` abaixo, 
+              5. **Geração:**
+                Gere o novo JSON final com a estrutura abaixo,
                 refletindo as adaptações e a priorização do `Perfil da Marca`.
 
 
@@ -1108,14 +1110,14 @@ class AIPromptService:
                 "analise_semantica": {{
                     "tema_principal": "[Tema principal adaptado ao contexto da marca]",
                     "subtemas": [],
-                    "conceitos_visuais": ["[Conceitos reinterpretados no estilo da marca]"],
-                    "objetos_relevantes": ["[Objetos descritos no estilo visual prioritário]"],
+                    "conceitos_visuais": ["[Conceitos reinterpretados para o nicho da marca]"],
+                    "objetos_relevantes": ["[Objetos descritos de forma coerente com a marca]"],
                     "contexto_visual_sugerido": "[Cenário com a estética e paleta da marca]",
                     "emoções_associadas": ["[Emoções alinhadas à personalidade da marca]"],
-                    "tons_de_cor_sugeridos": ["[As Cores da Marca e seus usos]"],
-                    "ação_sugerida": "[Ação que reflete a personalidade e estilo da marca]",
+                    "tons_de_cor_sugeridos": ["[Cores da marca em nomes descritivos e seus usos]"],
+                    "ação_sugerida": "[Ação que reflete a personalidade da marca]",
                     "sensação_geral": "[Sensação geral de acordo com a estética da marca]",
-                    "palavras_chave": ["[Keywords que fundem tema e estilo (ex: Café 3D, Editorial Roxo)]"]
+                    "palavras_chave": ["[Keywords que fundem tema e marca]"]
                 }}
               }}
             """
