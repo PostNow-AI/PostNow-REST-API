@@ -71,7 +71,6 @@ INSTALLED_APPS = [
     'CreditSystem',
     'AuditSystem',
     'ClientContext',
-    'Analytics',
     'OnboardingCampaign',
     'SocialMediaIntegration',
 ]
