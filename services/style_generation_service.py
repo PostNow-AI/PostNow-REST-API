@@ -9,7 +9,7 @@ from services.get_creator_profile_data import get_creator_profile_data
 
 logger = logging.getLogger(__name__)
 
-# Mapeamento das preferências do onboarding para diretrizes estéticas ricas
+# Mapeamento das preferencias do onboarding para diretrizes esteticas ricas
 STYLE_DIRECTIONS = {
     "minimalista": {
         "direction": "Clean minimalist with generous negative space",
@@ -55,7 +55,6 @@ STYLE_DIRECTIONS = {
     },
 }
 
-# Direção default quando o usuário não escolheu estilo no onboarding
 DEFAULT_STYLE_DIRECTION = {
     "direction": "Professional and visually engaging, adapted to the brand's niche",
     "references": "editorial magazine layouts, modern social media design, brand-appropriate aesthetics",
@@ -64,12 +63,14 @@ DEFAULT_STYLE_DIRECTION = {
     "avoid": "generic stock photo aesthetic, cluttered layouts",
 }
 
-STYLE_GENERATION_PROMPT_SYSTEM = """You are a world-class Art Director creating visual styles for Instagram posts.
-
-You have deep knowledge of design movements, photography styles, and visual culture.
-Your styles are specific, vivid, and produce striking images — never generic or corporate.
-
-Return ONLY a valid JSON object. No markdown, no explanation, no code blocks."""
+STYLE_GENERATION_PROMPT_SYSTEM = (
+    "You are a world-class Art Director creating visual styles for Instagram posts.\n\n"
+    "You have deep knowledge of design movements, photography styles, and visual culture.\n"
+    "Your styles are specific, vivid, and produce striking images — never generic or corporate.\n\n"
+    "Before creating, you must reason about the best visual strategy.\n"
+    "Analyze the brand context, market intelligence, audience, and content — then create.\n\n"
+    "Return ONLY a valid JSON object. No markdown, no explanation, no code blocks."
+)
 
 STYLE_GENERATION_PROMPT_TEMPLATE = """
 ### BRAND ###
@@ -77,18 +78,35 @@ STYLE_GENERATION_PROMPT_TEMPLATE = """
 - Niche: {specialization}
 - Personality: {brand_personality}
 - Voice: {voice_tone}
+- Purpose: {business_purpose}
+- Products/Services: {products_services}
 - Brand colors:
 {colors_formatted}
 
-### CONTENT ###
+### TARGET AUDIENCE ###
+- Who: {target_audience}
+- Interests: {target_interests}
+{audience_context}
+
+### MARKET INTELLIGENCE (this week) ###
+{market_context}
+
+### COMPETITION ###
+{competition_context}
+
+### CONTENT (this specific post) ###
 - Theme: {tema_principal}
 - Visual scene: {contexto_visual_sugerido}
 - Key elements: {objetos_relevantes}
 - Emotions: {emocoes_associadas}
 - Feeling: {sensacao_geral}
+{content_type_context}
 
-### AESTHETIC DIRECTION ###
+### AESTHETIC DIRECTION (user preference) ###
 {style_direction}
+
+### PREVIOUS STYLES (avoid repetition) ###
+{previous_styles}
 
 ### VISUAL REPERTOIRE (choose from these, combine, or be inspired by) ###
 
@@ -122,9 +140,14 @@ Modifiers: pale, soft, pastel, bright, deep, vivid, bold, dark, muted, rich, war
 5. Colors must be memory color names (descriptive), NEVER hex codes
 6. Limit to 2-3 dominant colors + 1 accent — more creates visual noise
 7. The style must work for Instagram feed (4:5 vertical)
+8. Consider the TARGET AUDIENCE — design for who will SEE this, not just the brand
+9. Consider MARKET CONTEXT — align with or intentionally contrast current trends
+10. DIFFERENTIATE from competition — if they use cold corporate, go warm and human
+11. The "rationale" must explain WHY this style works for this specific case
 
 ### OUTPUT (JSON only) ###
 {{
+    "rationale": "2-3 sentences explaining the strategic reasoning: WHY this visual approach for this brand + audience + market moment + content. Reference specific data from the context.",
     "name": "Creative style name in Portuguese (3-5 words)",
     "aesthetic": "Vivid, specific aesthetic description in English. Reference recognizable styles, textures, or movements. Describe what the viewer SEES, not abstract concepts.",
     "colors": {{
@@ -147,24 +170,52 @@ def generate_style(
     semantic_analysis: dict,
     ai_service,
     source_post_id: int | None = None,
+    content_type: str | None = None,
+    opportunity_score: int | None = None,
 ) -> GeneratedVisualStyle:
-    """Gera um estilo visual único via IA e salva no banco."""
+    """Gera um estilo visual unico via IA e salva no banco."""
     profile_data = get_creator_profile_data(user)
-    colors_formatted = format_colors_for_prompt(profile_data.get('color_palette', []))
+    colors_formatted = format_colors_for_prompt(
+        profile_data.get('color_palette', []),
+    )
     style_direction = _get_style_direction(user)
+    market_ctx, comp_ctx, audience_ctx = _gather_market_context(user)
+    previous_styles = _gather_previous_styles(user)
+    content_ctx = _format_content_type_context(content_type, opportunity_score)
 
     prompt_body = STYLE_GENERATION_PROMPT_TEMPLATE.format(
         business_name=profile_data.get('business_name', ''),
         specialization=profile_data.get('specialization', ''),
         brand_personality=profile_data.get('brand_personality', ''),
         voice_tone=profile_data.get('voice_tone', ''),
+        business_purpose=profile_data.get('business_purpose', ''),
+        products_services=profile_data.get('products_services', ''),
         colors_formatted=colors_formatted,
+        target_audience=profile_data.get('target_audience', ''),
+        target_interests=profile_data.get('target_interests', ''),
+        audience_context=audience_ctx,
+        market_context=market_ctx,
+        competition_context=comp_ctx,
         tema_principal=semantic_analysis.get('tema_principal', ''),
-        contexto_visual_sugerido=semantic_analysis.get('contexto_visual_sugerido', ''),
-        objetos_relevantes=', '.join(semantic_analysis.get('objetos_relevantes', [])),
-        emocoes_associadas=', '.join(semantic_analysis.get('emoções_associadas', [])),
-        sensacao_geral=semantic_analysis.get('sensação_geral', ''),
+        contexto_visual_sugerido=semantic_analysis.get(
+            'contexto_visual_sugerido', '',
+        ),
+        objetos_relevantes=', '.join(
+            semantic_analysis.get('objetos_relevantes', []),
+        ),
+        emocoes_associadas=', '.join(
+            semantic_analysis.get(
+                'emocoes_associadas',
+                semantic_analysis.get('emoções_associadas', []),
+            ),
+        ),
+        sensacao_geral=semantic_analysis.get(
+            'sensacao_geral',
+            semantic_analysis.get('sensação_geral', ''),
+        ),
+        content_type_context=content_ctx,
         style_direction=style_direction,
+        previous_styles=previous_styles,
     )
 
     prompt_list = [STYLE_GENERATION_PROMPT_SYSTEM, prompt_body]
@@ -179,12 +230,178 @@ def generate_style(
         source_post_id=source_post_id,
     )
 
-    logger.info("Estilo visual '%s' gerado para user %s (id=%d)", style.name, user.email, style.id)
+    logger.info(
+        "Estilo visual '%s' gerado para user %s (id=%d)",
+        style.name, user.email, style.id,
+    )
     return style
 
 
+def _gather_market_context(user: User) -> tuple[str, str, str]:
+    """Busca dados do ClientContext para informar o estilo."""
+    try:
+        from ClientContext.models import ClientContext
+        context = ClientContext.objects.filter(user=user).first()
+    except Exception:
+        return ("No market data available.", "No competition data available.", "")
+
+    if not context:
+        return ("No market data available.", "No competition data available.", "")
+
+    # Market
+    market_lines = []
+    if context.market_panorama:
+        market_lines.append(
+            "- Market overview: " + context.market_panorama[:300],
+        )
+    if context.market_tendencies:
+        items = (
+            context.market_tendencies[:5]
+            if isinstance(context.market_tendencies, list) else []
+        )
+        if items:
+            joined = ', '.join(str(t) for t in items)
+            market_lines.append("- Trending now: " + joined)
+    if context.discovered_trends and isinstance(context.discovered_trends, list):
+        joined = ', '.join(str(t) for t in context.discovered_trends[:3])
+        market_lines.append("- Validated trends: " + joined)
+    if context.brand_communication_style:
+        market_lines.append(
+            "- Recommended tone this week: "
+            + context.brand_communication_style[:200],
+        )
+    market_text = (
+        "\n".join(market_lines)
+        if market_lines else "No market data available."
+    )
+
+    # Competition
+    comp_lines = []
+    if context.competition_strategies:
+        comp_lines.append(
+            "- What competitors are doing: "
+            + context.competition_strategies[:300],
+        )
+    if context.competition_opportunities:
+        comp_lines.append(
+            "- Opportunities vs competition: "
+            + context.competition_opportunities[:200],
+        )
+    comp_text = (
+        "\n".join(comp_lines)
+        if comp_lines else "No competition data available."
+    )
+
+    # Audience (from weekly research)
+    audience_lines = []
+    if context.target_audience_behaviors:
+        audience_lines.append(
+            "- Current behaviors: "
+            + context.target_audience_behaviors[:200],
+        )
+    if context.target_audience_interests:
+        interests = context.target_audience_interests
+        if isinstance(interests, list) and interests:
+            joined = ', '.join(str(i) for i in interests[:5])
+            audience_lines.append("- Researched interests: " + joined)
+    audience_text = "\n".join(audience_lines) if audience_lines else ""
+
+    return (market_text, comp_text, audience_text)
+
+
+def _gather_previous_styles(user: User, limit: int = 5) -> str:
+    """Busca estilos anteriores do usuario para evitar repeticao."""
+    previous = (
+        GeneratedVisualStyle.objects
+        .filter(user=user)
+        .order_by('-created_at')[:limit]
+    )
+
+    if not previous:
+        return "No previous styles -- this is the first generation. Be creative!"
+
+    lines = []
+    for s in previous:
+        data = s.style_data or {}
+        colors = data.get('colors', {})
+        bg = colors.get("background", "")
+        prim = colors.get("primary", "")
+        light = data.get("lighting", "")[:40]
+        aes = data.get("aesthetic", "")[:80]
+        lines.append(
+            '- "' + s.name + '": ' + aes + '... '
+            '(colors: ' + bg + ', ' + prim + ' | lighting: ' + light + ')'
+        )
+
+    lines.append(
+        "-> Generate something DIFFERENT from these. "
+        "Vary the aesthetic, colors, and lighting."
+    )
+    return "\n".join(lines)
+
+
+def _format_content_type_context(
+    content_type: str | None,
+    opportunity_score: int | None,
+) -> str:
+    """Formata contexto do tipo de oportunidade do conteudo."""
+    if not content_type:
+        return ""
+
+    type_visual_mapping = {
+        "Polemica": (
+            "High-contrast, attention-grabbing. Bold colors, dramatic lighting. "
+            "Think protest poster or breaking news."
+        ),
+        "Educativo": (
+            "Clear, structured, trustworthy. Clean layout, good readability. "
+            "Think textbook meets infographic."
+        ),
+        "Newsjacking": (
+            "Urgent, current, dynamic. News-inspired layout, bold typography. "
+            "Think newspaper front page meets social media."
+        ),
+        "Entretenimento": (
+            "Fun, vibrant, scroll-stopping. Playful colors, energetic composition. "
+            "Think meme culture meets branded content."
+        ),
+        "Estudo de Caso": (
+            "Professional, data-driven, authoritative. Structured layout, "
+            "confident colors. Think business presentation meets editorial."
+        ),
+        "Futuro": (
+            "Visionary, innovative, forward-looking. Gradient/futuristic palette, "
+            "modern composition. Think sci-fi meets TED talk."
+        ),
+    }
+
+    lines = ["- Content type: " + content_type]
+    if content_type in type_visual_mapping:
+        lines.append(
+            "- Visual approach for this type: "
+            + type_visual_mapping[content_type]
+        )
+    if opportunity_score is not None:
+        if opportunity_score >= 80:
+            lines.append(
+                "- Impact score: " + str(opportunity_score) + "/100 "
+                "(HIGH -- make the style bold and attention-grabbing)"
+            )
+        elif opportunity_score >= 50:
+            lines.append(
+                "- Impact score: " + str(opportunity_score) + "/100 "
+                "(MEDIUM -- balanced between impact and professionalism)"
+            )
+        else:
+            lines.append(
+                "- Impact score: " + str(opportunity_score) + "/100 "
+                "(MODERATE -- focus on clarity and brand alignment)"
+            )
+    return "\n".join(lines)
+
+
 def _get_style_direction(user: User) -> str:
-    """Monta a direção estética baseada na preferência do onboarding."""
+    """Monta a direcao estetica baseada na preferencia do onboarding."""
     try:
         profile = CreatorProfile.objects.get(user=user)
         style_ids = profile.visual_style_ids or []
@@ -194,16 +411,16 @@ def _get_style_direction(user: User) -> str:
     if not style_ids:
         direction = DEFAULT_STYLE_DIRECTION
     else:
-        # Pega a primeira preferência (principal) do onboarding
-        primary_style = style_ids[0] if isinstance(style_ids[0], str) else str(style_ids[0])
+        first = style_ids[0]
+        primary_style = first if isinstance(first, str) else str(first)
         direction = STYLE_DIRECTIONS.get(primary_style, DEFAULT_STYLE_DIRECTION)
 
     lines = [
-        f"- Direction: {direction['direction']}",
-        f"- Reference artists/styles: {direction['references']}",
-        f"- Typography tendency: {direction['typography']}",
-        f"- Lighting tendency: {direction['lighting']}",
-        f"- Avoid: {direction['avoid']}",
+        "- Direction: " + direction['direction'],
+        "- Reference artists/styles: " + direction['references'],
+        "- Typography tendency: " + direction['typography'],
+        "- Lighting tendency: " + direction['lighting'],
+        "- Avoid: " + direction['avoid'],
     ]
     return "\n".join(lines)
 
@@ -213,21 +430,26 @@ def _parse_style_json(raw_text: str) -> dict:
     cleaned = raw_text.strip()
 
     if cleaned.startswith('```'):
-        first_newline = cleaned.index('\n') if '\n' in cleaned else len(cleaned)
-        cleaned = cleaned[first_newline + 1:]
+        idx = cleaned.index('\n') if '\n' in cleaned else len(cleaned)
+        cleaned = cleaned[idx + 1:]
         if cleaned.rstrip().endswith('```'):
             cleaned = cleaned.rstrip()[:-3].rstrip()
 
     try:
         data = json.loads(cleaned)
     except json.JSONDecodeError as e:
-        logger.warning("Falha ao parsear JSON do estilo: %s. Raw: %s", e, raw_text[:200])
+        logger.warning(
+            "Falha ao parsear JSON do estilo: %s. Raw: %s",
+            e, raw_text[:200],
+        )
         return _default_style()
 
-    required_fields = ['aesthetic', 'colors', 'lighting', 'typography', 'composition']
+    required_fields = [
+        'aesthetic', 'colors', 'lighting', 'typography', 'composition',
+    ]
     missing = [f for f in required_fields if f not in data]
     if missing:
-        logger.warning("Estilo gerado sem campos obrigatórios: %s", missing)
+        logger.warning("Estilo gerado sem campos obrigatorios: %s", missing)
         defaults = _default_style()
         for field in missing:
             data[field] = defaults[field]
@@ -236,10 +458,13 @@ def _parse_style_json(raw_text: str) -> dict:
 
 
 def _default_style() -> dict:
-    """Estilo fallback caso a IA retorne JSON inválido."""
+    """Estilo fallback caso a IA retorne JSON invalido."""
     return {
         "name": "Minimalista Profissional",
-        "aesthetic": "Clean minimalist design with generous whitespace, inspired by Kinfolk magazine editorial layouts",
+        "aesthetic": (
+            "Clean minimalist design with generous whitespace, "
+            "inspired by Kinfolk magazine editorial layouts"
+        ),
         "colors": {
             "background": "warm ivory",
             "primary": "deep cobalt blue",
@@ -247,8 +472,16 @@ def _default_style() -> dict:
             "text": "dark charcoal",
         },
         "lighting": "soft overcast nordic daylight, diffused and even",
-        "typography": "modern geometric sans-serif, light weight, generous letter-spacing",
-        "composition": "title upper third centered, main visual centered 40% of frame, logo bottom-right 8%",
+        "typography": (
+            "modern geometric sans-serif, light weight, generous letter-spacing"
+        ),
+        "composition": (
+            "title upper third centered, main visual centered 40% of frame, "
+            "logo bottom-right 8%"
+        ),
         "mood": "professional, refined, confident",
-        "references": ["Kinfolk magazine editorial", "Swiss International Style poster"],
+        "references": [
+            "Kinfolk magazine editorial",
+            "Swiss International Style poster",
+        ],
     }
