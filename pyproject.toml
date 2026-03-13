@@ -36,6 +36,16 @@ dependencies = [
     "pydantic==2.11.7",
     "pytrends>=4.9.2",
     "webcolors==25.10.0",
+    # AWS
+    "boto3==1.35.99",
+    # Email
+    "mailjet-rest==1.5.1",
+    # Async HTTP
+    "aiohttp==3.11.14",
+    # Timezone
+    "pytz",
+    # Vercel deployment
+    "whitenoise==6.6.0",
     # Vercel deployment
     "whitenoise==6.6.0",
 ]
