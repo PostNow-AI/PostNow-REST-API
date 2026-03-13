@@ -29,12 +29,13 @@ dependencies = [
     # Payment Processing
     "stripe==12.4.0",
     # HTTP and API
-    "requests==2.32.3",
+    "requests==2.32.4",
     "urllib3==2.5.0",
     # Utilities
     "python-dotenv==1.1.0",
     "pydantic==2.11.7",
     "pytrends>=4.9.2",
+    "webcolors==25.10.0",
     # Vercel deployment
     "whitenoise==6.6.0",
 ]
