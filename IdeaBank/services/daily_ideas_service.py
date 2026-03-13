@@ -6,7 +6,11 @@ from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.db import connection
 from django.utils import timezone
-from google.genai import types
+
+try:
+    from google.genai import types
+except ImportError:
+    types = None
 
 from AuditSystem.services import AuditService
 from CreatorProfile.models import CreatorProfile

@@ -3,8 +3,13 @@ import os
 from time import sleep
 
 from django.contrib.auth.models import User
-from google import genai
-from google.genai import types
+
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 from AuditSystem.services import AuditService
 from CreditSystem.services.credit_service import CreditService
@@ -29,6 +34,8 @@ class AiService:
             'gemini-3-pro-image-preview',
         ]
         self.api_key = os.getenv('GEMINI_API_KEY', '')
+        if genai is None:
+            raise ImportError("google-genai package is not installed or could not be imported.")
         self.client = genai.Client(api_key=self.api_key)
         self.generate_text_config = types.GenerateContentConfig(
             response_modalities=[
