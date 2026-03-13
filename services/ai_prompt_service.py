@@ -1110,6 +1110,7 @@ class AIPromptService:
                 "analise_semantica": {{
                     "tema_principal": "[Tema principal adaptado ao contexto da marca]",
                     "subtemas": [],
+                    "titulo_imagem": "[Título curto para renderizar NA imagem, max 4 palavras, PT-BR, SEM acentos (ã, ç, é, ô, ü). Ex: 'Vendas Digital' ao invés de 'Ação Digital'. Deve ser impactante e relacionado ao tema.]",
                     "conceitos_visuais": ["[Conceitos reinterpretados para o nicho da marca]"],
                     "objetos_relevantes": ["[Objetos descritos de forma coerente com a marca]"],
                     "contexto_visual_sugerido": "[Cenário com a estética e paleta da marca]",
@@ -1179,8 +1180,8 @@ COMPOSITION:
 {style.get('composition', 'Title upper third centered, main visual centered, logo bottom-right 8%')}.
 Typography: {style.get('typography', 'modern bold sans-serif')}.
 Safe margin of 10% on all edges — no important elements near borders.
-Render a short title text related to the post content, centered in the upper third.
-All rendered text must be in Brazilian Portuguese (PT-BR).
+Title text: "{semantic_analysis.get('titulo_imagem', semantic_analysis.get('tema_principal', ''))}" — render this exact text, centered in the upper third, in bold {style.get('typography', 'sans-serif')} font, {style_colors.get('text', 'dark charcoal')} color.
+All rendered text must be in Brazilian Portuguese (PT-BR). Do NOT add accented characters (ã, ç, é, ô, ü) unless they appear in the title above.
 
 {logo_section}
 

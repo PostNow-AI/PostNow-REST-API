@@ -7,8 +7,11 @@ from unittest.mock import Mock, patch, MagicMock
 from services.style_generation_service import (
     _parse_style_json,
     _default_style,
+    _get_style_direction,
     STYLE_GENERATION_PROMPT_SYSTEM,
     STYLE_GENERATION_PROMPT_TEMPLATE,
+    STYLE_DIRECTIONS,
+    DEFAULT_STYLE_DIRECTION,
 )
 
 
@@ -118,7 +121,7 @@ class TestPromptTemplates:
     """Testa que os templates de prompt estão bem formados."""
 
     def test_system_prompt_is_english(self):
-        assert "Senior Art Director" in STYLE_GENERATION_PROMPT_SYSTEM
+        assert "Art Director" in STYLE_GENERATION_PROMPT_SYSTEM
 
     def test_template_has_all_placeholders(self):
         required_placeholders = [
@@ -137,10 +140,77 @@ class TestPromptTemplates:
         assert "memory color" in STYLE_GENERATION_PROMPT_TEMPLATE.lower()
 
     def test_template_forbids_hex(self):
-        assert "NEVER use hex" in STYLE_GENERATION_PROMPT_TEMPLATE
+        assert "NEVER hex codes" in STYLE_GENERATION_PROMPT_TEMPLATE
 
     def test_template_requires_json_output(self):
         assert "JSON" in STYLE_GENERATION_PROMPT_TEMPLATE
+
+
+class TestStyleDirections:
+    """Testa o mapeamento de preferências de estilo do onboarding."""
+
+    def test_all_onboarding_styles_mapped(self):
+        expected_ids = ["minimalista", "colorido", "elegante", "moderno", "rustico", "ousado"]
+        for style_id in expected_ids:
+            assert style_id in STYLE_DIRECTIONS, f"Estilo '{style_id}' não mapeado"
+
+    def test_each_direction_has_required_fields(self):
+        required = ["direction", "references", "typography", "lighting", "avoid"]
+        for style_id, direction in STYLE_DIRECTIONS.items():
+            for field in required:
+                assert field in direction, f"Campo '{field}' faltando em '{style_id}'"
+
+    def test_directions_are_distinct(self):
+        """Cada estilo deve ter referências diferentes."""
+        all_refs = [d["references"] for d in STYLE_DIRECTIONS.values()]
+        assert len(set(all_refs)) == len(all_refs), "Referências duplicadas entre estilos"
+
+    def test_default_direction_has_required_fields(self):
+        required = ["direction", "references", "typography", "lighting", "avoid"]
+        for field in required:
+            assert field in DEFAULT_STYLE_DIRECTION
+
+    def test_colorido_avoids_muted(self):
+        assert "muted" in STYLE_DIRECTIONS["colorido"]["avoid"].lower()
+
+    def test_elegante_references_luxury(self):
+        refs = STYLE_DIRECTIONS["elegante"]["references"].lower()
+        assert "vogue" in refs or "chanel" in refs or "luxury" in refs
+
+    def test_rustico_has_warm_lighting(self):
+        assert "golden hour" in STYLE_DIRECTIONS["rustico"]["lighting"]
+
+
+class TestGetStyleDirection:
+    """Testa _get_style_direction com mocks."""
+
+    @patch("services.style_generation_service.CreatorProfile")
+    def test_returns_default_when_no_style_ids(self, mock_model):
+        mock_profile = Mock()
+        mock_profile.visual_style_ids = []
+        mock_model.objects.get.return_value = mock_profile
+
+        result = _get_style_direction(Mock())
+        assert "Direction:" in result
+        assert DEFAULT_STYLE_DIRECTION["direction"] in result
+
+    @patch("services.style_generation_service.CreatorProfile")
+    def test_returns_mapped_style(self, mock_model):
+        mock_profile = Mock()
+        mock_profile.visual_style_ids = ["ousado", "minimalista"]
+        mock_model.objects.get.return_value = mock_profile
+
+        result = _get_style_direction(Mock())
+        assert "Nike" in result or "bold" in result.lower() or "impactful" in result.lower()
+
+    @patch("services.style_generation_service.CreatorProfile")
+    def test_returns_default_for_unknown_style(self, mock_model):
+        mock_profile = Mock()
+        mock_profile.visual_style_ids = ["estilo_inexistente"]
+        mock_model.objects.get.return_value = mock_profile
+
+        result = _get_style_direction(Mock())
+        assert DEFAULT_STYLE_DIRECTION["direction"] in result
 
 
 class TestGenerateStyleIntegration:
