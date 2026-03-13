@@ -342,12 +342,12 @@ Todas as ideias devem ser em português brasileiro (PT-BR).
         if context_data.get('market_tendencies'):
             tendencies = context_data['market_tendencies']
             if isinstance(tendencies, list):
-                sections.append(f"**Tendências do Mercado:**\n- " + "\n- ".join(tendencies))
+                sections.append(f"**Tendências do Mercado:**\n- " + "\n- ".join(str(t) for t in tendencies))
 
         if context_data.get('market_challenges'):
             challenges = context_data['market_challenges']
             if isinstance(challenges, list):
-                sections.append(f"**Desafios do Mercado:**\n- " + "\n- ".join(challenges))
+                sections.append(f"**Desafios do Mercado:**\n- " + "\n- ".join(str(c) for c in challenges))
 
         # Concorrência
         if context_data.get('competition_main'):
@@ -371,18 +371,18 @@ Todas as ideias devem ser em português brasileiro (PT-BR).
         if context_data.get('target_audience_interests'):
             interests = context_data['target_audience_interests']
             if isinstance(interests, list):
-                sections.append(f"**Interesses do Público:**\n- " + "\n- ".join(interests))
+                sections.append(f"**Interesses do Público:**\n- " + "\n- ".join(str(i) for i in interests))
 
         # Tendências
         if context_data.get('tendencies_popular_themes'):
             themes = context_data['tendencies_popular_themes']
             if isinstance(themes, list):
-                sections.append(f"**Temas Populares:**\n- " + "\n- ".join(themes))
+                sections.append(f"**Temas Populares:**\n- " + "\n- ".join(str(t) for t in themes))
 
         if context_data.get('tendencies_hashtags'):
             hashtags = context_data['tendencies_hashtags']
             if isinstance(hashtags, list):
-                sections.append(f"**Hashtags em Alta:**\n{', '.join(hashtags)}")
+                sections.append(f"**Hashtags em Alta:**\n{', '.join(str(h) for h in hashtags)}")
 
         # Sazonalidade
         if context_data.get('seasonal_relevant_dates'):

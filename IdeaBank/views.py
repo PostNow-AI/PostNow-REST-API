@@ -10,7 +10,11 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from google.genai import types
+
+try:
+    from google.genai import types
+except ImportError:
+    types = None
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import (
     api_view,
@@ -28,6 +32,7 @@ from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
 from services.daily_post_amount_service import DailyPostAmountService
 from services.s3_sevice import S3Service
+
 from .models import Post, PostIdea, PostObjective, PostType
 from .serializers import (
     ImageGenerationRequestSerializer,

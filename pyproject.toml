@@ -20,7 +20,7 @@ dependencies = [
     "google-auth==2.40.3",
     "google-auth-oauthlib==1.2.2",
     "google-api-python-client==2.178.0",
-    "google-generativeai==0.8.5",
+    "google-genai==1.49.0",
     # AI Services
     "openai==1.102.0",
     "anthropic==0.64.0",
@@ -29,12 +29,23 @@ dependencies = [
     # Payment Processing
     "stripe==12.4.0",
     # HTTP and API
-    "requests==2.32.3",
+    "requests==2.32.4",
     "urllib3==2.5.0",
     # Utilities
     "python-dotenv==1.1.0",
     "pydantic==2.11.7",
     "pytrends>=4.9.2",
+    "webcolors==25.10.0",
+    # AWS
+    "boto3==1.35.99",
+    # Email
+    "mailjet-rest==1.5.1",
+    # Async HTTP
+    "aiohttp==3.11.14",
+    # Timezone
+    "pytz",
+    # Vercel deployment
+    "whitenoise==6.6.0",
     # Vercel deployment
     "whitenoise==6.6.0",
 ]
