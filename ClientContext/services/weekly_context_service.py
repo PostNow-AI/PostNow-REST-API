@@ -1,30 +1,25 @@
 """Servico de orquestracao para geracao de contexto semanal."""
 
-import html
 import json
 import logging
 import os
-import re
-from datetime import datetime
 from typing import Dict, Any, Optional
-from urllib.parse import urlparse
-from google.genai import types
 
+from google.genai import types
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.utils import timezone
 
 from AuditSystem.services import AuditService
-from ..utils.url_dedupe import normalize_url_key
 from ..utils.policy_resolver import resolve_policy
-from ..utils.source_quality import pick_candidates, is_denied, is_allowed, allowed_domains, build_allowlist_query
-from ..utils.text_utils import is_blocked_filetype, sanitize_query_for_allowlist, extract_json_block
+from ..utils.text_utils import extract_json_block
 from ..utils.history_utils import get_recent_topics, get_recent_url_keys
 from ..utils.data_extraction import normalize_section_structure
 from .opportunity_ranking_service import OpportunityRankingService
 from .context_error_service import ContextErrorService
 from .context_stats_service import ContextStatsService
 from .context_persistence_service import ContextPersistenceService
+from .source_fetching_service import SourceFetchingService
 from services.get_creator_profile_data import get_creator_profile_data
 from services.prompt_utils import build_optimized_search_queries
 from services.user_validation_service import UserValidationService
@@ -75,16 +70,13 @@ CONTEXT_FIELD_MAPPING = {
     },
 }
 
+SECTIONS = ['mercado', 'concorrencia', 'publico', 'tendencias', 'sazonalidade', 'marca']
+
 
 class WeeklyContextService:
     """Service for generating weekly context for users.
 
     Supports dependency injection for testing and flexibility (DIP).
-
-    Fluxo melhorado (2026):
-        1. Fase 0: TrendsDiscoveryService descobre tendencias REAIS
-        2. Fase 1: Contexto gerado com tendencias como input
-        3. Resultado: Temas validados com fontes verificaveis
     """
 
     def __init__(
@@ -100,18 +92,21 @@ class WeeklyContextService:
         stats_service: Optional[ContextStatsService] = None,
         persistence_service: Optional[ContextPersistenceService] = None,
         trends_discovery_service: Optional[TrendsDiscoveryService] = None,
+        source_fetching_service: Optional[SourceFetchingService] = None,
     ):
         self.user_validation_service = user_validation_service or UserValidationService()
         self.semaphore_service = semaphore_service or SemaphoreService()
         self.ai_service = ai_service or AiService()
         self.prompt_service = prompt_service or AIPromptService()
         self.audit_service = audit_service or AuditService()
-        self.google_search_service = google_search_service or GoogleSearchService()
+        google_search = google_search_service or GoogleSearchService()
+        self.google_search_service = google_search
         self.opportunity_ranking_service = opportunity_ranking_service or OpportunityRankingService()
         self.error_service = error_service or ContextErrorService()
         self.stats_service = stats_service or ContextStatsService()
         self.persistence_service = persistence_service or ContextPersistenceService()
         self.trends_discovery_service = trends_discovery_service or TrendsDiscoveryService()
+        self.source_fetching_service = source_fetching_service or SourceFetchingService(google_search)
         self.dedupe_lookback_weeks = 4
 
     @sync_to_async
@@ -189,437 +184,162 @@ class WeeklyContextService:
                 return {'status': 'failed', 'reason': 'user_not_found', 'user_id': user_id}
 
             await sync_to_async(self.audit_service.log_context_generation)(
-                user=user,
-                action='weekly_context_generation_started',
-                status='info',
-            )
+                user=user, action='weekly_context_generation_started', status='info')
 
             validation_result = await self.user_validation_service.validate_user_eligibility(user_data)
-
             if validation_result['status'] != 'eligible':
-                return {
-                    'user_id': user_id,
-                    'status': 'skipped',
-                    'reason': validation_result['reason']
-                }
+                return {'user_id': user_id, 'status': 'skipped', 'reason': validation_result['reason']}
 
-            # _generate_context_for_user is async now, so we await it directly
-            # RETORNA UMA TUPLA: (json_str, search_results_dict)
-            context_result = await self._generate_context_for_user(user)
+            json_str, search_results_map = await self._generate_context_for_user(user)
 
-            search_results_map = {}
-            json_str = ""
-
-            if isinstance(context_result, tuple):
-                json_str = context_result[0]
-                search_results_map = context_result[1]
-            else:
-                json_str = context_result
-
-            # Robust JSON parsing from the full string
-            try:
-                context_data = json.loads(json_str)
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON Parse Error Main: {e}")
-                # Tentar extrair o bloco principal novamente com a funcao robusta
-                clean_context = extract_json_block(json_str)
-                try:
-                    context_data = json.loads(clean_context)
-                except json.JSONDecodeError as e2:
-                    logger.error(f"Failed to parse extracted JSON Main: {e2}")
-                    raise ValueError("Invalid JSON format from AI synthesis")
-
-            # --- CORRECAO DE ESTRUTURA ---
-            # Garantir que todas as secoes criticas sejam dicionarios (movido para utils)
+            context_data = self._parse_context_json(json_str)
             context_data = normalize_section_structure(context_data)
 
-            # --- NOVO: Agregacao e Ranking de Oportunidades ---
-            # Usar funcao utilitaria para obter URLs recentes (movido para utils)
             recent_used_url_keys = await get_recent_url_keys(user, self.dedupe_lookback_weeks)
             ranked_opportunities = await self.opportunity_ranking_service.aggregate_and_rank_opportunities(
-                context_data,
-                search_results_map,
-                recent_used_url_keys=recent_used_url_keys
-            )
-            # Injetar estrutura rankeada no contexto para o template usar
+                context_data, search_results_map, recent_used_url_keys=recent_used_url_keys)
             context_data['ranked_opportunities'] = ranked_opportunities
 
-            # --- PERSISTENCIA: Usar servico dedicado (SRP) ---
             client_context = await self.persistence_service.save_context(
-                user=user,
-                context_data=context_data,
-                ranked_opportunities=ranked_opportunities
-            )
-
-            # --- HISTORICO: Salvar copia no historico ---
+                user=user, context_data=context_data, ranked_opportunities=ranked_opportunities)
             await self.persistence_service.save_context_history(user, client_context)
 
             await sync_to_async(self.audit_service.log_context_generation)(
-                user=user,
-                action='context_generated',
-                status='success',
-                details={
-                    'discovered_trends_count': discovered_trends.get('validated_count', 0)
-                }
-            )
+                user=user, action='context_generated', status='success')
 
-            return {
-                'user_id': user_id,
-                'status': 'success',
-                'discovered_trends_count': discovered_trends.get('validated_count', 0),
-            }
+            return {'user_id': user_id, 'status': 'success'}
 
         except Exception as e:
             await self.error_service.store_error(user, str(e))
             await sync_to_async(self.audit_service.log_context_generation)(
-                user=user,
-                action='weekly_context_generation_failed',
-                status='error',
-                details=str(e)
+                user=user, action='weekly_context_generation_failed',
+                status='error', details=str(e))
+            return {'user_id': user_id, 'status': 'failed', 'error': str(e)}
+
+    def _parse_context_json(self, json_str: str) -> dict:
+        """Parse JSON from AI response with fallback."""
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            clean_context = extract_json_block(json_str)
+            try:
+                return json.loads(clean_context)
+            except json.JSONDecodeError:
+                raise ValueError("Invalid JSON format from AI synthesis")
+
+    async def _generate_context_for_user(self, user: User) -> tuple:
+        """Generate context for a specific user.
+
+        Returns: (json_string, search_results_by_section)
+        """
+        self.prompt_service.set_user(user)
+
+        profile_data = await sync_to_async(get_creator_profile_data)(user)
+        queries = build_optimized_search_queries(profile_data)
+
+        decision = resolve_policy(profile_data)
+        policy = decision.policy
+        logger.info(
+            "[POLICY] key=%s source=%s languages=%s",
+            policy.key, decision.source, ",".join(policy.languages))
+
+        excluded_topics = await get_recent_topics(user, self.dedupe_lookback_weeks)
+        used_url_keys_recent = await get_recent_url_keys(user, self.dedupe_lookback_weeks)
+        used_url_keys_this_run: set[str] = set()
+
+        # Buscar fontes por secao (delegado ao SourceFetchingService)
+        search_results = {}
+        for section in SECTIONS:
+            search_results[section] = await self.source_fetching_service.fetch_and_filter_section(
+                section=section,
+                query=queries.get(section, ''),
+                profile_data=profile_data,
+                policy=policy,
+                used_url_keys_recent=used_url_keys_recent,
+                used_url_keys_this_run=used_url_keys_this_run,
             )
 
-            return {
-                'user_id': user_id,
-                'status': 'failed',
-                'error': str(e),
-            }
+        context_borrowed_for_audience = (
+            search_results.get('mercado', []) + search_results.get('tendencias', []))
+
+        # Sintetizar com IA por secao
+        final_json_parts = []
+        for section in SECTIONS:
+            borrowed = context_borrowed_for_audience if section == 'publico' else None
+            json_part = await self._synthesize_section(
+                section, queries.get(section, ''),
+                search_results.get(section, []),
+                profile_data, excluded_topics, borrowed)
+            final_json_parts.append(f'"{section}": {json_part}')
+
+        full_json_str = "{" + ", ".join(final_json_parts) + "}"
+        return full_json_str, search_results
+
+    async def _synthesize_section(
+        self, section: str, query: str, urls: list,
+        profile_data: dict, excluded_topics: list, borrowed=None,
+    ) -> str:
+        """Synthesize a single section with AI."""
+        prompt_list = self.prompt_service._build_synthesis_prompt(
+            section_name=section,
+            query=query,
+            urls=urls,
+            profile_data=profile_data,
+            excluded_topics=excluded_topics,
+            context_borrowed=borrowed,
+        )
+
+        synthesis_config = types.GenerateContentConfig(
+            response_modalities=["TEXT"],
+            temperature=0.7,
+            top_p=0.9,
+            max_output_tokens=4096,
+            response_mime_type="application/json",
+        )
+
+        try:
+            ai_response = await sync_to_async(self.ai_service.generate_text)(
+                prompt_list, None, config=synthesis_config)
+            if isinstance(ai_response, dict):
+                ai_text = ai_response.get('text', '')
+            else:
+                ai_text = str(ai_response)
+            return extract_json_block(ai_text)
+        except Exception as e:
+            logger.error(f"Error generating section {section}: {e}")
+            return '{}'
 
     async def _discover_trends_for_user(self, user: User) -> Dict[str, Any]:
-        """
-        Fase 0: Descobre tendencias REAIS para o setor do usuario.
-
-        Usa Google Trends para descobrir o que esta em alta e valida
-        cada tendencia buscando fontes reais no Google Search.
-        """
+        """Fase 0: Descobre tendencias REAIS para o setor do usuario."""
         try:
             profile_data = await sync_to_async(get_creator_profile_data)(user)
-
             sector = profile_data.get('specialization', '')
             business_description = profile_data.get('business_description', '')
             location = profile_data.get('business_location', 'Brasil')
 
             if not sector:
                 logger.warning(f"User {user.id} has no sector defined, skipping trend discovery")
-                return {
-                    'general_trends': [],
-                    'sector_trends': [],
-                    'rising_topics': [],
-                    'validated_count': 0,
-                    'discovery_metadata': {'error': 'no_sector_defined'}
-                }
+                return {'general_trends': [], 'sector_trends': [], 'rising_topics': [],
+                        'validated_count': 0, 'discovery_metadata': {'error': 'no_sector_defined'}}
 
             discovered_trends = await sync_to_async(
                 self.trends_discovery_service.discover_trends_for_sector
-            )(
-                sector=sector,
-                business_description=business_description,
-                location=location,
-            )
+            )(sector=sector, business_description=business_description, location=location)
 
             logger.info(
                 f"Discovered {discovered_trends.get('validated_count', 0)} trends "
-                f"for user {user.id} (sector: {sector})"
-            )
-
+                f"for user {user.id} (sector: {sector})")
             return discovered_trends
 
         except Exception as e:
             logger.error(f"Error discovering trends for user {user.id}: {e}")
-            return {
-                'general_trends': [],
-                'sector_trends': [],
-                'rising_topics': [],
-                'validated_count': 0,
-                'discovery_metadata': {'error': str(e)}
-            }
+            return {'general_trends': [], 'sector_trends': [], 'rising_topics': [],
+                    'validated_count': 0, 'discovery_metadata': {'error': str(e)}}
 
     def _map_context_fields(self, client_context, context_data: dict) -> None:
-        """DRY: Map JSON context data to ClientContext model fields.
-
-        Uses CONTEXT_FIELD_MAPPING to avoid repetitive field assignments.
-        """
+        """DRY: Map JSON context data to ClientContext model fields."""
         for section_key, fields in CONTEXT_FIELD_MAPPING.items():
             section_data = context_data.get(section_key, {})
             for json_key, (model_field, default) in fields.items():
                 value = section_data.get(json_key, default)
                 setattr(client_context, model_field, value)
-
-    async def _generate_context_for_user(self, user: User) -> tuple:
-        """
-        Generate context for a specific user.
-        Retorna: (json_string_completo, dict_urls_reais_por_secao)
-        """
-        self.prompt_service.set_user(user)
-
-        # 1. Preparar Prompts e Queries
-        profile_data = await sync_to_async(get_creator_profile_data)(user)
-        queries = build_optimized_search_queries(profile_data)
-
-        # Policy (auto/override) para controlar thresholds/idiomas e auditar comportamento
-        decision = resolve_policy(profile_data)
-        policy = decision.policy
-        logger.info(
-            "[POLICY] key=%s source=%s override=%s reason=%s languages=%s min_selected=%s allow_ratio_threshold=%.2f",
-            policy.key,
-            decision.source,
-            decision.override_value or "",
-            decision.reason,
-            ",".join(policy.languages),
-            policy.min_selected_by_section,
-            policy.allowlist_ratio_threshold,
-        )
-
-        # 2. Historico Anti-Repeticao (usando funcoes utilitarias)
-        excluded_topics = await get_recent_topics(user, self.dedupe_lookback_weeks)
-        used_url_keys_recent = await get_recent_url_keys(user, self.dedupe_lookback_weeks)
-        # Tambem evita duplicar links dentro do mesmo e-mail (entre secoes)
-        used_url_keys_this_run: set[str] = set()
-
-        # 3. Executar Buscas (Paralelas ou Sequenciais)
-        sections = ['mercado', 'concorrencia', 'publico',
-                    'tendencias', 'sazonalidade', 'marca']
-
-        # Executar buscas
-        search_results = {}
-        for section in sections:
-            # Sazonalidade precisa de parser especial no futuro, mas por enquanto busca normal
-            query = queries.get(section, '')
-            urls = []
-            if query:
-                def _fetch_pool(lr: str, q: str) -> list[dict]:
-                    raw: list[dict] = []
-                    for start in (1, 11, 21, 31, 41):
-                        try:
-                            page = self.google_search_service.search(
-                                q,
-                                num_results=10,
-                                start=start,
-                                lr=lr,
-                                gl=os.getenv("GOOGLE_CSE_GL", "br"),
-                            )
-                        except Exception:
-                            page = []
-                        if page:
-                            raw.extend(page)
-                    return raw
-
-                # 1) Buscar pt-BR primeiro (preferencia). Tentar primeiro com restricao de allowlist (se existir).
-                doms = allowed_domains(section)
-                sanitized = sanitize_query_for_allowlist(query)
-                allow_q = build_allowlist_query(
-                    sanitized or query, doms, max_domains=8) if doms else query
-                pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", allow_q)
-                if doms and len(pt_pool) < 5:
-                    # fallback 1: query generica (menos restritiva) ainda dentro da allowlist
-                    fallback_base = f"{profile_data.get('specialization', '')} cultura organizacional gestao de processos {datetime.now().year}"
-                    fb_q = build_allowlist_query(sanitize_query_for_allowlist(
-                        fallback_base), doms, max_domains=8)
-                    pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", fb_q)
-                if doms and len(pt_pool) < 5:
-                    # fallback 2: busca geral
-                    pt_pool = await sync_to_async(_fetch_pool)(policy.languages[0] if policy.languages else "lang_pt", query)
-                logger.info(
-                    "[SOURCE_AUDIT] secao=%s stage=raw_pt count=%s", section, len(pt_pool))
-                pt_urls = [i.get("url") for i in pt_pool if isinstance(
-                    i, dict) and isinstance(i.get("url"), str)]
-                picked_urls = pick_candidates(
-                    section,
-                    pt_urls,
-                    min_allowlist=policy.allowlist_min_coverage.get(
-                        section, 3),
-                    max_keep=12,
-                )
-                picked_items: list[dict] = []
-                raw_pt_count = len(pt_pool)
-                raw_en_count = 0
-                denied_count = 0
-                allowlist_count = 0
-                fallback_used = []
-                min_needed = policy.min_selected_by_section.get(section, 3)
-
-                # Aplicar dedupe (historico + dentro do run) e limite por dominio
-                per_domain: dict[str, int] = {}
-                for u in picked_urls:
-                    if not u or not u.startswith("http"):
-                        continue
-                    if is_blocked_filetype(u) or is_denied(u):
-                        denied_count += 1
-                        continue
-                    if is_allowed(section, u):
-                        allowlist_count += 1
-                    k = normalize_url_key(u)
-                    if not k or k in used_url_keys_recent or k in used_url_keys_this_run:
-                        continue
-                    d = urlparse(u).netloc.lower()
-                    per_domain[d] = per_domain.get(d, 0) + 1
-                    if per_domain[d] > 2:
-                        per_domain[d] -= 1
-                        continue
-                    # recuperar item original
-                    item = next((x for x in pt_pool if isinstance(
-                        x, dict) and x.get("url") == u), None)
-                    if item:
-                        picked_items.append(item)
-                        used_url_keys_this_run.add(k)
-                    if len(picked_items) >= 6:
-                        break
-
-                # 2) Fallback en se cobertura baixa
-                if len(picked_items) < min_needed and len(policy.languages) > 1:
-                    en_pool = await sync_to_async(_fetch_pool)(policy.languages[1], allow_q)
-                    if doms and len(en_pool) < 5:
-                        en_pool = await sync_to_async(_fetch_pool)(policy.languages[1], query)
-                    logger.info(
-                        "[SOURCE_AUDIT] secao=%s stage=raw_en count=%s", section, len(en_pool))
-                    raw_en_count = len(en_pool)
-                    fallback_used.append("en")
-                    en_urls = [i.get("url") for i in en_pool if isinstance(
-                        i, dict) and isinstance(i.get("url"), str)]
-                    en_picked = pick_candidates(
-                        section, en_urls, min_allowlist=2, max_keep=12)
-                    for u in en_picked:
-                        if not u or not u.startswith("http"):
-                            continue
-                        if is_blocked_filetype(u) or is_denied(u):
-                            denied_count += 1
-                            continue
-                        if is_allowed(section, u):
-                            allowlist_count += 1
-                        k = normalize_url_key(u)
-                        if not k or k in used_url_keys_recent or k in used_url_keys_this_run:
-                            continue
-                        d = urlparse(u).netloc.lower()
-                        per_domain[d] = per_domain.get(d, 0) + 1
-                        if per_domain[d] > 2:
-                            per_domain[d] -= 1
-                            continue
-                        item = next((x for x in en_pool if isinstance(
-                            x, dict) and x.get("url") == u), None)
-                        if item:
-                            picked_items.append(item)
-                            used_url_keys_this_run.add(k)
-                        if len(picked_items) >= 6:
-                            break
-
-                if len(picked_items) < min_needed:
-                    logger.info(
-                        "[LOW_SOURCE_COVERAGE] secao=%s picked=%s lookback_weeks=%s",
-                        section,
-                        len(picked_items),
-                        self.dedupe_lookback_weeks,
-                    )
-                else:
-                    # Log dos dominios finais usados por secao
-                    domains = []
-                    for it in picked_items:
-                        u = it.get("url") if isinstance(it, dict) else None
-                        if isinstance(u, str) and u.startswith("http"):
-                            domains.append(urlparse(u).netloc.lower())
-                    logger.info(
-                        "[SOURCE_AUDIT] secao=%s stage=selected count=%s domains=%s",
-                        section,
-                        len(picked_items),
-                        sorted(list(set(domains)))[:10],
-                    )
-
-                logger.info(
-                    "[SOURCE_METRICS] policy=%s secao=%s raw_pt=%s raw_en=%s denied=%s allow=%s selected=%s min_needed=%s fallback=%s",
-                    policy.key,
-                    section,
-                    raw_pt_count,
-                    raw_en_count,
-                    denied_count,
-                    allowlist_count,
-                    len(picked_items),
-                    min_needed,
-                    ",".join(fallback_used) if fallback_used else "",
-                )
-
-                # Alertas simples de qualidade
-                if section in ("mercado", "tendencias", "concorrencia") and len(picked_items) < min_needed:
-                    logger.warning(
-                        "[LOW_SOURCE_COVERAGE] policy=%s secao=%s selected=%s raw_pt=%s raw_en=%s",
-                        policy.key,
-                        section,
-                        len(picked_items),
-                        raw_pt_count,
-                        raw_en_count,
-                    )
-
-                # Ratio de allowlist (quando ha allowlist definida para a secao)
-                if doms and len(picked_items) > 0:
-                    allow_ratio = allowlist_count / max(len(picked_items), 1)
-                    if allow_ratio < policy.allowlist_ratio_threshold:
-                        logger.warning(
-                            "[LOW_ALLOWLIST_RATIO] policy=%s secao=%s ratio=%.2f allow=%s selected=%s domains_allowlist=%s",
-                            policy.key,
-                            section,
-                            allow_ratio,
-                            allowlist_count,
-                            len(picked_items),
-                            len(doms),
-                        )
-
-                urls = picked_items
-            search_results[section] = urls
-
-        # 4. Contexto Cruzado (Cross-Context Synthesis)
-        # O Publico precisa saber o que esta rolando no Mercado e Tendencias
-        context_borrowed_for_audience = search_results.get(
-            'mercado', []) + search_results.get('tendencias', [])
-
-        # 5. Gerar Sintese com IA (Sequencial para garantir coerencia ou paralelo?)
-        # Vamos fazer sequencial para simplicidade e controle de erro, mas construindo um JSON unificado
-        final_json_parts = []
-
-        for section in sections:
-            borrowed = context_borrowed_for_audience if section == 'publico' else None
-
-            prompt_list = self.prompt_service._build_synthesis_prompt(
-                section_name=section,
-                query=queries.get(section, ''),
-                urls=search_results.get(section, []),
-                profile_data=profile_data,
-                excluded_topics=excluded_topics,
-                context_borrowed=borrowed
-            )
-
-            # Chamar Gemini
-
-            # Configuracao "limpa" para sintese (sem Google Search Tools)
-            # para evitar conflito com o texto ja fornecido e prevenir erros de Grounding
-            synthesis_config = types.GenerateContentConfig(
-                response_modalities=["TEXT"],
-                temperature=0.7,
-                top_p=0.9,
-                max_output_tokens=4096,
-                response_mime_type="application/json"
-            )
-
-            try:
-                # O metodo generate_text espera uma lista de prompts, nao string unica
-                ai_response = await sync_to_async(self.ai_service.generate_text)(
-                    prompt_list,
-                    user,
-                    config=synthesis_config
-                )
-                # Limpar JSON markdown se houver
-                if isinstance(ai_response, dict):
-                    ai_text = ai_response.get('text', '')
-                else:
-                    ai_text = str(ai_response)
-
-                # Usar a nova funcao robusta para extrair o JSON
-                clean_json = extract_json_block(ai_text)
-                final_json_parts.append(f'"{section}": {clean_json}')
-
-            except Exception as e:
-                logger.error(f"Error generating section {section}: {e}")
-                final_json_parts.append(f'"{section}": {{}}')  # Fallback vazio
-
-        # Montar JSON Final
-        full_json_str = "{" + ", ".join(final_json_parts) + "}"
-        return full_json_str, search_results
-
-    # NOTE: _get_recent_topics e _get_recent_url_keys foram movidos para
-    # ClientContext/utils/history_utils.py conforme feedback do CTO (SOLID/DRY)
