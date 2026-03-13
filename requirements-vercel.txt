@@ -38,5 +38,21 @@ urllib3==2.5.0
 python-dotenv==1.1.0
 pydantic==2.11.7
 
+# AWS
+boto3==1.35.99
+
+# Email
+mailjet-rest==1.5.1
+
+# Async HTTP
+aiohttp==3.11.14
+
+# Timezone
+pytz
+
+# Utilities (missing from vercel file)
+pytrends==4.9.0
+webcolors==25.10.0
+
 # Vercel deployment
 whitenoise==6.6.0
