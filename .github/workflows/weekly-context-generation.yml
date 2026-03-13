@@ -17,8 +17,10 @@ jobs:
 
     steps:
       - name: Debug URL
+        if: success() || failure()
         run: echo "${{ secrets.VERCEL_API_URL }}/api/v1/client-context/generate-weekly-context/?batch=${{ matrix.batch }}"
       - name: Wait for staggered execution
+        if: success() || failure()
         run: |
           # Stagger the batches by 5 minutes each
           DELAY=$(( (${{ matrix.batch }} - 1) * 300 ))
@@ -26,6 +28,7 @@ jobs:
           sleep $DELAY
 
       - name: Call Vercel API for batch ${{ matrix.batch }}
+        if: success() || failure()
         run: |
           echo "Processing batch ${{ matrix.batch }}"
           curl -X GET \
