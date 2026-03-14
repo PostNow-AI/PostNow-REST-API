@@ -13,7 +13,7 @@ class WeeklyContextPolicy:
 
     key: str
 
-    # Idiomas (Google CSE lr), em ordem de preferência. Ex.: ["lang_pt", "lang_en"].
+    # Idiomas de busca, em ordem de preferência. Ex.: ["lang_pt", "lang_en"].
     languages: List[str]
 
     # Mínimo de fontes selecionadas por seção (mercado/tendencias/concorrencia/etc).
