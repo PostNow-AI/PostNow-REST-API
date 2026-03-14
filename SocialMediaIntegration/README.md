@@ -14,7 +14,7 @@ Este modulo implementa a integracao completa com a Instagram Graph API para:
 
 ```
 SocialMediaIntegration/
-├── models.py                  # Models Django
+├── models.py                  # Models Django (ScheduledPost, EngagementMetrics, etc.)
 ├── views.py                   # REST API endpoints
 ├── urls.py                    # Rotas
 ├── admin.py                   # Django Admin
@@ -23,9 +23,14 @@ SocialMediaIntegration/
 │   └── scheduled_post_serializers.py
 ├── services/
 │   ├── instagram_publish_service.py   # Publicacao via Graph API
+│   ├── instagram_insights_service.py  # Metricas de engagement (Graph API)
 │   └── scheduled_post_processor.py    # Processador de posts agendados
+├── management/
+│   └── commands/
+│       └── fetch_engagement_metrics.py  # Cron de coleta de metricas
+├── tests/
+│   └── test_instagram_insights_service.py
 └── migrations/
-    └── 0001_initial.py
 ```
 
 ## Models
@@ -182,13 +187,42 @@ O workflow `.github/workflows/instagram-publish-scheduler.yml` executa:
 | PROCESSING_TIMEOUT | Agenda retry |
 | CONTAINER_EXPIRED | Falha definitiva |
 
+### EngagementMetrics
+Metricas de engagement coletadas via Instagram Insights API.
+
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| scheduled_post | OneToOne(ScheduledPost) | Post publicado |
+| instagram_media_id | CharField | ID da midia no Instagram |
+| impressions | IntegerField | Total de impressoes |
+| reach | IntegerField | Alcance unico |
+| engagement | IntegerField | Saves + shares |
+| saves | IntegerField | Salvamentos |
+| shares | IntegerField | Compartilhamentos |
+| engagement_rate | FloatField | Taxa (engagement/reach * 100) |
+| raw_data | JSONField | Resposta completa da API |
+| fetched_at | DateTimeField | Ultima coleta |
+
+**FK Chain:** EngagementMetrics → ScheduledPost → PostIdea → GeneratedVisualStyle
+
+Essa cadeia permite correlacionar performance com estilo visual.
+
+### Management Commands
+
+| Comando | Descricao |
+|---------|-----------|
+| `python manage.py fetch_engagement_metrics --days 7` | Coleta metricas dos ultimos N dias |
+
+O comando atualiza `GeneratedVisualStyle.engagement_score` via FK chain.
+
 ## Proximos Passos
 
 1. Implementar criptografia de tokens (Fernet)
 2. Adicionar notificacoes por email/push
 3. Implementar rate limiting
-4. Adicionar testes unitarios
+4. ~~Adicionar testes unitarios~~ (5 testes para insights service)
 5. Solicitar App Review para `instagram_content_publish`
+6. Agendar `fetch_engagement_metrics` como cron (GitHub Actions ou Celery Beat)
 
 ## Referencias
 

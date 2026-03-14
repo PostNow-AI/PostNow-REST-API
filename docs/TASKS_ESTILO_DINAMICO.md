@@ -180,14 +180,15 @@ O banco de teste tem uma migration que tenta adicionar `tendencies_data` mas a c
 
 ---
 
-## Fase 2: Completar (após Fase 1 funcionando)
+## Fase 2: Feedback Loop — Reutilização e Favoritos (CONCLUÍDA 2026-03-14)
 
 ### Task 2.1: Reutilização de Estilo
 
-- [ ] Endpoint para listar estilos salvos do usuário
-- [ ] Opção de "usar este estilo novamente" (passa `style_id` ao invés de gerar novo)
-- [ ] Incrementar `times_used` quando reutilizado
-- [ ] Endpoint para marcar/desmarcar favorito
+- [x] Endpoint `GET /creator-profile/styles/` para listar estilos (filtro `?favorites=true`)
+- [x] Opção de "usar este estilo novamente" (`reuse_style_id` no `ImageGenerationRequestSerializer`)
+- [x] Incrementar `times_used` quando reutilizado
+- [x] Endpoint `PATCH /creator-profile/styles/<id>/favorite/` para toggle favorito
+- [x] `GeneratedVisualStyleSerializer` (id, name, style_data, is_favorite, times_used, feedback_signal, created_at)
 
 ### Task 2.2: Refatorar prompt-best-practices.md
 
@@ -204,62 +205,86 @@ O banco de teste tem uma migration que tenta adicionar `tendencies_data` mas a c
 
 ---
 
-## Fase 3: Futuro (após sistema rodando com dados)
+## Fase 3: Feedback Loop — Sinais Implícitos e Performance (CONCLUÍDA 2026-03-14)
 
-### Task 3.1: Histórico e Anti-Repetição
-- [ ] Consultar últimos N estilos do usuário antes de gerar novo
-- [ ] Incluir no prompt: "evitar estilos similares a: [lista]"
+### Task 3.1: Sinais Implícitos (accepted/rejected)
 
-### Task 3.2: Campanhas Visuais
+- [x] FK `generated_style` no `PostIdea` (vincula estilo ao post)
+- [x] Campo `feedback_signal` (pending/accepted/rejected) no `GeneratedVisualStyle` com db_index
+- [x] Lógica: marca `accepted` na primeira geração, `rejected` na regeneração
+- [x] Helper `_mark_style_feedback()` em `IdeaBank/views.py`
+- [x] Vinculação em 4 pontos: `generate_post_idea`, `generate_from_opportunity`, `generate_image_for_idea`, `_generate_image_for_feed_post`
+- [x] Emite `AnalyticsEvent` (STYLE_ACCEPTED/STYLE_REJECTED) com resource_type=GeneratedVisualStyle
+- [x] `_gather_previous_styles()` agora busca 10 estilos e separa em 3 seções: LIKED / REJECTED / pending
+
+### Task 3.2: Favoritos como referência forte no prompt
+
+- [x] `_gather_favorite_styles(user, limit=3)` — busca estilos com `is_favorite=True`
+- [x] Nova seção `### FAVORITE STYLES` no `STYLE_GENERATION_PROMPT_TEMPLATE`
+- [x] Regra 12: "new style MUST share DNA with at least one favorite while still being unique"
+
+### Task 3.3: Instagram Engagement — Coleta de Métricas
+
+- [x] `InstagramInsightsService` — `fetch_media_insights(media_id, access_token)` via Graph API
+- [x] Model `EngagementMetrics` (impressions, reach, engagement, saves, shares, engagement_rate, raw_data)
+- [x] FK chain: EngagementMetrics → ScheduledPost → PostIdea → GeneratedVisualStyle
+- [x] Campo `engagement_score` no `GeneratedVisualStyle`
+- [x] Management command `fetch_engagement_metrics --days N` (coleta e atualiza scores)
+
+### Task 3.4: Performance no prompt de geração
+
+- [x] `_gather_performance_data(user, limit=5)` — busca estilos com maior engagement_score
+- [x] Nova seção `### TOP PERFORMING STYLES` no template
+- [x] Regra 13: "incorporate elements from top performing styles"
+- [x] Se não tem dados, seção não aparece (string vazia)
+
+### Pendentes (Fase 3)
+
+### Task 3.5: Campanhas Visuais
 - [ ] Modelo `Campaign` que agrupa posts com mesmo estilo
 - [ ] Reutilização automática do estilo da campanha
 
-### Task 3.3: Analytics e Feedback
-- [ ] Integrar com Instagram Graph API (métricas de performance por post)
-- [ ] Correlacionar estilo visual com engagement
-- [ ] Feedback loop: estilos com melhor performance influenciam geração futura
-
-### Task 3.4: Identificação de Estilo (UX)
+### Task 3.6: Identificação de Estilo (UX)
 - [ ] Como o usuário identifica/nomeia estilos salvos
 - [ ] Thumbnail/preview do estilo
 - [ ] Busca/filtro de estilos por tipo, cor, mood
 
-### Task 3.5: A/B Testing de Prompts
+### Task 3.7: A/B Testing de Prompts
 - [ ] Versionamento de prompts como código
 - [ ] Comparação de resultados entre versões
 - [ ] Métricas de qualidade por versão
 
 ---
 
-## Ordem de Execução Recomendada
-
-```
-1.1 (modelo) → 1.2 (cores) → 1.3 (service) → 1.4 (integração)
-                                                      ↓
-                                                2.1 (reutilização)
-                                                2.2 (atualizar docs)
-                                                2.3 (overlay)
-                                                      ↓
-                                              3.x (quando tiver dados)
-```
-
-1.1 e 1.2 podem ser feitos em paralelo.
-1.3 depende de 1.1 (modelo) e 1.2 (cores).
-1.4 depende de 1.3.
-
----
-
-## Código que será afetado
+## Código afetado (acumulado)
 
 | Arquivo | Mudança |
 |---|---|
-| `CreatorProfile/models.py` | Novo modelo `GeneratedVisualStyle` |
-| `services/color_extraction.py` | Dicionário memory colors, nova função |
-| `services/style_generation_service.py` | **Novo** — service de geração de estilo |
-| `services/ai_prompt_service.py` | Refatorar `image_generation_prompt()` |
-| `services/get_creator_profile_data.py` | Remover/adaptar `get_random_visual_style()` |
-| `services/prompt_logo.py` | Atualizar para memory colors se necessário |
-| `docs/prompt-best-practices.md` | Atualizar após Fase 1 (Task 2.2) |
+| `CreatorProfile/models.py` | `GeneratedVisualStyle` + campos `feedback_signal`, `engagement_score` |
+| `CreatorProfile/admin.py` | `feedback_signal` em list_display e list_filter |
+| `CreatorProfile/serializers.py` | `GeneratedVisualStyleSerializer` |
+| `CreatorProfile/views.py` | `list_generated_styles`, `toggle_style_favorite` |
+| `CreatorProfile/urls.py` | `styles/`, `styles/<id>/favorite/` |
+| `IdeaBank/models.py` | FK `generated_style` no `PostIdea` |
+| `IdeaBank/views.py` | `_mark_style_feedback`, vinculação em 3 endpoints |
+| `IdeaBank/serializers.py` | `reuse_style_id` no `ImageGenerationRequestSerializer` |
+| `IdeaBank/services/daily_ideas_service.py` | Vincula `generated_style` ao `PostIdea` |
+| `Analytics/constants.py` | `STYLE_ACCEPTED`, `STYLE_REJECTED`, `GENERATED_VISUAL_STYLE` |
+| `services/style_generation_service.py` | `_gather_favorite_styles`, `_gather_performance_data`, prompt enriquecido |
+| `SocialMediaIntegration/models.py` | `EngagementMetrics` |
+| `SocialMediaIntegration/services/instagram_insights_service.py` | **Novo** |
+| `SocialMediaIntegration/management/commands/fetch_engagement_metrics.py` | **Novo** |
+
+---
+
+## Testes
+
+| Arquivo | Qtd | Cobertura |
+|---|---|---|
+| `services/tests/test_style_generation_service.py` | 42 | Prompt, parsing, directions, feedback no prompt |
+| `services/tests/test_style_feedback.py` | 23 | Models, FK, serializers, admin, URLs, helper |
+| `Analytics/tests/test_constants.py` | 6 | Constantes novas |
+| `SocialMediaIntegration/tests/test_instagram_insights_service.py` | 5 | Insights API (success, rate limit, errors) |
 
 ---
 
@@ -267,5 +292,6 @@ O banco de teste tem uma migration que tenta adicionar `tendencies_data` mas a c
 
 | Data | Mudança |
 |---|---|
+| 2026-03-14 | Feedback loop completo: sinais implícitos, favoritos, performance Instagram. |
 | 2026-03-13 | Fase 1 concluída: modelo, memory colors, service, integração. |
 | 2026-03-13 | Documento criado com 3 fases, 12 tasks, ordem de execução. |

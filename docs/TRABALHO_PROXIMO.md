@@ -54,10 +54,11 @@
 - [ ] Adicionar classe `border-red-500` quando há erro
 
 ### Sistema de Estilo Visual Dinâmico
-- [ ] **Decisão tomada (2026-03-13):** IA gera estilo do zero para cada imagem, estilos salvos para reutilização
+- [x] **Fase 1 (2026-03-13):** Modelo de dados, memory colors, service de geração, integração
+- [x] **Fase 2 (2026-03-14):** Reutilização, favoritos, endpoints de estilos
+- [x] **Fase 3 (2026-03-14):** Feedback loop (sinais implícitos, engagement Instagram)
+- [ ] Pendente: Campanhas Visuais, UX de identificação de estilos, A/B de prompts
 - [ ] Ver tasks completas em `docs/TASKS_ESTILO_DINAMICO.md`
-- [ ] Fase 1: Modelo de dados, memory colors, service de geração, integração no pipeline
-- [ ] Referência anterior: `ANALISE_PR24_VISUAL_STYLES.md`
 
 ---
 

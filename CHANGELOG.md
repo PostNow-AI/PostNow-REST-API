@@ -8,6 +8,13 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 ## [Unreleased]
 
 ### Added
+- Feedback loop de estilos visuais em 3 níveis:
+  - **Sinais implícitos:** FK `generated_style` no PostIdea, campo `feedback_signal` (accepted/rejected/pending), emissão de AnalyticsEvent
+  - **Favoritos:** endpoints `GET /styles/` e `PATCH /styles/<id>/favorite/`, favoritos como referência forte no prompt de geração
+  - **Performance:** `InstagramInsightsService`, model `EngagementMetrics`, management command `fetch_engagement_metrics`, `engagement_score` no prompt
+- Campo `reuse_style_id` no `ImageGenerationRequestSerializer` para reutilizar estilo existente
+- Prompt de estilo enriquecido com 3 novas seções: FAVORITE STYLES, TOP PERFORMING STYLES, feedback separado (liked/rejected/pending)
+- 45 novos testes unitários para o feedback loop
 - Sistema de enriquecimento de contexto em duas fases (PR #34)
 - E-mail de Oportunidades de Conteúdo (Segunda-feira)
 - E-mail de Inteligência de Mercado (Quarta-feira)
