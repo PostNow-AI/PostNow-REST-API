@@ -72,10 +72,6 @@ urlpatterns = [
     # Client Context endpoints
     path('api/v1/client-context/', include('ClientContext.urls')),
 
-
     # Onboarding Campaign endpoints
     path('api/v1/onboarding-campaign/', include('OnboardingCampaign.urls')),
-
-    # Social Media Integration endpoints
-    path('api/v1/social/', include('SocialMediaIntegration.urls')),
 ]
