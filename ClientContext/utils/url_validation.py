@@ -40,7 +40,7 @@ def coerce_url_to_str(value: Any) -> str:
 def recover_url(generated_url: Any, real_urls: List[str]) -> str:
     """
     Try to recover a hallucinated URL by finding the best match
-    among the real URLs provided by Google Search.
+    among the real URLs provided by search results.
     """
     generated_url = coerce_url_to_str(generated_url)
     if not generated_url:
