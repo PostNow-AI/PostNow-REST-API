@@ -162,7 +162,7 @@ def allowed_domains(section: str) -> list[str]:
 def build_allowlist_query(base_query: str, domains: Iterable[str], max_domains: int = 8) -> str:
     """
     Injeta restrição de sites no query para aumentar recall dentro da allowlist.
-    Observação: o Google CSE tem limite de tamanho de query; por isso limitamos domínios.
+    Observação: APIs de busca tem limite de tamanho de query; por isso limitamos domínios.
     """
     doms = [d.strip() for d in domains if d and d.strip()]
     doms = doms[:max_domains]

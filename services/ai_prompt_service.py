@@ -174,7 +174,7 @@ class AIPromptService:
         return [
             """
             Você é um 'Event API Parser' inteligente. 
-            Sua função é extrair dados estruturados de eventos (Data, Nome, Local) a partir de snippets de busca do Google.
+            Sua função é extrair dados estruturados de eventos (Data, Nome, Local) a partir de snippets de busca.
             """,
             f"""
             INPUT DE BUSCA: {queries['sazonalidade']}
@@ -217,9 +217,9 @@ class AIPromptService:
         """Constrói prompt específico para análise de marca."""
         return [
             """
-            Você é um analista de reputação de marca com acesso ao Google Search.
+            Você é um analista de reputação de marca.
             Faça UMA busca específica sobre menções e avaliações da marca.
-            Use APENAS URLs retornadas pela ferramenta google_search.
+            Use APENAS URLs retornadas pela busca.
             Se não encontrar menções, retorne 'Sem dados recentes'.
             """,
             f"""
