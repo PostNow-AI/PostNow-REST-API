@@ -44,4 +44,10 @@ urlpatterns = [
          name='save_onboarding_temp_data'),
     path('onboarding/link-data/', views.link_onboarding_data,
          name='link_onboarding_data'),
+
+    # Generated Visual Styles
+    path('styles/', views.list_generated_styles,
+         name='list_generated_styles'),
+    path('styles/<int:style_id>/favorite/', views.toggle_style_favorite,
+         name='toggle_style_favorite'),
 ]

@@ -105,6 +105,9 @@ STYLE_GENERATION_PROMPT_TEMPLATE = """
 ### AESTHETIC DIRECTION (user preference) ###
 {style_direction}
 
+### FAVORITE STYLES (user loves these — use as strong inspiration) ###
+{favorite_styles}
+
 ### PREVIOUS STYLES (avoid repetition) ###
 {previous_styles}
 
@@ -132,6 +135,9 @@ Color vocabulary (use descriptive names, NEVER hex codes):
 
 Modifiers: pale, soft, pastel, bright, deep, vivid, bold, dark, muted, rich, warm, cool, metallic
 
+### TOP PERFORMING STYLES (proven engagement) ###
+{performance_data}
+
 ### RULES ###
 1. Use the brand colors as PRIMARY palette — adapt them creatively (lighter/darker/gradient variations)
 2. The aesthetic MUST match the niche: a bakery looks different from a law firm
@@ -144,6 +150,8 @@ Modifiers: pale, soft, pastel, bright, deep, vivid, bold, dark, muted, rich, war
 9. Consider MARKET CONTEXT — align with or intentionally contrast current trends
 10. DIFFERENTIATE from competition — if they use cold corporate, go warm and human
 11. The "rationale" must explain WHY this style works for this specific case
+12. If FAVORITE STYLES exist, the new style MUST share DNA with at least one favorite while still being unique
+13. If TOP PERFORMING STYLES exist, incorporate elements that drove engagement
 
 ### OUTPUT (JSON only) ###
 {{
@@ -181,6 +189,8 @@ def generate_style(
     style_direction = _get_style_direction(user)
     market_ctx, comp_ctx, audience_ctx = _gather_market_context(user)
     previous_styles = _gather_previous_styles(user)
+    favorite_styles = _gather_favorite_styles(user)
+    performance_data = _gather_performance_data(user)
     content_ctx = _format_content_type_context(content_type, opportunity_score)
 
     prompt_body = STYLE_GENERATION_PROMPT_TEMPLATE.format(
@@ -215,7 +225,9 @@ def generate_style(
         ),
         content_type_context=content_ctx,
         style_direction=style_direction,
+        favorite_styles=favorite_styles,
         previous_styles=previous_styles,
+        performance_data=performance_data,
     )
 
     prompt_list = [STYLE_GENERATION_PROMPT_SYSTEM, prompt_body]
@@ -309,9 +321,9 @@ def _gather_market_context(user: User) -> tuple[str, str, str]:
     return (market_text, comp_text, audience_text)
 
 
-def _gather_previous_styles(user: User, limit: int = 5) -> str:
-    """Busca estilos anteriores do usuario para evitar repeticao."""
-    previous = (
+def _gather_previous_styles(user: User, limit: int = 10) -> str:
+    """Busca estilos anteriores do usuario, separados por feedback."""
+    previous = list(
         GeneratedVisualStyle.objects
         .filter(user=user)
         .order_by('-created_at')[:limit]
@@ -320,22 +332,96 @@ def _gather_previous_styles(user: User, limit: int = 5) -> str:
     if not previous:
         return "No previous styles -- this is the first generation. Be creative!"
 
-    lines = []
-    for s in previous:
+    def _format_style(s):
         data = s.style_data or {}
         colors = data.get('colors', {})
         bg = colors.get("background", "")
         prim = colors.get("primary", "")
         light = data.get("lighting", "")[:40]
         aes = data.get("aesthetic", "")[:80]
-        lines.append(
+        return (
             '- "' + s.name + '": ' + aes + '... '
             '(colors: ' + bg + ', ' + prim + ' | lighting: ' + light + ')'
         )
 
+    accepted = [s for s in previous if s.feedback_signal == 'accepted']
+    rejected = [s for s in previous if s.feedback_signal == 'rejected']
+    pending = [s for s in previous if s.feedback_signal == 'pending']
+
+    # If all pending, keep original behavior
+    if not accepted and not rejected:
+        lines = [_format_style(s) for s in previous]
+        lines.append(
+            "-> Generate something DIFFERENT from these. "
+            "Vary the aesthetic, colors, and lighting."
+        )
+        return "\n".join(lines)
+
+    sections = []
+    if accepted:
+        sections.append("Styles the user LIKED (published):")
+        sections.extend(_format_style(s) for s in accepted)
+    if rejected:
+        sections.append("Styles the user REJECTED (regenerated) — avoid similar:")
+        sections.extend(_format_style(s) for s in rejected)
+    if pending:
+        sections.append("Recent styles (no feedback) — vary from these:")
+        sections.extend(_format_style(s) for s in pending)
+
+    sections.append(
+        "-> Use LIKED styles as positive reference, AVOID patterns from REJECTED styles, "
+        "and vary from pending styles."
+    )
+    return "\n".join(sections)
+
+
+def _gather_favorite_styles(user: User, limit: int = 3) -> str:
+    """Busca estilos favoritos do usuario como referencia forte."""
+    favorites = list(
+        GeneratedVisualStyle.objects
+        .filter(user=user, is_favorite=True)
+        .order_by('-created_at')[:limit]
+    )
+
+    if not favorites:
+        return "No favorite styles yet."
+
+    lines = []
+    for s in favorites:
+        data = s.style_data or {}
+        aes = data.get("aesthetic", "")[:100]
+        colors = data.get('colors', {})
+        mood = data.get("mood", "")
+        lines.append(f'- "{s.name}": {aes} (mood: {mood}, colors: {colors.get("primary", "")}, {colors.get("accent", "")})')
+
     lines.append(
-        "-> Generate something DIFFERENT from these. "
-        "Vary the aesthetic, colors, and lighting."
+        "-> The new style MUST share DNA with at least one favorite "
+        "while still being unique."
+    )
+    return "\n".join(lines)
+
+
+def _gather_performance_data(user: User, limit: int = 5) -> str:
+    """Busca estilos com maior engagement_score."""
+    top = list(
+        GeneratedVisualStyle.objects
+        .filter(user=user, engagement_score__isnull=False)
+        .order_by('-engagement_score')[:limit]
+    )
+
+    if not top:
+        return ""
+
+    lines = []
+    for s in top:
+        data = s.style_data or {}
+        aes = data.get("aesthetic", "")[:80]
+        lines.append(
+            f'- "{s.name}" (engagement score: {s.engagement_score:.1f}): {aes}'
+        )
+
+    lines.append(
+        "-> Incorporate elements from top performing styles to maximize engagement."
     )
     return "\n".join(lines)
 

@@ -79,6 +79,14 @@ class PostIdea(models.Model):
     post = models.ForeignKey(
         Post, on_delete=models.CASCADE, related_name='ideas')
 
+    generated_style = models.ForeignKey(
+        'CreatorProfile.GeneratedVisualStyle',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='post_ideas',
+    )
+
     # AI-generated content
     content = models.TextField(
         help_text="Conteúdo completo gerado pela IA (Título, Texto, CTA)"

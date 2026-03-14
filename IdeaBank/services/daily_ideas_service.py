@@ -275,6 +275,7 @@ class DailyIdeasService:
 
             post_idea.image_description = json.dumps(semantic_analysis)
             post_idea.image_url = image_url
+            post_idea.generated_style = generated_style
             post_idea.save()
 
             return image_url

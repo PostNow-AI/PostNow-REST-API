@@ -22,6 +22,9 @@ class AnalyticsEventName:
 
     DECISION_MADE = "decision_made"
 
+    STYLE_ACCEPTED = "style_accepted"
+    STYLE_REJECTED = "style_rejected"
+
     @classmethod
     def allowed(cls) -> set[str]:
         return {
@@ -35,6 +38,8 @@ class AnalyticsEventName:
             cls.IMAGE_DOWNLOAD_FAILED,
             cls.POST_SAVE_CLICKED,
             cls.DECISION_MADE,
+            cls.STYLE_ACCEPTED,
+            cls.STYLE_REJECTED,
         }
 
 
@@ -42,8 +47,9 @@ class AnalyticsResourceType:
     POST = "Post"
     POST_IDEA = "PostIdea"
     USER = "User"
+    GENERATED_VISUAL_STYLE = "GeneratedVisualStyle"
 
     @classmethod
     def allowed(cls) -> set[str]:
-        return {cls.POST, cls.POST_IDEA, cls.USER}
+        return {cls.POST, cls.POST_IDEA, cls.USER, cls.GENERATED_VISUAL_STYLE}
 

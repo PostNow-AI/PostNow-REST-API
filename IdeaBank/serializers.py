@@ -205,6 +205,11 @@ class ImageGenerationRequestSerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Prompt opcional para geração da imagem"
     )
+    reuse_style_id = serializers.IntegerField(
+        required=False,
+        default=None,
+        help_text="ID de um estilo existente para reutilizar"
+    )
 
 
 class PostOptionsSerializer(serializers.Serializer):

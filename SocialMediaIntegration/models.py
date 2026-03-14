@@ -410,3 +410,35 @@ class PublishingLog(models.Model):
         if error_message:
             self.error_message = error_message
         self.save()
+
+
+class EngagementMetrics(models.Model):
+    """
+    Instagram engagement metrics for a published post.
+
+    FK chain: EngagementMetrics -> ScheduledPost -> PostIdea -> GeneratedVisualStyle
+    """
+    scheduled_post = models.OneToOneField(
+        ScheduledPost,
+        on_delete=models.CASCADE,
+        related_name='engagement_metrics',
+    )
+
+    instagram_media_id = models.CharField(max_length=100)
+    impressions = models.IntegerField(default=0)
+    reach = models.IntegerField(default=0)
+    engagement = models.IntegerField(default=0)
+    saves = models.IntegerField(default=0)
+    shares = models.IntegerField(default=0)
+    engagement_rate = models.FloatField(default=0.0)
+
+    fetched_at = models.DateTimeField(auto_now=True)
+    raw_data = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = 'engagement_metrics'
+        verbose_name = 'Engagement Metrics'
+        verbose_name_plural = 'Engagement Metrics'
+
+    def __str__(self):
+        return f"Metrics for {self.instagram_media_id} (rate: {self.engagement_rate:.1f}%)"

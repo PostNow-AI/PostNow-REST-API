@@ -21,6 +21,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from AuditSystem.services import AuditService
+from Analytics.constants import AnalyticsEventName, AnalyticsResourceType
+from Analytics.models import AnalyticsEvent
 from ClientContext.models import ClientContext
 from ClientContext.serializers import ClientContextSerializer
 from CreatorProfile.models import CreatorProfile
@@ -48,6 +50,29 @@ from .services.retry_weekly_feed import RetryWeeklyFeedService
 from .services.weekly_feed_creation import WeeklyFeedCreationService
 
 logger = logging.getLogger(__name__)
+
+
+def _mark_style_feedback(style, signal: str, user):
+    """Mark a GeneratedVisualStyle with feedback and emit analytics event."""
+    from django.utils import timezone as tz
+    import uuid
+
+    style.feedback_signal = signal
+    style.save(update_fields=['feedback_signal'])
+
+    event_name = (
+        AnalyticsEventName.STYLE_ACCEPTED
+        if signal == 'accepted'
+        else AnalyticsEventName.STYLE_REJECTED
+    )
+    AnalyticsEvent.objects.create(
+        event_name=event_name,
+        occurred_at=tz.now(),
+        user=user,
+        client_session_id=uuid.uuid4(),
+        resource_type=AnalyticsResourceType.GENERATED_VISUAL_STYLE,
+        resource_id=str(style.id),
+    )
 
 
 # Post management views
@@ -250,6 +275,7 @@ def generate_post_idea(request):
         content_loaded = json.loads(content_json)
 
         image_url = ''
+        generated_style = None
 
         if include_image:
             try:
@@ -318,8 +344,12 @@ def generate_post_idea(request):
             post=post,
             content=post_content,
             image_url=image_url if include_image else '',
-            image_description=''
+            image_description='',
+            generated_style=generated_style,
         )
+
+        if generated_style:
+            _mark_style_feedback(generated_style, 'accepted', user)
 
         # Log successful post and content generation
         AuditService.log_content_generation(
@@ -441,6 +471,7 @@ Use essas informações como base para criar o conteúdo.
         content_loaded = json.loads(content_json)
 
         image_url = ''
+        generated_style = None
 
         # Generate image if requested
         if include_image:
@@ -509,8 +540,12 @@ Use essas informações como base para criar o conteúdo.
             post=post,
             content=post_content,
             image_url=image_url if include_image else '',
-            image_description=''
+            image_description='',
+            generated_style=generated_style,
         )
+
+        if generated_style:
+            _mark_style_feedback(generated_style, 'accepted', user)
 
         # Log success
         AuditService.log_content_generation(
@@ -587,10 +622,18 @@ def generate_image_for_idea(request, idea_id):
 
     try:
         custom_prompt = serializer.validated_data.get('prompt')
+        reuse_style_id = serializer.validated_data.get('reuse_style_id')
         semantic_analysis = ''
         user_logo = CreatorProfile.objects.filter(user=user).first().logo
         if user_logo and "data:image/" in user_logo and ";base64," in user_logo:
             user_logo = user_logo.split(",")[1]
+
+        # Mark previous style as rejected if regenerating
+        previous_style = post_idea.generated_style
+        if previous_style and post_idea.image_url:
+            _mark_style_feedback(previous_style, 'rejected', user)
+
+        generated_style = None
 
         if custom_prompt is not None:
             image_result = ai_service.generate_image(custom_prompt, user_logo, user, types.GenerateContentConfig(
@@ -602,6 +645,34 @@ def generate_image_for_idea(request, idea_id):
                 image_config=types.ImageConfig(
                     aspect_ratio="4:5",
                 ),
+            ))
+        elif reuse_style_id:
+            from CreatorProfile.models import GeneratedVisualStyle
+            reuse_style = GeneratedVisualStyle.objects.get(
+                id=reuse_style_id, user=user)
+            reuse_style.times_used += 1
+            reuse_style.save(update_fields=['times_used'])
+            generated_style = reuse_style
+
+            prompt_service.set_user(user)
+            semantic_prompt = prompt_service.semantic_analysis_prompt(
+                post_idea.content)
+            semantic_result = ai_service.generate_text(
+                semantic_prompt, user)
+            semantic_json = semantic_result.replace(
+                'json', '', 1).strip('`').strip()
+            semantic_loaded = json.loads(semantic_json)
+            semantic_analysis = semantic_loaded.get(
+                'analise_semantica', {})
+
+            image_prompt = prompt_service.image_generation_prompt(
+                semantic_analysis, generated_style=reuse_style)
+
+            image_result = ai_service.generate_image(image_prompt, user_logo, user, types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(aspect_ratio="4:5"),
             ))
         else:
             prompt_service.set_user(user)
@@ -640,6 +711,9 @@ def generate_image_for_idea(request, idea_id):
 
         post_idea.image_description = json.dumps(custom_prompt if custom_prompt is not None else semantic_analysis)
         post_idea.image_url = image_url
+        if generated_style:
+            post_idea.generated_style = generated_style
+            _mark_style_feedback(generated_style, 'accepted', user)
         post_idea.save()
 
         # Log successful image generation

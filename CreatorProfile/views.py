@@ -7,8 +7,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from .models import OnboardingStepTracking, VisualStylePreference
+from .models import GeneratedVisualStyle
 from .serializers import (
     CreatorProfileSerializer,
+    GeneratedVisualStyleSerializer,
     OnboardingStatusSerializer,
     OnboardingTempDataSerializer,
     Step1BusinessSerializer,
@@ -482,3 +484,31 @@ def link_onboarding_data(request):
             'status': 'not_found',
             'message': 'Nenhum dado temporário encontrado para esta sessão',
         }, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def list_generated_styles(request):
+    """List generated styles for the authenticated user."""
+    qs = GeneratedVisualStyle.objects.filter(user=request.user)
+    if request.query_params.get('favorites') == 'true':
+        qs = qs.filter(is_favorite=True)
+    serializer = GeneratedVisualStyleSerializer(qs, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['PATCH'])
+@permission_classes([permissions.IsAuthenticated])
+def toggle_style_favorite(request, style_id):
+    """Toggle is_favorite on a GeneratedVisualStyle."""
+    try:
+        style = GeneratedVisualStyle.objects.get(
+            id=style_id, user=request.user)
+    except GeneratedVisualStyle.DoesNotExist:
+        return Response(
+            {'error': 'Estilo não encontrado'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    style.is_favorite = not style.is_favorite
+    style.save(update_fields=['is_favorite'])
+    return Response(GeneratedVisualStyleSerializer(style).data)

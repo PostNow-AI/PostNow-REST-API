@@ -360,6 +360,19 @@ class GeneratedVisualStyle(models.Model):
         verbose_name="Vezes Utilizado"
     )
 
+    feedback_signal = models.CharField(
+        max_length=20,
+        default='pending',
+        choices=[
+            ('pending', 'Pendente'),
+            ('accepted', 'Aceito'),
+            ('rejected', 'Rejeitado'),
+        ],
+        db_index=True,
+    )
+
+    engagement_score = models.FloatField(null=True, blank=True)
+
     class Meta:
         verbose_name = "Estilo Visual Gerado"
         verbose_name_plural = "Estilos Visuais Gerados"

@@ -334,6 +334,19 @@ class OnboardingStatusSerializer(serializers.Serializer):
     profile_exists = serializers.BooleanField()
 
 
+class GeneratedVisualStyleSerializer(serializers.ModelSerializer):
+    """Serializer for GeneratedVisualStyle model."""
+
+    class Meta:
+        from .models import GeneratedVisualStyle
+        model = GeneratedVisualStyle
+        fields = [
+            'id', 'name', 'style_data', 'is_favorite',
+            'times_used', 'feedback_signal', 'created_at',
+        ]
+        read_only_fields = ['id', 'name', 'style_data', 'times_used', 'feedback_signal', 'created_at']
+
+
 class VisualStylePreferenceSerializer(serializers.ModelSerializer):
     """Serializer for Visual Style Preference."""
 

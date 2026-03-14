@@ -10,6 +10,8 @@ from services.style_generation_service import (  # noqa: E501
     _get_style_direction,
     _gather_market_context,
     _gather_previous_styles,
+    _gather_favorite_styles,
+    _gather_performance_data,
     _format_content_type_context,
     STYLE_GENERATION_PROMPT_SYSTEM,
     STYLE_GENERATION_PROMPT_TEMPLATE,
@@ -465,3 +467,151 @@ class TestGenerateStyleIntegration:
         assert isinstance(style, GeneratedVisualStyle)
         assert style.name == "Minimalista Profissional"
         assert "warm ivory" in style.style_data["colors"]["background"]
+
+
+class TestGatherPreviousStylesWithFeedback:
+    """Testa _gather_previous_styles com feedback signals."""
+
+    @patch("services.style_generation_service.GeneratedVisualStyle")
+    def test_separates_by_feedback_signal(self, mock_model):
+        accepted = Mock()
+        accepted.name = "Aceito"
+        accepted.feedback_signal = "accepted"
+        accepted.style_data = {
+            "aesthetic": "Bold design",
+            "colors": {"background": "deep navy", "primary": "coral"},
+            "lighting": "dramatic",
+        }
+
+        rejected = Mock()
+        rejected.name = "Rejeitado"
+        rejected.feedback_signal = "rejected"
+        rejected.style_data = {
+            "aesthetic": "Minimal design",
+            "colors": {"background": "ivory", "primary": "blue"},
+            "lighting": "soft",
+        }
+
+        pending = Mock()
+        pending.name = "Pendente"
+        pending.feedback_signal = "pending"
+        pending.style_data = {
+            "aesthetic": "Clean design",
+            "colors": {"background": "white", "primary": "green"},
+            "lighting": "flat",
+        }
+
+        mock_model.objects.filter.return_value.order_by.return_value.__getitem__ = (
+            lambda self, key: [accepted, rejected, pending]
+        )
+
+        result = _gather_previous_styles(Mock())
+
+        assert "LIKED" in result
+        assert "REJECTED" in result
+        assert "no feedback" in result
+        assert "Aceito" in result
+        assert "Rejeitado" in result
+        assert "Pendente" in result
+
+    @patch("services.style_generation_service.GeneratedVisualStyle")
+    def test_all_pending_keeps_original_behavior(self, mock_model):
+        style = Mock()
+        style.name = "Pendente"
+        style.feedback_signal = "pending"
+        style.style_data = {
+            "aesthetic": "Clean design",
+            "colors": {"background": "white", "primary": "green"},
+            "lighting": "flat",
+        }
+
+        mock_model.objects.filter.return_value.order_by.return_value.__getitem__ = (
+            lambda self, key: [style]
+        )
+
+        result = _gather_previous_styles(Mock())
+
+        assert "DIFFERENT" in result
+        assert "LIKED" not in result
+
+
+class TestGatherFavoriteStyles:
+    """Testa _gather_favorite_styles."""
+
+    @patch("services.style_generation_service.GeneratedVisualStyle")
+    def test_returns_favorites(self, mock_model):
+        fav = Mock()
+        fav.name = "Estilo Favorito"
+        fav.style_data = {
+            "aesthetic": "Beautiful editorial",
+            "colors": {"primary": "coral", "accent": "gold"},
+            "mood": "elegant, warm",
+        }
+
+        mock_model.objects.filter.return_value.order_by.return_value.__getitem__ = (
+            lambda self, key: [fav]
+        )
+
+        result = _gather_favorite_styles(Mock())
+
+        assert "Estilo Favorito" in result
+        assert "DNA" in result
+
+    @patch("services.style_generation_service.GeneratedVisualStyle")
+    def test_returns_message_when_no_favorites(self, mock_model):
+        mock_model.objects.filter.return_value.order_by.return_value.__getitem__ = (
+            lambda self, key: []
+        )
+
+        result = _gather_favorite_styles(Mock())
+
+        assert "No favorite" in result
+
+
+class TestGatherPerformanceData:
+    """Testa _gather_performance_data."""
+
+    @patch("services.style_generation_service.GeneratedVisualStyle")
+    def test_returns_top_performers(self, mock_model):
+        style = Mock()
+        style.name = "Top Performer"
+        style.engagement_score = 8.5
+        style.style_data = {"aesthetic": "Striking bold design"}
+
+        mock_model.objects.filter.return_value.order_by.return_value.__getitem__ = (
+            lambda self, key: [style]
+        )
+
+        result = _gather_performance_data(Mock())
+
+        assert "Top Performer" in result
+        assert "8.5" in result
+
+    @patch("services.style_generation_service.GeneratedVisualStyle")
+    def test_returns_empty_when_no_data(self, mock_model):
+        mock_model.objects.filter.return_value.order_by.return_value.__getitem__ = (
+            lambda self, key: []
+        )
+
+        result = _gather_performance_data(Mock())
+
+        assert result == ""
+
+
+class TestNewPromptSections:
+    """Testa que o template tem as novas secoes."""
+
+    def test_template_has_favorite_styles_section(self):
+        assert "FAVORITE STYLES" in STYLE_GENERATION_PROMPT_TEMPLATE
+
+    def test_template_has_performance_section(self):
+        assert "TOP PERFORMING STYLES" in STYLE_GENERATION_PROMPT_TEMPLATE
+
+    def test_template_has_favorite_dna_rule(self):
+        assert "share DNA" in STYLE_GENERATION_PROMPT_TEMPLATE
+
+    def test_template_has_favorite_placeholder(self):
+        assert "{favorite_styles}" in STYLE_GENERATION_PROMPT_TEMPLATE
+
+    def test_template_has_performance_placeholder(self):
+        assert "{performance_data}" in STYLE_GENERATION_PROMPT_TEMPLATE
