@@ -47,7 +47,7 @@ def recover_url(generated_url: Any, real_urls: List[str]) -> str:
         return ""
 
     generated_url = generated_url.strip().lower()
-    # Normalize the list of real URLs (GoogleSearchService returns list of dicts)
+    # Normalize the list of real URLs (SearchService returns list of dicts)
     real_urls_norm = []
     for real in (real_urls or []):
         real_s = coerce_url_to_str(real)

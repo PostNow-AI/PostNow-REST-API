@@ -5,7 +5,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-class GoogleSearchService:
+class SearchService:
     """Busca via Serper.dev API (substitui Google Custom Search)."""
 
     def __init__(self):

@@ -25,7 +25,7 @@ from services.prompt_utils import build_optimized_search_queries
 from services.user_validation_service import UserValidationService
 from services.ai_prompt_service import AIPromptService
 from services.ai_service import AiService
-from services.google_search_service import GoogleSearchService
+from services.search_service import SearchService
 from services.semaphore_service import SemaphoreService
 from services.trends_discovery_service import TrendsDiscoveryService
 
@@ -86,7 +86,7 @@ class WeeklyContextService:
         ai_service: Optional[AiService] = None,
         prompt_service: Optional[AIPromptService] = None,
         audit_service: Optional[AuditService] = None,
-        google_search_service: Optional[GoogleSearchService] = None,
+        search_service: Optional[SearchService] = None,
         opportunity_ranking_service: Optional[OpportunityRankingService] = None,
         error_service: Optional[ContextErrorService] = None,
         stats_service: Optional[ContextStatsService] = None,
@@ -99,14 +99,14 @@ class WeeklyContextService:
         self.ai_service = ai_service or AiService()
         self.prompt_service = prompt_service or AIPromptService()
         self.audit_service = audit_service or AuditService()
-        google_search = google_search_service or GoogleSearchService()
-        self.google_search_service = google_search
+        search_svc = search_service or SearchService()
+        self.search_service = search_svc
         self.opportunity_ranking_service = opportunity_ranking_service or OpportunityRankingService()
         self.error_service = error_service or ContextErrorService()
         self.stats_service = stats_service or ContextStatsService()
         self.persistence_service = persistence_service or ContextPersistenceService()
         self.trends_discovery_service = trends_discovery_service or TrendsDiscoveryService()
-        self.source_fetching_service = source_fetching_service or SourceFetchingService(google_search)
+        self.source_fetching_service = source_fetching_service or SourceFetchingService(search_svc)
         self.dedupe_lookback_weeks = 4
 
     @sync_to_async
@@ -190,6 +190,9 @@ class WeeklyContextService:
             if validation_result['status'] != 'eligible':
                 return {'user_id': user_id, 'status': 'skipped', 'reason': validation_result['reason']}
 
+            # Fase 0: Descobrir tendencias reais para o setor
+            discovered_trends = await self._discover_trends_for_user(user)
+
             json_str, search_results_map = await self._generate_context_for_user(user)
 
             context_data = self._parse_context_json(json_str)
@@ -205,9 +208,14 @@ class WeeklyContextService:
             await self.persistence_service.save_context_history(user, client_context)
 
             await sync_to_async(self.audit_service.log_context_generation)(
-                user=user, action='context_generated', status='success')
+                user=user, action='context_generated', status='success',
+                details={'discovered_trends_count': discovered_trends.get('validated_count', 0)})
 
-            return {'user_id': user_id, 'status': 'success'}
+            return {
+                'user_id': user_id,
+                'status': 'success',
+                'discovered_trends_count': discovered_trends.get('validated_count', 0),
+            }
 
         except Exception as e:
             await self.error_service.store_error(user, str(e))

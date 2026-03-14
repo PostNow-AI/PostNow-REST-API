@@ -11,7 +11,7 @@ from asgiref.sync import sync_to_async
 from ..utils.url_dedupe import normalize_url_key
 from ..utils.source_quality import pick_candidates, is_denied, is_allowed, allowed_domains, build_allowlist_query
 from ..utils.text_utils import is_blocked_filetype, sanitize_query_for_allowlist
-from services.google_search_service import GoogleSearchService
+from services.search_service import SearchService
 
 logger = logging.getLogger(__name__)
 
@@ -19,22 +19,17 @@ logger = logging.getLogger(__name__)
 class SourceFetchingService:
     """Busca e filtra URLs de fontes para cada secao do contexto semanal."""
 
-    def __init__(self, google_search_service: Optional[GoogleSearchService] = None):
-        self.google_search_service = google_search_service or GoogleSearchService()
+    def __init__(self, search_service: Optional[SearchService] = None):
+        self.search_service = search_service or SearchService()
 
     def _fetch_pool(self, lr: str, q: str) -> list[dict]:
-        raw: list[dict] = []
-        for start in (1, 11, 21, 31, 41):
-            try:
-                page = self.google_search_service.search(
-                    q, num_results=10, start=start, lr=lr,
-                    gl=os.getenv("GOOGLE_CSE_GL", "br"),
-                )
-            except Exception:
-                page = []
-            if page:
-                raw.extend(page)
-        return raw
+        try:
+            return self.search_service.search(
+                q, num_results=10, lr=lr,
+                gl=os.getenv("SERPER_GL", "br"),
+            )
+        except Exception:
+            return []
 
     async def fetch_and_filter_section(
         self,
