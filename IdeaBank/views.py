@@ -459,6 +459,8 @@ Use essas informações como base para criar o conteúdo.
                     user=user,
                     semantic_analysis=semantic_analysis,
                     ai_service=ai_service,
+                    content_type=data.get('categoria') or data.get('tipo') or None,
+                    opportunity_score=data.get('score'),
                 )
                 image_prompt = prompt_service.image_generation_prompt(
                     semantic_analysis, generated_style=generated_style)

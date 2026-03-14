@@ -258,6 +258,11 @@ class OpportunityGenerationRequestSerializer(serializers.Serializer):
         allow_blank=True,
         help_text="Análise/contexto da oportunidade"
     )
+    score = serializers.IntegerField(
+        required=False,
+        default=None,
+        help_text="Score de impacto da oportunidade (0-100)",
+    )
 
     # Opções de geração
     include_image = serializers.BooleanField(
