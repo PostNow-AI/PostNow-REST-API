@@ -12,10 +12,12 @@ from services.style_generation_service import (  # noqa: E501
     _gather_previous_styles,
     _gather_favorite_styles,
     _gather_performance_data,
+    _pick_visual_approach,
     _format_content_type_context,
     STYLE_GENERATION_PROMPT_SYSTEM,
     STYLE_GENERATION_PROMPT_TEMPLATE,
     STYLE_DIRECTIONS,
+    VISUAL_APPROACHES,
     DEFAULT_STYLE_DIRECTION,
 )
 
@@ -555,7 +557,7 @@ class TestGatherFavoriteStyles:
         result = _gather_favorite_styles(Mock())
 
         assert "Estilo Favorito" in result
-        assert "DNA" in result
+        assert "INSPIRATION" in result
 
     @patch("services.style_generation_service.GeneratedVisualStyle")
     def test_returns_message_when_no_favorites(self, mock_model):
@@ -607,11 +609,77 @@ class TestNewPromptSections:
     def test_template_has_performance_section(self):
         assert "TOP PERFORMING STYLES" in STYLE_GENERATION_PROMPT_TEMPLATE
 
-    def test_template_has_favorite_dna_rule(self):
-        assert "share DNA" in STYLE_GENERATION_PROMPT_TEMPLATE
+    def test_template_has_favorite_inspiration_rule(self):
+        assert "INSPIRATION" in STYLE_GENERATION_PROMPT_TEMPLATE
 
     def test_template_has_favorite_placeholder(self):
         assert "{favorite_styles}" in STYLE_GENERATION_PROMPT_TEMPLATE
 
     def test_template_has_performance_placeholder(self):
         assert "{performance_data}" in STYLE_GENERATION_PROMPT_TEMPLATE
+
+    def test_template_has_visual_approach_placeholder(self):
+        assert "{visual_approach}" in STYLE_GENERATION_PROMPT_TEMPLATE
+
+    def test_template_forbids_generic_icons(self):
+        assert "rockets, lightbulbs" in STYLE_GENERATION_PROMPT_TEMPLATE
+
+
+class TestVisualApproaches:
+    """Testa o mecanismo de diversidade visual."""
+
+    def test_approaches_have_required_keys(self):
+        for approach in VISUAL_APPROACHES:
+            assert "technique" in approach
+            assert "description" in approach
+            assert "color_strategy" in approach
+
+    def test_at_least_6_approaches(self):
+        assert len(VISUAL_APPROACHES) >= 6
+
+    @patch("services.style_generation_service.GeneratedVisualStyle")
+    def test_pick_returns_technique_instruction(self, mock_model):
+        mock_model.objects.filter.return_value.order_by.return_value.values_list.return_value.__getitem__ = (
+            lambda self, key: []
+        )
+
+        result = _pick_visual_approach(Mock())
+
+        assert "You MUST use this visual technique:" in result
+        assert "Do NOT use glassmorphism" in result
+
+    @patch("services.style_generation_service.GeneratedVisualStyle")
+    def test_pick_avoids_recent_techniques(self, mock_model):
+        """Quando recentes usam photography, pick deve preferir algo diferente."""
+        recent_data = [
+            {"aesthetic": "editorial photography with lifestyle elements"},
+            {"aesthetic": "high-quality editorial photography studio shot"},
+            {"aesthetic": "editorial photography dramatic lighting"},
+        ]
+        mock_model.objects.filter.return_value.order_by.return_value.values_list.return_value.__getitem__ = (
+            lambda self, key: recent_data
+        )
+
+        # Roda 20 vezes e verifica que nunca escolhe editorial photography
+        results = set()
+        for _ in range(20):
+            result = _pick_visual_approach(Mock())
+            # Extrai a técnica do resultado
+            for approach in VISUAL_APPROACHES:
+                if approach['technique'] in result:
+                    results.add(approach['technique'])
+
+        # Não deve escolher "Editorial photography" quando é recente
+        assert "Editorial photography" not in results
+
+    @patch("services.style_generation_service.GeneratedVisualStyle")
+    def test_pick_with_no_history_returns_any(self, mock_model):
+        mock_model.objects.filter.return_value.order_by.return_value.values_list.return_value.__getitem__ = (
+            lambda self, key: []
+        )
+
+        result = _pick_visual_approach(Mock())
+
+        # Deve conter uma das técnicas disponíveis
+        found = any(a['technique'] in result for a in VISUAL_APPROACHES)
+        assert found

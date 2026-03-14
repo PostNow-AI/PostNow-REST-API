@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 
 from django.contrib.auth.models import User
 
@@ -138,8 +139,11 @@ Modifiers: pale, soft, pastel, bright, deep, vivid, bold, dark, muted, rich, war
 ### TOP PERFORMING STYLES (proven engagement) ###
 {performance_data}
 
+### MANDATORY VISUAL APPROACH FOR THIS POST ###
+{visual_approach}
+
 ### RULES ###
-1. Use the brand colors as PRIMARY palette — adapt them creatively (lighter/darker/gradient variations)
+1. Brand colors are your STARTING POINT, not a constraint. Use them for ONE element (logo area, accent, or text). The rest of the palette should COMPLEMENT the brand but come from DIFFERENT color families. If brand is purple, try warm gold + sage green, or coral + navy.
 2. The aesthetic MUST match the niche: a bakery looks different from a law firm
 3. Be SPECIFIC: not "modern design" but "bold geometric composition inspired by Bauhaus posters with overlapping shapes"
 4. Pick ONE lighting — do not mix conflicting light sources
@@ -150,8 +154,10 @@ Modifiers: pale, soft, pastel, bright, deep, vivid, bold, dark, muted, rich, war
 9. Consider MARKET CONTEXT — align with or intentionally contrast current trends
 10. DIFFERENTIATE from competition — if they use cold corporate, go warm and human
 11. The "rationale" must explain WHY this style works for this specific case
-12. If FAVORITE STYLES exist, the new style MUST share DNA with at least one favorite while still being unique
+12. If FAVORITE STYLES exist, take INSPIRATION from them (shared mood or composition), but the visual execution (colors, technique, aesthetic) MUST be noticeably different. Do NOT copy the same style.
 13. If TOP PERFORMING STYLES exist, incorporate elements that drove engagement
+14. NEVER repeat visual clichés from PREVIOUS STYLES. If previous styles used glassmorphism, do NOT use glassmorphism. If they used isometric 3D, try flat illustration or photography. Actively choose a DIFFERENT visual technique.
+15. Do NOT include decorative icons like rockets, lightbulbs, or generic tech symbols unless the content specifically requires them. Prefer concrete, topic-specific imagery.
 
 ### OUTPUT (JSON only) ###
 {{
@@ -193,6 +199,8 @@ def generate_style(
     performance_data = _gather_performance_data(user)
     content_ctx = _format_content_type_context(content_type, opportunity_score)
 
+    visual_approach = _pick_visual_approach(user)
+
     prompt_body = STYLE_GENERATION_PROMPT_TEMPLATE.format(
         business_name=profile_data.get('business_name', ''),
         specialization=profile_data.get('specialization', ''),
@@ -228,6 +236,7 @@ def generate_style(
         favorite_styles=favorite_styles,
         previous_styles=previous_styles,
         performance_data=performance_data,
+        visual_approach=visual_approach,
     )
 
     prompt_list = [STYLE_GENERATION_PROMPT_SYSTEM, prompt_body]
@@ -247,6 +256,99 @@ def generate_style(
         style.name, user.email, style.id,
     )
     return style
+
+
+VISUAL_APPROACHES = [
+    {
+        "technique": "Editorial photography",
+        "description": "High-quality lifestyle or product photography with editorial magazine styling. Real textures, real materials, real light. Think Kinfolk, Cereal Magazine, or Apple product shots.",
+        "color_strategy": "Muted earth tones with one bold accent. Warm neutrals (sand, linen, cream) dominate.",
+    },
+    {
+        "technique": "Flat illustration",
+        "description": "Bold flat vector illustration with geometric shapes, clean lines, no gradients. Think Mailchimp, Slack, or Headspace app illustrations. Characters or objects are stylized and simple.",
+        "color_strategy": "Vibrant complementary pair (e.g. teal + coral, mustard + navy). Flat solid fills, no shadows.",
+    },
+    {
+        "technique": "Data visualization / Infographic",
+        "description": "Clean data-driven layout with charts, numbers, and structured information hierarchy. Think The Economist, FiveThirtyEight, or annual report design. Information is the hero.",
+        "color_strategy": "Monochromatic base with color used for data emphasis. White/light background, dark text, colored data points.",
+    },
+    {
+        "technique": "Collage / Mixed media",
+        "description": "Layered composition mixing photography cutouts, paper textures, hand-drawn elements, and typography. Think 90s zine aesthetic, Wes Anderson, or modern editorial collage.",
+        "color_strategy": "Warm vintage palette (terracotta, mustard, olive) or cool editorial (ice blue, charcoal, blush).",
+    },
+    {
+        "technique": "Bold typography-first",
+        "description": "Typography IS the visual. Oversized bold text dominates 70%+ of the canvas. Minimal imagery, maximum typographic impact. Think Nike posters, protest art, or Barbara Kruger.",
+        "color_strategy": "High contrast duotone. Black + one bold color, or white text on saturated background.",
+    },
+    {
+        "technique": "3D render / Clay style",
+        "description": "Soft 3D rendered objects with clay/matte material. Rounded shapes, soft shadows, playful depth. Think Figma 3D illustrations, Notion icons, or Google Material You.",
+        "color_strategy": "Pastel palette with depth (soft lavender, mint, peach). Subtle shadows create dimension.",
+    },
+    {
+        "technique": "Split composition",
+        "description": "Canvas divided into distinct zones (half/half, thirds, diagonal). Each zone has different visual treatment — photo vs solid color, before vs after, problem vs solution.",
+        "color_strategy": "Contrasting palettes per zone. One warm, one cool. Creates visual tension.",
+    },
+    {
+        "technique": "Gradient abstract",
+        "description": "Flowing gradient backgrounds with minimal elements floating on top. Ethereal, modern, tech-forward. Think Stripe, Linear, or Arc browser aesthetics.",
+        "color_strategy": "Rich gradient transitions (deep navy to warm sunset, forest to emerald). Avoid flat solids.",
+    },
+]
+
+
+def _pick_visual_approach(user: User) -> str:
+    """Seleciona uma abordagem visual diferente das usadas recentemente."""
+    recent_styles = list(
+        GeneratedVisualStyle.objects
+        .filter(user=user)
+        .order_by('-created_at')
+        .values_list('style_data', flat=True)[:6]
+    )
+
+    # Extrai técnicas usadas recentemente dos aesthetics
+    recent_aesthetics = []
+    for sd in recent_styles:
+        if isinstance(sd, dict):
+            recent_aesthetics.append(sd.get('aesthetic', '').lower())
+        elif isinstance(sd, str):
+            try:
+                parsed = json.loads(sd)
+                recent_aesthetics.append(parsed.get('aesthetic', '').lower())
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+    recent_text = ' '.join(recent_aesthetics)
+
+    # Pontua cada approach pela distância das recentes
+    scored = []
+    for approach in VISUAL_APPROACHES:
+        technique_lower = approach['technique'].lower()
+        keywords = technique_lower.split(' / ') + technique_lower.split()
+
+        # Penaliza se keywords do approach aparecem nos estilos recentes
+        overlap = sum(1 for kw in keywords if kw in recent_text and len(kw) > 3)
+        scored.append((approach, overlap))
+
+    # Ordena por menor overlap (mais diferente)
+    scored.sort(key=lambda x: x[1])
+
+    # Pega os 3 mais diferentes e escolhe aleatoriamente
+    top_candidates = [s[0] for s in scored[:3]]
+    chosen = random.choice(top_candidates)
+
+    return (
+        f"You MUST use this visual technique: **{chosen['technique']}**\n"
+        f"Description: {chosen['description']}\n"
+        f"Color strategy: {chosen['color_strategy']}\n"
+        f"Do NOT use glassmorphism, isometric 3D dioramas, or holographic UI overlays "
+        f"unless the chosen technique specifically calls for it."
+    )
 
 
 def _gather_market_context(user: User) -> tuple[str, str, str]:
@@ -337,11 +439,13 @@ def _gather_previous_styles(user: User, limit: int = 10) -> str:
         colors = data.get('colors', {})
         bg = colors.get("background", "")
         prim = colors.get("primary", "")
+        accent = colors.get("accent", "")
         light = data.get("lighting", "")[:40]
         aes = data.get("aesthetic", "")[:80]
         return (
             '- "' + s.name + '": ' + aes + '... '
-            '(colors: ' + bg + ', ' + prim + ' | lighting: ' + light + ')'
+            '(colors: ' + bg + ' / ' + prim + ' / ' + accent
+            + ' | lighting: ' + light + ')'
         )
 
     accepted = [s for s in previous if s.feedback_signal == 'accepted']
@@ -395,8 +499,8 @@ def _gather_favorite_styles(user: User, limit: int = 3) -> str:
         lines.append(f'- "{s.name}": {aes} (mood: {mood}, colors: {colors.get("primary", "")}, {colors.get("accent", "")})')
 
     lines.append(
-        "-> The new style MUST share DNA with at least one favorite "
-        "while still being unique."
+        "-> Take INSPIRATION from favorites (mood, energy, quality level), "
+        "but the visual execution MUST be different. Same vibe, different look."
     )
     return "\n".join(lines)
 

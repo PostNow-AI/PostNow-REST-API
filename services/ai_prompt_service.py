@@ -1197,6 +1197,8 @@ AVOID:
 - Hashtags or hex codes rendered in the image
 - Text in any language other than Brazilian Portuguese
 - If no logo is attached, do NOT generate or add any logo
+- Do NOT add decorative text on screens, dashboards, charts, or UI elements unless explicitly requested. If the image shows a laptop/phone screen, keep it blurred or show abstract shapes instead of readable text. Any visible text risks being misspelled.
+- Do NOT add generic icons (rockets, lightbulbs, gears, targets) unless the content specifically mentions them. Prefer concrete imagery related to the actual topic.
 """
         ]
 
