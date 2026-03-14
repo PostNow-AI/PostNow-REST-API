@@ -1182,6 +1182,7 @@ Typography: {style.get('typography', 'modern bold sans-serif')}.
 Safe margin of 10% on all edges — no important elements near borders.
 Title text: "{semantic_analysis.get('titulo_imagem', semantic_analysis.get('tema_principal', ''))}" — render this exact text, centered in the upper third, in bold {style.get('typography', 'sans-serif')} font, {style_colors.get('text', 'dark charcoal')} color.
 All rendered text must be in Brazilian Portuguese (PT-BR). Do NOT add accented characters (ã, ç, é, ô, ü) unless they appear in the title above.
+CRITICAL: The ONLY text in this image should be the title above and the logo. Do NOT generate any other text — no paragraphs, no captions, no labels, no descriptions, no quotes. If the composition needs filler, use abstract shapes or blurred content instead.
 
 {logo_section}
 
