@@ -221,7 +221,7 @@ O banco de teste tem uma migration que tenta adicionar `tendencies_data` mas a c
 
 - [x] `_gather_favorite_styles(user, limit=3)` — busca estilos com `is_favorite=True`
 - [x] Nova seção `### FAVORITE STYLES` no `STYLE_GENERATION_PROMPT_TEMPLATE`
-- [x] Regra 12: "new style MUST share DNA with at least one favorite while still being unique"
+- [x] Regra 12: "take INSPIRATION from favorites — same vibe, different look" (suavizado de "MUST share DNA")
 
 ### Task 3.3: Instagram Engagement — Coleta de Métricas
 
@@ -237,6 +237,17 @@ O banco de teste tem uma migration que tenta adicionar `tendencies_data` mas a c
 - [x] Nova seção `### TOP PERFORMING STYLES` no template
 - [x] Regra 13: "incorporate elements from top performing styles"
 - [x] Se não tem dados, seção não aparece (string vazia)
+
+### Task 3.8: Diversidade Visual — Rotação de Técnicas (CONCLUÍDA 2026-03-14)
+
+- [x] Sistema `VISUAL_APPROACHES` com 8 técnicas visuais (editorial photography, flat illustration, data viz, collage, bold typography, 3D render, split composition, gradient abstract)
+- [x] Função `_pick_visual_approach(user)` — anti-repetição por scoring de keywords nos estilos recentes
+- [x] Seção `### MANDATORY VISUAL APPROACH` no template de geração
+- [x] Regra 1 relaxada: cores da marca como ponto de partida, não restrição
+- [x] Regra 14: proíbe clichês visuais repetidos dos estilos anteriores
+- [x] Regra 15: proíbe ícones decorativos genéricos (foguetes, lâmpadas, engrenagens)
+- [x] Prompt de imagem (`ai_prompt_service.py`): proíbe texto decorativo em telas/dashboards
+- [x] 7 novos testes (total: 61 em `test_style_generation_service.py`)
 
 ### Pendentes (Fase 3)
 
@@ -270,7 +281,8 @@ O banco de teste tem uma migration que tenta adicionar `tendencies_data` mas a c
 | `IdeaBank/serializers.py` | `reuse_style_id` no `ImageGenerationRequestSerializer` |
 | `IdeaBank/services/daily_ideas_service.py` | Vincula `generated_style` ao `PostIdea` |
 | `Analytics/constants.py` | `STYLE_ACCEPTED`, `STYLE_REJECTED`, `GENERATED_VISUAL_STYLE` |
-| `services/style_generation_service.py` | `_gather_favorite_styles`, `_gather_performance_data`, prompt enriquecido |
+| `services/style_generation_service.py` | `VISUAL_APPROACHES`, `_pick_visual_approach`, `_gather_favorite_styles`, `_gather_performance_data`, prompt enriquecido |
+| `services/ai_prompt_service.py` | Regra anti-texto decorativo em imagens |
 | `SocialMediaIntegration/models.py` | `EngagementMetrics` |
 | `SocialMediaIntegration/services/instagram_insights_service.py` | **Novo** |
 | `SocialMediaIntegration/management/commands/fetch_engagement_metrics.py` | **Novo** |
@@ -281,7 +293,7 @@ O banco de teste tem uma migration que tenta adicionar `tendencies_data` mas a c
 
 | Arquivo | Qtd | Cobertura |
 |---|---|---|
-| `services/tests/test_style_generation_service.py` | 42 | Prompt, parsing, directions, feedback no prompt |
+| `services/tests/test_style_generation_service.py` | 61 | Prompt, parsing, directions, feedback, visual approaches, diversidade |
 | `services/tests/test_style_feedback.py` | 23 | Models, FK, serializers, admin, URLs, helper |
 | `Analytics/tests/test_constants.py` | 6 | Constantes novas |
 | `SocialMediaIntegration/tests/test_instagram_insights_service.py` | 5 | Insights API (success, rate limit, errors) |
@@ -292,6 +304,7 @@ O banco de teste tem uma migration que tenta adicionar `tendencies_data` mas a c
 
 | Data | Mudança |
 |---|---|
+| 2026-03-14 | Diversidade visual: 8 técnicas com rotação anti-repetição, regras anti-clichê, anti-texto decorativo. |
 | 2026-03-14 | Feedback loop completo: sinais implícitos, favoritos, performance Instagram. |
 | 2026-03-13 | Fase 1 concluída: modelo, memory colors, service, integração. |
 | 2026-03-13 | Documento criado com 3 fases, 12 tasks, ordem de execução. |
