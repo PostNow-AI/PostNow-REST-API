@@ -683,3 +683,21 @@ class TestVisualApproaches:
         # Deve conter uma das técnicas disponíveis
         found = any(a['technique'] in result for a in VISUAL_APPROACHES)
         assert found
+
+    def test_no_typography_first_approach(self):
+        """Bold typography-first foi removido — Gemini gera texto gibberish."""
+        techniques = [a['technique'] for a in VISUAL_APPROACHES]
+        assert "Bold typography-first" not in techniques
+
+    def test_has_photographic_texture_approach(self):
+        """Photographic texture close-up substituiu typography-first."""
+        techniques = [a['technique'] for a in VISUAL_APPROACHES]
+        assert "Photographic texture close-up" in techniques
+
+    def test_template_forbids_typography_heavy(self):
+        """Regra 16 proíbe estilos com texto dominando mais de 30%."""
+        assert "NEVER design a style where text/typography covers more than 30%" in STYLE_GENERATION_PROMPT_TEMPLATE
+
+    def test_template_limits_favorite_typography(self):
+        """Regra 17 impede que favorito tipográfico force novos tipográficos."""
+        assert "typography-heavy" in STYLE_GENERATION_PROMPT_TEMPLATE

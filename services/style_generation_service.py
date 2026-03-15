@@ -158,6 +158,8 @@ Modifiers: pale, soft, pastel, bright, deep, vivid, bold, dark, muted, rich, war
 13. If TOP PERFORMING STYLES exist, incorporate elements that drove engagement
 14. NEVER repeat visual clichés from PREVIOUS STYLES. If previous styles used glassmorphism, do NOT use glassmorphism. If they used isometric 3D, try flat illustration or photography. Actively choose a DIFFERENT visual technique.
 15. Do NOT include decorative icons like rockets, lightbulbs, or generic tech symbols unless the content specifically requires them. Prefer concrete, topic-specific imagery.
+16. The image MUST be primarily VISUAL, not textual. Typography should be limited to the post title only. NEVER design a style where text/typography covers more than 30% of the canvas. The AI image model cannot generate extended text without errors — so the visual must rely on imagery, illustration, photography, or graphic elements, NOT walls of text.
+17. If a FAVORITE STYLE is typography-heavy, do NOT replicate the typography-heavy approach. Instead, inherit the mood, color energy, or compositional boldness — but express it through VISUAL elements (illustration, photography, graphic shapes).
 
 ### OUTPUT (JSON only) ###
 {{
@@ -280,9 +282,9 @@ VISUAL_APPROACHES = [
         "color_strategy": "Warm vintage palette (terracotta, mustard, olive) or cool editorial (ice blue, charcoal, blush).",
     },
     {
-        "technique": "Bold typography-first",
-        "description": "Typography IS the visual. Oversized bold text dominates 70%+ of the canvas. Minimal imagery, maximum typographic impact. Think Nike posters, protest art, or Barbara Kruger.",
-        "color_strategy": "High contrast duotone. Black + one bold color, or white text on saturated background.",
+        "technique": "Photographic texture close-up",
+        "description": "Macro or close-up photography of real textures and materials as background — paper grain, fabric weave, wood grain, concrete, marble, coffee foam. The texture becomes the canvas. Minimal overlaid elements. Think Aesop branding, Muji, or artisan packaging.",
+        "color_strategy": "Natural material palette — the colors come from the real texture. Warm browns, creams, grays. One accent color for text/logo contrast.",
     },
     {
         "technique": "3D render / Clay style",
