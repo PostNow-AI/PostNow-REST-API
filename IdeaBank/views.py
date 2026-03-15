@@ -522,7 +522,7 @@ Use essas informações como base para criar o conteúdo.
             user=user,
             name=data.get('titulo', '')[:100] or 'Post de Oportunidade',
             type='feed',
-            objective='engajamento',
+            objective='engagement',
             further_details=opportunity_context,
             include_image=include_image,
             is_automatically_generated=True,
@@ -631,9 +631,9 @@ def generate_image_for_idea(request, idea_id):
         if user_logo and "data:image/" in user_logo and ";base64," in user_logo:
             user_logo = user_logo.split(",")[1]
 
-        # Mark previous style as rejected if regenerating
+        # Mark previous style as rejected ONLY if regenerating (not reusing)
         previous_style = post_idea.generated_style
-        if previous_style and post_idea.image_url:
+        if previous_style and post_idea.image_url and not reuse_style_id:
             _mark_style_feedback(previous_style, 'rejected', user)
 
         generated_style = None
