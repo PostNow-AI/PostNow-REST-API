@@ -427,6 +427,9 @@ def generate_from_opportunity(request):
         context = ClientContext.objects.filter(user=user).first()
         context_serializer = ClientContextSerializer(context)
         context_data = context_serializer.data if context_serializer else {}
+        # Remove tendencies_data (4MB+) from prompt context — not needed for post generation
+        context_data.pop('tendencies_data', None)
+        context_data.pop('discovered_trends', None)
 
         # Initialize services
         ai_service = AiService()
