@@ -1048,9 +1048,17 @@ class AIPromptService:
                   "tons_de_cor_sugeridos": [],
                   "ação_sugerida": "",
                   "sensação_geral": "",
-                  "palavras_chave": []
+                  "palavras_chave": [],
+                  "titulo_imagem": ""
                 }}
               }}
+
+              REGRA PARA titulo_imagem:
+              - Máximo 8 palavras, direto e impactante
+              - Deve capturar a essência do tema em uma frase curta
+              - NUNCA terminar em preposição ou conjunção (de, da, e, para, com, no, na, entre, sobre, como, sem)
+              - Exemplos bons: "Erros fatais no primeiro ano da startup", "Precificação estratégica de SaaS B2B", "CLT ou empreendedorismo: a escolha real"
+              - Exemplos ruins: "A importância da construção de um branding sólido, posicionamento e identidade visual para startups" (longo demais), "Vendas B2B para" (termina em preposição)
             """
         ]
 
