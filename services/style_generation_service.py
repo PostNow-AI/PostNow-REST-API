@@ -59,7 +59,7 @@ STYLE_DIRECTIONS = {
 DEFAULT_STYLE_DIRECTION = {
     "direction": "Professional and visually engaging, adapted to the brand's niche",
     "references": "editorial magazine layouts, modern social media design, brand-appropriate aesthetics",
-    "typography": "clean sans-serif, medium to bold weight, good readability",
+    "typography": "versatile geometric sans-serif (like Poppins or DM Sans), medium to bold weight, clean tracking, good readability",
     "lighting": "soft natural daylight, diffused and even",
     "avoid": "generic stock photo aesthetic, cluttered layouts",
 }
@@ -173,7 +173,7 @@ Modifiers: pale, soft, pastel, bright, deep, vivid, bold, dark, muted, rich, war
         "text": "high-contrast memory color for readability"
     }},
     "lighting": "ONE specific lighting setup with direction and quality",
-    "typography": "specific font style with weight, spacing, and personality",
+    "typography": "specific named font reference with weight and personality (e.g. 'bold condensed sans-serif like Bebas Neue, uppercase, tight spacing' or 'elegant thin serif like Playfair Display Light, wide tracking'). ALWAYS include a concrete font name reference — never just 'sans-serif' or 'modern font'.",
     "composition": "layout with exact positions: where title goes, where visual goes, percentages",
     "mood": "2-3 evocative mood words",
     "references": ["2 specific, recognizable aesthetic references the AI image model knows well"]
@@ -201,7 +201,7 @@ def generate_style(
     performance_data = _gather_performance_data(user)
     content_ctx = _format_content_type_context(content_type, opportunity_score)
 
-    visual_approach = _pick_visual_approach(user)
+    visual_approach_text, visual_approach_technique = _pick_visual_approach(user)
 
     prompt_body = STYLE_GENERATION_PROMPT_TEMPLATE.format(
         business_name=profile_data.get('business_name', ''),
@@ -238,13 +238,14 @@ def generate_style(
         favorite_styles=favorite_styles,
         previous_styles=previous_styles,
         performance_data=performance_data,
-        visual_approach=visual_approach,
+        visual_approach=visual_approach_text,
     )
 
     prompt_list = [STYLE_GENERATION_PROMPT_SYSTEM, prompt_body]
 
     result_text = ai_service.generate_text(prompt_list, user)
     style_data = _parse_style_json(result_text)
+    style_data['visual_approach'] = visual_approach_technique
 
     style = GeneratedVisualStyle.objects.create(
         user=user,
@@ -304,8 +305,11 @@ VISUAL_APPROACHES = [
 ]
 
 
-def _pick_visual_approach(user: User) -> str:
-    """Seleciona uma abordagem visual diferente das usadas recentemente."""
+def _pick_visual_approach(user: User) -> tuple[str, str]:
+    """Seleciona uma abordagem visual diferente das usadas recentemente.
+
+    Returns (prompt_text, technique_name).
+    """
     recent_styles = list(
         GeneratedVisualStyle.objects
         .filter(user=user)
@@ -344,13 +348,14 @@ def _pick_visual_approach(user: User) -> str:
     top_candidates = [s[0] for s in scored[:3]]
     chosen = random.choice(top_candidates)
 
-    return (
+    prompt_text = (
         f"You MUST use this visual technique: **{chosen['technique']}**\n"
         f"Description: {chosen['description']}\n"
         f"Color strategy: {chosen['color_strategy']}\n"
         f"Do NOT use glassmorphism, isometric 3D dioramas, or holographic UI overlays "
         f"unless the chosen technique specifically calls for it."
     )
+    return prompt_text, chosen['technique']
 
 
 def _gather_market_context(user: User) -> tuple[str, str, str]:

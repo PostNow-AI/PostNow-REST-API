@@ -643,10 +643,12 @@ class TestVisualApproaches:
             lambda self, key: []
         )
 
-        result = _pick_visual_approach(Mock())
+        prompt_text, technique = _pick_visual_approach(Mock())
 
-        assert "You MUST use this visual technique:" in result
-        assert "Do NOT use glassmorphism" in result
+        assert "You MUST use this visual technique:" in prompt_text
+        assert "Do NOT use glassmorphism" in prompt_text
+        assert isinstance(technique, str)
+        assert len(technique) > 0
 
     @patch("services.style_generation_service.GeneratedVisualStyle")
     def test_pick_avoids_recent_techniques(self, mock_model):
@@ -663,11 +665,8 @@ class TestVisualApproaches:
         # Roda 20 vezes e verifica que nunca escolhe editorial photography
         results = set()
         for _ in range(20):
-            result = _pick_visual_approach(Mock())
-            # Extrai a técnica do resultado
-            for approach in VISUAL_APPROACHES:
-                if approach['technique'] in result:
-                    results.add(approach['technique'])
+            _, technique = _pick_visual_approach(Mock())
+            results.add(technique)
 
         # Não deve escolher "Editorial photography" quando é recente
         assert "Editorial photography" not in results
@@ -678,11 +677,11 @@ class TestVisualApproaches:
             lambda self, key: []
         )
 
-        result = _pick_visual_approach(Mock())
+        _, technique = _pick_visual_approach(Mock())
 
-        # Deve conter uma das técnicas disponíveis
-        found = any(a['technique'] in result for a in VISUAL_APPROACHES)
-        assert found
+        # Deve ser uma das técnicas disponíveis
+        valid_techniques = {a['technique'] for a in VISUAL_APPROACHES}
+        assert technique in valid_techniques
 
     def test_no_typography_first_approach(self):
         """Bold typography-first foi removido — Gemini gera texto gibberish."""
