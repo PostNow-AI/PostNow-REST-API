@@ -61,14 +61,14 @@ O prompt de geração de estilo recebe histórico separado por feedback:
 
 O sistema roda entre 8 abordagens visuais diferentes para evitar monotonia:
 
-1. Bold Typography + Geometric — tipografia dominante com formas geométricas
-2. Photo Collage Mosaic — mosaico de fotos recortadas
-3. Data Visualization Art — infográficos artísticos
-4. Gradient Mesh + Glassmorphism — gradientes fluidos com vidro
-5. Retro Halftone Editorial — estilo editorial retrô
-6. Organic Blob Composition — formas orgânicas fluidas
-7. Isometric 3D Scene — cenas 3D isométricas
-8. Photographic Texture Overlay — texturas fotográficas sobrepostas
+1. Editorial Photography — fotografia lifestyle/produto com estilo editorial
+2. Flat Illustration — ilustração vetorial bold com formas geométricas
+3. Data Visualization / Infographic — layout data-driven com gráficos e hierarquia
+4. Collage / Mixed Media — composição em camadas com recortes e texturas
+5. Photographic Texture Close-up — macro de texturas reais como canvas
+6. 3D Render / Clay Style — objetos 3D soft com material matte
+7. Split Composition — canvas dividido em zonas contrastantes
+8. Gradient Abstract — gradientes fluidos com elementos mínimos
 
 A técnica é persistida em `style_data.visual_approach` para consulta e anti-repetição.
 
@@ -93,8 +93,8 @@ FK para `GeneratedVisualStyle` — vincula a ideia ao estilo usado na imagem.
 
 ## Testes
 
-- `services/tests/test_style_generation_service.py` — 50+ testes (approaches, feedback, favoritos, performance, prompt)
-- `services/tests/test_style_feedback.py` — testes do feedback loop (mark accepted/rejected, analytics events, admin, serializers, FK)
+- `services/tests/test_style_generation_service.py` — 68 testes (approaches, feedback, favoritos, performance, prompt, generate_style)
+- `services/tests/test_style_feedback.py` — 23 testes (mark accepted/rejected, analytics events, admin, serializers, FK, engagement)
 
 ```bash
 python -m pytest services/tests/test_style_generation_service.py services/tests/test_style_feedback.py -v
