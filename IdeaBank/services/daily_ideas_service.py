@@ -66,7 +66,7 @@ class DailyIdeasService:
         eligible_users = await self.error_service.get_users_without_errors(offset=offset, limit=limit)
         total = len(eligible_users)
 
-        print(f"Batch {batch_number} - Total eligible users: {total}")
+        logger.info("Batch %d - Total eligible users: %d", batch_number, total)
 
         if total == 0:
             return {
@@ -117,7 +117,7 @@ class DailyIdeasService:
         """Generate daily ideas to the user."""
         user = await sync_to_async(User.objects.get)(id=user_id)
 
-        print('processing user:', user_id)
+        logger.info("Processing user: %s", user_id)
         try:
             user_data = await self.user_validation_service.get_user_data(user_id)
             if not user_data:

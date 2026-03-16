@@ -387,7 +387,6 @@ class TestGenerateStyleIntegration:
         }
 
     @pytest.mark.django_db
-    @pytest.mark.xfail(reason="Migration conflitante tendencies_data no banco de teste")
     def test_generate_style_creates_record(self, mock_ai_service, semantic_analysis):
         from django.contrib.auth.models import User
         from CreatorProfile.models import CreatorProfile, GeneratedVisualStyle
@@ -417,7 +416,6 @@ class TestGenerateStyleIntegration:
         mock_ai_service.generate_text.assert_called_once()
 
     @pytest.mark.django_db
-    @pytest.mark.xfail(reason="Migration conflitante tendencies_data no banco de teste")
     def test_generate_style_with_source_post(self, mock_ai_service, semantic_analysis):
         from django.contrib.auth.models import User
         from CreatorProfile.models import CreatorProfile, GeneratedVisualStyle
@@ -442,7 +440,6 @@ class TestGenerateStyleIntegration:
         assert style.source_post_id == 42
 
     @pytest.mark.django_db
-    @pytest.mark.xfail(reason="Migration conflitante tendencies_data no banco de teste")
     def test_generate_style_with_invalid_ai_response(self, semantic_analysis):
         from django.contrib.auth.models import User
         from CreatorProfile.models import CreatorProfile, GeneratedVisualStyle
