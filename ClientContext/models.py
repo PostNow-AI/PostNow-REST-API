@@ -47,8 +47,6 @@ class ClientContext(models.Model):
         default=list, blank=True, null=True)
     tendencies_hashtags = models.JSONField(default=list, blank=True, null=True)
     tendencies_keywords = models.JSONField(default=list, blank=True, null=True)
-    tendencies_data = models.JSONField(
-        default=list, blank=True, null=True)  # Novo para dados estruturados
     tendencies_sources = models.JSONField(default=list, blank=True, null=True)
 
     seasonal_relevant_dates = models.JSONField(
