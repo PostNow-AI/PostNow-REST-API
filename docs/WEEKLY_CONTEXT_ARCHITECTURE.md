@@ -32,7 +32,7 @@ flowchart TD
 ## 2) Componentes e arquivos (onde olhar)
 
 - **Orquestração**: `ClientContext/services/weekly_context_service.py`
-- **Prompt e queries**: `services/ai_prompt_service.py`
+- **Prompt e queries**: `services/ai_prompt_service.py` (coordenador) → delega para `services/prompts/`
 - **Busca Google (CSE)**: `services/google_search_service.py`
 - **Qualidade de fontes**: `ClientContext/utils/source_quality.py`
 - **Dedup de URL (domain+path)**: `ClientContext/utils/url_dedupe.py`
