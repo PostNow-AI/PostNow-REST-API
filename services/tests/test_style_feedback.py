@@ -65,9 +65,9 @@ class TestPostIdeaGeneratedStyleFK:
 class TestMarkStyleFeedback:
     """Tarefa 1.4 + 1.6: _mark_style_feedback marca e emite analytics."""
 
-    @patch("IdeaBank.views.AnalyticsEvent")
+    @patch("IdeaBank.utils.style_feedback.AnalyticsEvent")
     def test_mark_accepted(self, mock_event_model):
-        from IdeaBank.views import _mark_style_feedback
+        from IdeaBank.utils.style_feedback import mark_style_feedback as _mark_style_feedback
 
         style = Mock()
         user = Mock()
@@ -81,9 +81,9 @@ class TestMarkStyleFeedback:
         assert call_kwargs['event_name'] == 'style_accepted'
         assert call_kwargs['resource_type'] == 'GeneratedVisualStyle'
 
-    @patch("IdeaBank.views.AnalyticsEvent")
+    @patch("IdeaBank.utils.style_feedback.AnalyticsEvent")
     def test_mark_rejected(self, mock_event_model):
-        from IdeaBank.views import _mark_style_feedback
+        from IdeaBank.utils.style_feedback import mark_style_feedback as _mark_style_feedback
 
         style = Mock()
         user = Mock()

@@ -185,7 +185,7 @@ class DailyIdeasService:
             await self.error_service.clear_error(user)
 
             return {'status': 'success', 'user_id': user_id, 'created_posts': []}
-        except Exception as e:
+        except Exception as e:  # broad catch: any failure must be logged and reported
             await self.error_service.store_error(user, str(e))
             await sync_to_async(self.audit_service.log_daily_content_generation)(
                 user=user,

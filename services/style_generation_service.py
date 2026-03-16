@@ -363,7 +363,7 @@ def _gather_market_context(user: User) -> tuple[str, str, str]:
     try:
         from ClientContext.models import ClientContext
         context = ClientContext.objects.filter(user=user).first()
-    except Exception:
+    except (ImportError, AttributeError):
         return ("No market data available.", "No competition data available.", "")
 
     if not context:

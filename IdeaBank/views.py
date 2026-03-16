@@ -21,8 +21,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from AuditSystem.services import AuditService
-from Analytics.constants import AnalyticsEventName, AnalyticsResourceType
-from Analytics.models import AnalyticsEvent
 from ClientContext.models import ClientContext
 from ClientContext.serializers import ClientContextSerializer
 from CreatorProfile.models import CreatorProfile
@@ -48,31 +46,9 @@ from .services.mail_daily_ideas_service import MailDailyIdeasService
 from .services.retry_ideas_service import RetryIdeasService
 from .services.retry_weekly_feed import RetryWeeklyFeedService
 from .services.weekly_feed_creation import WeeklyFeedCreationService
+from .utils.style_feedback import mark_style_feedback as _mark_style_feedback
 
 logger = logging.getLogger(__name__)
-
-
-def _mark_style_feedback(style, signal: str, user):
-    """Mark a GeneratedVisualStyle with feedback and emit analytics event."""
-    from django.utils import timezone as tz
-    import uuid
-
-    style.feedback_signal = signal
-    style.save(update_fields=['feedback_signal'])
-
-    event_name = (
-        AnalyticsEventName.STYLE_ACCEPTED
-        if signal == 'accepted'
-        else AnalyticsEventName.STYLE_REJECTED
-    )
-    AnalyticsEvent.objects.create(
-        event_name=event_name,
-        occurred_at=tz.now(),
-        user=user,
-        client_session_id=uuid.uuid4(),
-        resource_type=AnalyticsResourceType.GENERATED_VISUAL_STYLE,
-        resource_id=str(style.id),
-    )
 
 
 # Post management views

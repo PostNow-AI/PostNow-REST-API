@@ -11,7 +11,7 @@ from .models import (
 try:
     from Analytics.models import Decision
     ANALYTICS_AVAILABLE = True
-except Exception:
+except ImportError:
     Decision = None
     ANALYTICS_AVAILABLE = False
 
