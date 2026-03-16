@@ -1145,9 +1145,43 @@ class AIPromptService:
 
         # Estilo: usa GeneratedVisualStyle ou fallback
         if generated_style and hasattr(generated_style, 'style_data'):
-            style = generated_style.style_data
+            style = dict(generated_style.style_data or {})
         else:
             style = self._fallback_style(semantic_analysis, profile_data)
+
+        # Sanitize typography-heavy styles to prevent excessive text in image
+        _typo_keywords = ('typography', 'typographic', 'type-first', 'text-heavy', 'lettering')
+        _aesthetic = (style.get('aesthetic', '') or '').lower()
+        _composition = (style.get('composition', '') or '').lower()
+        if any(kw in _aesthetic or kw in _composition for kw in _typo_keywords):
+            style['composition'] = (
+                'Title in the upper third using oversized bold font for visual impact. '
+                'The remaining 60-70% of the canvas MUST be filled with visual elements '
+                '(illustrations, photos, icons, textures) — NOT more text. '
+                'Logo bottom-right 8%.'
+            )
+            # Strip typography-centric language from aesthetic to reduce text generation
+            aesthetic = style.get('aesthetic', '')
+            for phrase in ['typographic poster', 'typography-first', 'type-first',
+                           'Oversized bold', 'headline-driven']:
+                aesthetic = aesthetic.replace(phrase, 'bold visual')
+            style['aesthetic'] = aesthetic
+
+        # Truncate title to max 10 words, avoiding cuts on prepositions/conjunctions
+        _raw_title = semantic_analysis.get('titulo_imagem', semantic_analysis.get('tema_principal', ''))
+        _title_words = (_raw_title or '').split()
+        if len(_title_words) > 10:
+            _stop_words = {'e', 'de', 'da', 'do', 'das', 'dos', 'em', 'no', 'na', 'nos',
+                           'nas', 'para', 'com', 'por', 'um', 'uma', 'o', 'a', 'os', 'as',
+                           'que', 'ao', 'aos', 'ou', 'se', 'seu', 'sua', 'desde', 'entre',
+                           'sobre', 'como', 'mais', 'sem', 'até', 'nem', 'já', 'mas',
+                           'pela', 'pelo', 'pelas', 'pelos', 'num', 'numa'}
+            cut = 10
+            while cut > 5 and _title_words[cut - 1].lower().rstrip('.,;:') in _stop_words:
+                cut -= 1
+            title_text = ' '.join(_title_words[:cut]) + '.'
+        else:
+            title_text = ' '.join(_title_words)
 
         style_colors = style.get('colors', {})
         references = style.get('references', [])
@@ -1180,9 +1214,10 @@ COMPOSITION:
 {style.get('composition', 'Title upper third centered, main visual centered, logo bottom-right 8%')}.
 Typography: {style.get('typography', 'modern bold sans-serif')}.
 Safe margin of 10% on all edges — no important elements near borders.
-Title text: "{semantic_analysis.get('titulo_imagem', semantic_analysis.get('tema_principal', ''))}" — render this exact text, centered in the upper third, in bold {style.get('typography', 'sans-serif')} font, {style_colors.get('text', 'dark charcoal')} color.
+Title text: "{title_text}" — render this exact text, centered in the upper third, in bold {style.get('typography', 'sans-serif')} font, {style_colors.get('text', 'dark charcoal')} color. This title has at most 10 words — do NOT add more words.
 All rendered text must be in Brazilian Portuguese (PT-BR). Do NOT add accented characters (ã, ç, é, ô, ü) unless they appear in the title above.
 CRITICAL: This image must be PRIMARILY VISUAL, not textual. Maximum 10 words of rendered text total (the title + logo only). Do NOT generate any other text — no paragraphs, no captions, no labels, no descriptions, no quotes, no words on screens or dashboards, no scattered typography. If the composition needs filler, use abstract shapes, icons, or blurred content instead. ANY text beyond the title risks being misspelled and ruins the image.
+IMPORTANT: Even if the style description mentions "typography-heavy", "bold typography", or "typographic" approaches, you MUST still limit rendered text to the title only (max 10 words). Express the typographic energy through font weight, size, and placement of the TITLE — never by adding more text. Typography-heavy means a BOLD title, not more words.
 
 {logo_section}
 
