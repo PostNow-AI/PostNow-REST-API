@@ -1,12 +1,6 @@
 name: Retry Weekly Context Generation - Failed Users
 
 on:
-  schedule:
-    - cron: "0 5 * * SUN" # Run at 5:00 AM UTC on Sundays
-    - cron: "0 7 * * SUN" # Run at 7:00 AM UTC on Sundays
-    - cron: "0 9 * * SUN" # Run at 9:00 AM UTC on Sundays
-    - cron: "0 11 * * SUN" # Run at 11:00 AM UTC on Sundays
-    - cron: "0 13 * * SUN" # Run at 1:00 PM UTC on Sundays
   workflow_dispatch:
 
 jobs:

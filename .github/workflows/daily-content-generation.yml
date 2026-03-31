@@ -1,8 +1,6 @@
 name: Daily Content Generation
 
 on:
-  schedule:
-    - cron: "0 3 * * *" # Run once at 3:00 AM UTC
   workflow_dispatch:
 
 jobs:
@@ -13,7 +11,7 @@ jobs:
 
     strategy:
       matrix:
-        batch: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]
+        batch: [ 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21 ]
       max-parallel: 3
 
     steps:
@@ -29,7 +27,7 @@ jobs:
           sleep $DELAY
 
       - name: Call Vercel API for batch ${{ matrix.batch }}
-        if: success() || failure()  
+        if: success() || failure()
         timeout-minutes: 15    # optional, if the API can be slow
         run: |
           echo "Processing batch ${{ matrix.batch }}"

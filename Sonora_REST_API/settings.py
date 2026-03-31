@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     'AuditSystem',
     'ClientContext',
     'OnboardingCampaign',
+    'scripts',
 ]
 
 SITE_ID = 3

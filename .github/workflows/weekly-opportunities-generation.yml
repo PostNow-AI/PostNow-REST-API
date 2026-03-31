@@ -1,9 +1,6 @@
 name: Weekly Opportunities Generation (Sunday Phase 1b)
 
 on:
-  schedule:
-    # Every Sunday at 09:00 AM UTC (06:00 AM BRT) - 3 hours after context generation
-    - cron: '0 9 * * 0'
   workflow_dispatch:
     inputs:
       environment:
@@ -31,7 +28,7 @@ jobs:
     strategy:
       max-parallel: 2
       matrix:
-        batch: [1, 2, 3, 4, 5]
+        batch: [ 1, 2, 3, 4, 5 ]
 
     steps:
       - name: Generate Opportunities - Batch ${{ matrix.batch }}

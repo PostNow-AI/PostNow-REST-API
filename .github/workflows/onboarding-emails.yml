@@ -1,8 +1,6 @@
 name: Onboarding Emails
 
 on:
-  schedule:
-    - cron: "0 13 * * *" # Run at 1:00 PM UTC (10:00 AM BRT)
   workflow_dispatch:
 
 jobs:

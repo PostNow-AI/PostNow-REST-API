@@ -1,9 +1,6 @@
 name: Weekly Opportunities Email (Monday)
 
 on:
-  schedule:
-    # Every Monday at 10:00 AM UTC (7:00 AM BRT)
-    - cron: '0 10 * * 1'
   workflow_dispatch:
     inputs:
       environment:
@@ -31,7 +28,7 @@ jobs:
     strategy:
       max-parallel: 2
       matrix:
-        batch: [1, 2, 3, 4, 5]
+        batch: [ 1, 2, 3, 4, 5 ]
 
     steps:
       - name: Send Opportunities Email - Batch ${{ matrix.batch }}

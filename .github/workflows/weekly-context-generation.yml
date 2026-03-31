@@ -1,9 +1,6 @@
 name: Weekly Context Generation
 
 on:
-  schedule:
-    # Run once a week on Sundays at 06:00 UTC (03:00 BRT)
-    - cron: "0 6 * * SUN"
   workflow_dispatch:
 
 jobs:

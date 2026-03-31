@@ -40,6 +40,9 @@ pydantic==2.11.7
 pytrends==4.9.0
 webcolors==25.10.0
 
+# Data Export
+openpyxl==3.1.2
+
 # AWS
 boto3==1.35.99
 
